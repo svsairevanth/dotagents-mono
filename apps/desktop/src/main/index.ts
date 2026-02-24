@@ -32,9 +32,13 @@ import {
 } from "./cloudflare-tunnel"
 import { initModelsDevService } from "./models-dev-service"
 import { loopService } from "./loop-service"
+import { setHeadlessMode } from "./state"
+import { stopRemoteServer } from "./remote-server"
 
 // Check for --qr flag (headless mode with QR code)
 const isQRMode = process.argv.includes("--qr")
+// Check for --headless flag (headless mode without GUI)
+const isHeadlessMode = process.argv.includes("--headless")
 
 // Enable CDP remote debugging port if REMOTE_DEBUGGING_PORT env variable is set
 // This must be called before app.whenReady()
@@ -134,6 +138,99 @@ app.whenReady().then(async () => {
       console.error("[QR Mode] Failed to start remote server:", err instanceof Error ? err.message : String(err))
       process.exit(1)
     }
+
+    // Keep the process running - don't create any windows
+    return
+  }
+
+  // Handle --headless mode: initialize services and start CLI without any GUI
+  if (isHeadlessMode) {
+    setHeadlessMode(true)
+    logApp("Running in --headless mode")
+
+    // Hide dock icon on macOS for headless mode
+    if (process.platform === "darwin" && app.dock) {
+      app.dock.hide()
+    }
+
+    // Register IPC infrastructure (needed for remote-server agent execution)
+    registerIpcMain(router)
+    logApp("IPC main registered (headless)")
+
+    // Register serve protocol (safe in headless mode)
+    registerServeProtocol()
+    logApp("Serve protocol registered (headless)")
+
+    try {
+      // Initialize MCP service
+      await mcpService.initialize()
+      logApp("MCP service initialized (headless)")
+
+      // Start all enabled repeat tasks
+      loopService.startAllLoops()
+      logApp("Loop service started (headless)")
+
+      // Initialize ACP service
+      await acpService.initialize()
+      logApp("ACP service initialized (headless)")
+
+      // Sync agent profiles to ACP registry
+      try {
+        agentProfileService.syncAgentProfilesToACPRegistry()
+        logApp("Agent profiles synced to ACP registry (headless)")
+      } catch (error) {
+        logApp("Failed to sync agent profiles to ACP registry:", error)
+      }
+
+      // Initialize bundled skills
+      try {
+        const skillsResult = initializeBundledSkills()
+        logApp(`Bundled skills: ${skillsResult.copied.length} copied, ${skillsResult.skipped.length} skipped (headless)`)
+        startSkillsFolderWatcher()
+      } catch (error) {
+        logApp("Failed to initialize bundled skills:", error)
+      }
+
+      // Initialize models.dev service
+      initModelsDevService()
+      logApp("Models.dev service initialized (headless)")
+
+      // Force-start remote server bound to 0.0.0.0 for external access
+      const cfg = configStore.get()
+      const originalBindAddress = cfg.remoteServerBindAddress
+      // Temporarily override bind address to 0.0.0.0 if not already configured differently
+      if (!originalBindAddress || originalBindAddress === "127.0.0.1") {
+        configStore.save({ ...cfg, remoteServerBindAddress: "0.0.0.0" })
+        logApp("Temporarily set remote server bind address to 0.0.0.0 for headless mode")
+      }
+
+      const serverResult = await startRemoteServerForced()
+      if (!serverResult.running) {
+        console.error("[Headless] Failed to start remote server:", serverResult.error || "Unknown error")
+        process.exit(1)
+      }
+      logApp("Remote server started on 0.0.0.0 (headless)")
+
+      // Start headless CLI
+      const { startHeadlessCLI } = await import("./headless-cli")
+      await startHeadlessCLI()
+
+    } catch (err) {
+      console.error("[Headless] Failed to initialize:", err instanceof Error ? err.message : String(err))
+      process.exit(1)
+    }
+
+    // Graceful shutdown handlers
+    const gracefulShutdown = async () => {
+      console.log("\n[Headless] Shutting down...")
+      loopService.stopAllLoops()
+      await acpService.shutdown().catch(() => {})
+      await mcpService.cleanup().catch(() => {})
+      await stopRemoteServer().catch(() => {})
+      process.exit(0)
+    }
+    process.on("SIGINT", gracefulShutdown)
+    process.on("SIGTERM", gracefulShutdown)
 
     // Keep the process running - don't create any windows
     return
@@ -434,8 +531,8 @@ app.whenReady().then(async () => {
 })
 
 app.on("window-all-closed", () => {
-  // Don't quit in --qr mode (headless server)
-  if (isQRMode) {
+  // Don't quit in --qr or --headless mode (headless server)
+  if (isQRMode || isHeadlessMode) {
     return
   }
   if (process.platform !== "darwin") {
