@@ -1,6 +1,6 @@
 {
   "name": "@dotagents/desktop",
-  "version": "1.4.0",
+  "version": "0.0.1",
   "type": "module",
   "description": "AI-powered agents with MCP integration",
   "main": "./out/main/index.js",
