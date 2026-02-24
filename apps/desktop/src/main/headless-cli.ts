@@ -128,9 +128,10 @@ async function handleSlashCommand(input: string): Promise<boolean> {
       return true
     case "/quit":
     case "/exit":
-      printColored(colors.dim, "Goodbye!")
+      printColored(colors.dim, "Shutting down gracefully...")
       rl?.close()
-      process.exit(0)
+      process.kill(process.pid, "SIGINT")
+      return true
     case "/stop":
       await handleStop()
       return true
@@ -348,7 +349,7 @@ ${colors.dim}Type /help for available commands.${colors.reset}
 
   rl.on("close", () => {
     printColored(colors.dim, "\nGoodbye!")
-    process.exit(0)
+    process.kill(process.pid, "SIGINT")
   })
 
   // Handle SIGINT gracefully
