@@ -598,6 +598,16 @@ class SkillsService {
       }
     }
 
+    // Rename skills.json to skills.json.migrated so we don't re-import
+    // deleted skills on every app restart.
+    try {
+      const migratedPath = skillsPath + ".migrated"
+      fs.renameSync(skillsPath, migratedPath)
+      logApp(`[SkillsService] Renamed legacy skills.json → skills.json.migrated`)
+    } catch (error) {
+      logApp("[SkillsService] Failed to rename legacy skills.json:", error)
+    }
+
     return migrated
   }
 
