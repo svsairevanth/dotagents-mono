@@ -1092,7 +1092,7 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
         geminiTtsVoice: cfg.geminiTtsVoice || "Kore",
         // ACP Agent list for agent selection
         acpAgents: agentProfileService.getAll()
-          .filter(p => p.connectionType === 'acp' && p.enabled !== false)
+          .filter(p => p.connection.type === 'acp' && p.enabled !== false)
           .map(p => ({ name: p.name, displayName: p.displayName })),
       })
     } catch (error: any) {
