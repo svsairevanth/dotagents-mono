@@ -159,38 +159,6 @@ export const acpRouterToolDefinitions = [
       required: ['agentName', 'task'],
     },
   },
-  {
-    name: 'get_task_status',
-    description: 'Get the status of a task. Alias for check_agent_status.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        taskId: {
-          type: 'string',
-          description: 'The task ID (or run ID) returned from a previous send_to_agent/delegate_to_agent call',
-        },
-        historyLength: {
-          type: 'number',
-          description: 'Optional number of conversation history messages to include',
-        },
-      },
-      required: ['taskId'],
-    },
-  },
-  {
-    name: 'cancel_task',
-    description: 'Cancel a running task. Alias for cancel_agent_run.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        taskId: {
-          type: 'string',
-          description: 'The task ID to cancel',
-        },
-      },
-      required: ['taskId'],
-    },
-  },
 ];
 
 /**
@@ -199,8 +167,6 @@ export const acpRouterToolDefinitions = [
  */
 export const toolNameAliases: Record<string, string> = {
   'send_to_agent': 'delegate_to_agent',
-  'get_task_status': 'check_agent_status',
-  'cancel_task': 'cancel_agent_run',
 };
 
 /**

@@ -197,10 +197,10 @@ export function SettingsLoops() {
     try {
       const result = await tipcClient.openLoopTaskFile({ loopId: loop.id })
       if (!result?.success) {
-        toast.error(result?.error || "Failed to open task file")
+        toast.error(result?.error || "Failed to reveal task file")
       }
     } catch {
-      toast.error("Failed to open task file")
+      toast.error("Failed to reveal task file")
     }
   }
 
@@ -235,7 +235,7 @@ export function SettingsLoops() {
                   <Play className="h-4 w-4" />Run Now
                 </Button>
                 <Button variant="outline" size="sm" className="gap-2" onClick={() => handleOpenTaskFile(loop)}>
-                  <FileText className="h-4 w-4" />Open File
+                  <FileText className="h-4 w-4" />Reveal File
                 </Button>
                 <Button variant="ghost" size="icon" onClick={() => handleEdit(loop)}>
                   <Edit2 className="h-4 w-4" />

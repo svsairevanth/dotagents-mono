@@ -33,7 +33,7 @@ import {
 import { tipcClient } from "@renderer/lib/tipc-client"
 import { ExternalLink, AlertCircle, FolderOpen, FolderUp, FileText } from "lucide-react"
 import { toast } from "sonner"
-import { useState, useCallback, useEffect } from "react"
+import { useCallback, useEffect } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useNavigate } from "react-router-dom"
 import { Config } from "@shared/types"
@@ -96,11 +96,11 @@ export function Component() {
     try {
       const result = await tipcClient.openSystemPromptFile()
       if (!result?.success) {
-        toast.error(result?.error || "Failed to open system prompt file")
+        toast.error(result?.error || "Failed to reveal system prompt file")
       }
     } catch (error) {
-      console.error("Failed to open system prompt file:", error)
-      toast.error("Failed to open system prompt file")
+      console.error("Failed to reveal system prompt file:", error)
+      toast.error("Failed to reveal system prompt file")
     }
   }, [])
 
@@ -108,23 +108,13 @@ export function Component() {
     try {
       const result = await tipcClient.openAgentsGuidelinesFile()
       if (!result?.success) {
-        toast.error(result?.error || "Failed to open guidelines file")
+        toast.error(result?.error || "Failed to reveal guidelines file")
       }
     } catch (error) {
-      console.error("Failed to open guidelines file:", error)
-      toast.error("Failed to open guidelines file")
+      console.error("Failed to reveal guidelines file:", error)
+      toast.error("Failed to reveal guidelines file")
     }
   }, [])
-
-  const [preferredEditorCommandsText, setPreferredEditorCommandsText] = useState("")
-
-  const preferredEditorCommandsFromConfig = Array.isArray((configQuery.data as any)?.preferredEditorCommands)
-    ? (configQuery.data as any).preferredEditorCommands.join("\n")
-    : ""
-
-  useEffect(() => {
-    setPreferredEditorCommandsText(preferredEditorCommandsFromConfig)
-  }, [preferredEditorCommandsFromConfig])
 
   const saveConfig = useCallback(
     (config: Partial<Config>) => {
@@ -145,26 +135,6 @@ export function Component() {
     },
     [saveConfigMutation, configQuery.data],
   )
-
-  const savePreferredEditorCommands = useCallback(() => {
-    const nextCommands = preferredEditorCommandsText
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean)
-
-    const currentRaw = (configQuery.data as any)?.preferredEditorCommands
-    const currentCommands = Array.isArray(currentRaw)
-      ? currentRaw.map((line: string) => line.trim()).filter(Boolean)
-      : []
-
-    if (JSON.stringify(nextCommands) === JSON.stringify(currentCommands)) {
-      return
-    }
-
-    saveConfig({
-      preferredEditorCommands: nextCommands.length > 0 ? nextCommands : undefined,
-    })
-  }, [configQuery.data, preferredEditorCommandsText, saveConfig])
 
   // Sync theme preference from config to localStorage when config loads
   useEffect(() => {
@@ -496,34 +466,16 @@ export function Component() {
               </Button>
             </div>
           </Control>
-          <Control label="Open files" className="px-3">
+          <Control label="Reveal files in Finder/Explorer" className="px-3">
             <div className="flex flex-wrap justify-end gap-2">
               <Button variant="outline" size="sm" className="gap-1.5" onClick={openSystemPromptFile}>
                 <FileText className="h-3 w-3" />
-                System Prompt
+                Reveal System Prompt
               </Button>
               <Button variant="outline" size="sm" className="gap-1.5" onClick={openAgentsGuidelinesFile}>
                 <FileText className="h-3 w-3" />
-                Guidelines
+                Reveal Guidelines
               </Button>
-            </div>
-          </Control>
-          <Control
-            label={<ControlLabel label="Preferred editor commands" tooltip="One command per line. Use {file} to place the path explicitly." />}
-            className="px-3"
-          >
-            <div className="w-full space-y-2">
-              <Textarea
-                rows={3}
-                value={preferredEditorCommandsText}
-                onChange={(e) => setPreferredEditorCommandsText(e.target.value)}
-                onBlur={savePreferredEditorCommands}
-                className="font-mono text-xs"
-                placeholder={"code --reuse-window {file}\ncursor {file}"}
-              />
-              <div className="text-right text-xs text-muted-foreground">
-                Empty means fallback to your OS default app.
-              </div>
             </div>
           </Control>
         </ControlGroup>

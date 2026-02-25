@@ -314,302 +314,125 @@ const toolHandlers: Record<string, ToolHandler> = {
   },
 
   kill_agent: async (args: Record<string, unknown>): Promise<MCPToolResult> => {
-    const sessionId = args.sessionId as string
+    const sessionId = args.sessionId as string | undefined
 
-    if (!sessionId) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify({
-              success: false,
-              error: "sessionId is required",
-            }),
-          },
-        ],
-        isError: true,
+    if (sessionId) {
+      // Kill specific session
+      const session = agentSessionTracker.getSession(sessionId)
+      if (!session) {
+        return {
+          content: [{ type: "text", text: JSON.stringify({ success: false, error: `Agent session not found: ${sessionId}` }) }],
+          isError: true,
+        }
       }
-    }
-
-    // Check if session exists
-    const session = agentSessionTracker.getSession(sessionId)
-    if (!session) {
+      agentSessionStateManager.stopSession(sessionId)
+      toolApprovalManager.cancelSessionApprovals(sessionId)
+      agentSessionTracker.stopSession(sessionId)
       return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify({
-              success: false,
-              error: `Agent session not found: ${sessionId}`,
-            }),
-          },
-        ],
-        isError: true,
-      }
-    }
-
-    // Stop the session in the state manager (aborts LLM requests, kills processes)
-    agentSessionStateManager.stopSession(sessionId)
-
-    // Cancel any pending tool approvals for this session so executeToolCall doesn't hang
-    toolApprovalManager.cancelSessionApprovals(sessionId)
-
-    // Mark the session as stopped in the tracker
-    agentSessionTracker.stopSession(sessionId)
-
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({
-            success: true,
-            sessionId,
-            message: `Agent session ${sessionId} (${session.conversationTitle}) has been terminated`,
-          }, null, 2),
-        },
-      ],
-      isError: false,
-    }
-  },
-
-  kill_all_agents: async (): Promise<MCPToolResult> => {
-    const activeSessions = agentSessionTracker.getActiveSessions()
-    const sessionCount = activeSessions.length
-
-    if (sessionCount === 0) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify({
-              success: true,
-              message: "No agents were running",
-              sessionsTerminated: 0,
-              processesKilled: 0,
-            }, null, 2),
-          },
-        ],
+        content: [{ type: "text", text: JSON.stringify({ success: true, sessionId, message: `Agent session ${sessionId} (${session.conversationTitle}) terminated` }, null, 2) }],
         isError: false,
       }
     }
 
-    // Cancel any pending tool approvals to prevent sessions from hanging
+    // Kill all agents
+    const activeSessions = agentSessionTracker.getActiveSessions()
+    if (activeSessions.length === 0) {
+      return {
+        content: [{ type: "text", text: JSON.stringify({ success: true, message: "No agents were running", sessionsTerminated: 0 }, null, 2) }],
+        isError: false,
+      }
+    }
     toolApprovalManager.cancelAllApprovals()
-
-    // Perform emergency stop
     const { before, after } = await emergencyStopAll()
-
     return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({
-            success: true,
-            message: `Emergency stop completed: ${sessionCount} agent session(s) terminated`,
-            sessionsTerminated: sessionCount,
-            processesKilled: before - after,
-            processesBeforeStop: before,
-            processesAfterStop: after,
-          }, null, 2),
-        },
-      ],
+      content: [{ type: "text", text: JSON.stringify({
+        success: true,
+        message: `Emergency stop: ${activeSessions.length} session(s) terminated`,
+        sessionsTerminated: activeSessions.length,
+        processesKilled: before - after,
+      }, null, 2) }],
       isError: false,
     }
   },
 
-  get_settings: async (): Promise<MCPToolResult> => {
+  update_settings: async (args: Record<string, unknown>): Promise<MCPToolResult> => {
     const config = configStore.get()
 
-    // Post-processing requires both the toggle AND a prompt to be set
-    const postProcessingEnabled = config.transcriptPostProcessingEnabled ?? false
+    // Setting mappings: key → { configKey, default, label }
+    const SETTING_MAP: Record<string, { configKey: string; defaultVal: boolean; label: string }> = {
+      postProcessing: { configKey: "transcriptPostProcessingEnabled", defaultVal: false, label: "Post-processing" },
+      tts: { configKey: "ttsEnabled", defaultVal: true, label: "Text-to-speech" },
+      toolApproval: { configKey: "mcpRequireApprovalBeforeToolCall", defaultVal: false, label: "Tool approval" },
+      verification: { configKey: "mcpVerifyCompletionEnabled", defaultVal: true, label: "Verification" },
+      whatsapp: { configKey: "whatsappEnabled", defaultVal: false, label: "WhatsApp" },
+    }
+
+    // Determine if any settings are being updated
+    const updates: Record<string, boolean> = {}
+    for (const [key, mapping] of Object.entries(SETTING_MAP)) {
+      if (args[key] !== undefined) {
+        if (typeof args[key] !== "boolean") {
+          return {
+            content: [{ type: "text", text: JSON.stringify({ success: false, error: `${key} must be a boolean` }) }],
+            isError: true,
+          }
+        }
+        updates[key] = args[key] as boolean
+      }
+    }
+
+    const isReadOnly = Object.keys(updates).length === 0
+
+    if (!isReadOnly) {
+      // Apply updates
+      const configUpdates: Record<string, boolean> = {}
+      const changes: Array<{ setting: string; from: boolean; to: boolean }> = []
+      for (const [key, newValue] of Object.entries(updates)) {
+        const mapping = SETTING_MAP[key]
+        const previousValue = (config as any)[mapping.configKey] ?? mapping.defaultVal
+        configUpdates[mapping.configKey] = newValue
+        changes.push({ setting: mapping.label, from: previousValue, to: newValue })
+      }
+
+      configStore.save({ ...config, ...configUpdates })
+
+      // Handle WhatsApp lifecycle if toggled
+      if (updates.whatsapp !== undefined) {
+        const prevWhatsapp = config.whatsappEnabled ?? false
+        try {
+          await handleWhatsAppToggle(prevWhatsapp, updates.whatsapp)
+        } catch (_e) { /* lifecycle is best-effort */ }
+      }
+
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            success: true,
+            changes,
+            message: changes.map(c => `${c.setting}: ${c.from} → ${c.to}`).join(", "),
+          }, null, 2),
+        }],
+        isError: false,
+      }
+    }
+
+    // Read-only: return current values
     const postProcessingPromptConfigured = !!(config.transcriptPostProcessingPrompt?.trim())
-    const postProcessingEffective = postProcessingEnabled && postProcessingPromptConfigured
-
     return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({
-            postProcessingEnabled: postProcessingEnabled,
-            postProcessingPromptConfigured: postProcessingPromptConfigured,
-            postProcessingEffective: postProcessingEffective,
-            ttsEnabled: config.ttsEnabled ?? true,
-            toolApprovalEnabled: config.mcpRequireApprovalBeforeToolCall ?? false,
-            verificationEnabled: config.mcpVerifyCompletionEnabled ?? true,
-            messageQueueEnabled: config.mcpMessageQueueEnabled ?? true,
-            parallelToolExecutionEnabled: config.mcpParallelToolExecution ?? true,
-            whatsappEnabled: config.whatsappEnabled ?? false,
-            descriptions: {
-              postProcessingEnabled: "When enabled AND a prompt is configured, transcripts are cleaned up and improved using AI",
-              postProcessingPromptConfigured: "Whether a post-processing prompt has been configured in settings",
-              postProcessingEffective: "True only when post-processing is both enabled AND a prompt is configured",
-              ttsEnabled: "When enabled, assistant responses are read aloud",
-              toolApprovalEnabled: "When enabled, a confirmation dialog appears before any tool executes (affects new sessions only)",
-              verificationEnabled: "When enabled, the agent verifies task completion before finishing. Disable for faster responses without verification",
-              messageQueueEnabled: "When enabled, users can queue messages while the agent is processing",
-              parallelToolExecutionEnabled: "When enabled, multiple tool calls from a single LLM response are executed concurrently",
-              whatsappEnabled: "When enabled, allows sending and receiving WhatsApp messages through DotAgents",
-            },
-          }, null, 2),
-        },
-      ],
-      isError: false,
-    }
-  },
-
-  toggle_post_processing: async (args: Record<string, unknown>): Promise<MCPToolResult> => {
-    const config = configStore.get()
-    const currentValue = config.transcriptPostProcessingEnabled ?? false
-
-    // Validate enabled parameter if provided (optional)
-    if (args.enabled !== undefined && typeof args.enabled !== "boolean") {
-      return {
-        content: [{ type: "text", text: JSON.stringify({ success: false, error: "enabled must be a boolean if provided" }) }],
-        isError: true,
-      }
-    }
-
-    // Determine new value: use provided value or toggle
-    const enabled = typeof args.enabled === "boolean" ? args.enabled : !currentValue
-
-    configStore.save({
-      ...config,
-      transcriptPostProcessingEnabled: enabled,
-    })
-
-    // Check if prompt is configured
-    const promptConfigured = !!(config.transcriptPostProcessingPrompt?.trim())
-    let message = `Post-processing has been ${enabled ? "enabled" : "disabled"}.`
-    if (enabled && !promptConfigured) {
-      message += " Note: A post-processing prompt must also be configured in settings for this feature to take effect."
-    }
-
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({
-            success: true,
-            setting: "postProcessingEnabled",
-            previousValue: currentValue,
-            newValue: enabled,
-            promptConfigured: promptConfigured,
-            effectivelyActive: enabled && promptConfigured,
-            message: message,
-          }, null, 2),
-        },
-      ],
-      isError: false,
-    }
-  },
-
-  toggle_tts: async (args: Record<string, unknown>): Promise<MCPToolResult> => {
-    const config = configStore.get()
-    const currentValue = config.ttsEnabled ?? true
-
-    // Validate enabled parameter if provided (optional)
-    if (args.enabled !== undefined && typeof args.enabled !== "boolean") {
-      return {
-        content: [{ type: "text", text: JSON.stringify({ success: false, error: "enabled must be a boolean if provided" }) }],
-        isError: true,
-      }
-    }
-
-    // Determine new value: use provided value or toggle
-    const enabled = typeof args.enabled === "boolean" ? args.enabled : !currentValue
-
-    configStore.save({
-      ...config,
-      ttsEnabled: enabled,
-    })
-
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({
-            success: true,
-            setting: "ttsEnabled",
-            previousValue: currentValue,
-            newValue: enabled,
-            message: `Text-to-speech has been ${enabled ? "enabled" : "disabled"}`,
-          }, null, 2),
-        },
-      ],
-      isError: false,
-    }
-  },
-
-  toggle_tool_approval: async (args: Record<string, unknown>): Promise<MCPToolResult> => {
-    const config = configStore.get()
-    const currentValue = config.mcpRequireApprovalBeforeToolCall ?? false
-
-    // Validate enabled parameter if provided (optional)
-    if (args.enabled !== undefined && typeof args.enabled !== "boolean") {
-      return {
-        content: [{ type: "text", text: JSON.stringify({ success: false, error: "enabled must be a boolean if provided" }) }],
-        isError: true,
-      }
-    }
-
-    // Determine new value: use provided value or toggle
-    const enabled = typeof args.enabled === "boolean" ? args.enabled : !currentValue
-
-    configStore.save({
-      ...config,
-      mcpRequireApprovalBeforeToolCall: enabled,
-    })
-
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({
-            success: true,
-            setting: "toolApprovalEnabled",
-            previousValue: currentValue,
-            newValue: enabled,
-            message: `Tool approval has been ${enabled ? "enabled" : "disabled"}. Note: This change takes effect for new agent sessions only; currently running sessions are not affected.`,
-          }, null, 2),
-        },
-      ],
-      isError: false,
-    }
-  },
-
-  toggle_verification: async (args: Record<string, unknown>): Promise<MCPToolResult> => {
-    const config = configStore.get()
-    const currentValue = config.mcpVerifyCompletionEnabled ?? true
-
-    // Validate enabled parameter if provided (optional)
-    if (args.enabled !== undefined && typeof args.enabled !== "boolean") {
-      return {
-        content: [{ type: "text", text: JSON.stringify({ success: false, error: "enabled must be a boolean if provided" }) }],
-        isError: true,
-      }
-    }
-
-    // Determine new value: use provided value or toggle
-    const enabled = typeof args.enabled === "boolean" ? args.enabled : !currentValue
-
-    configStore.save({
-      ...config,
-      mcpVerifyCompletionEnabled: enabled,
-    })
-
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({
-            success: true,
-            setting: "verificationEnabled",
-            previousValue: currentValue,
-            newValue: enabled,
-            message: `Task completion verification has been ${enabled ? "enabled" : "disabled"}. ${enabled ? "The agent will verify task completion before finishing." : "The agent will respond faster without verification."} Note: This change takes effect for new agent sessions only; currently running sessions are not affected.`,
-          }, null, 2),
-        },
-      ],
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          postProcessing: config.transcriptPostProcessingEnabled ?? false,
+          postProcessingPromptConfigured,
+          tts: config.ttsEnabled ?? true,
+          toolApproval: config.mcpRequireApprovalBeforeToolCall ?? false,
+          verification: config.mcpVerifyCompletionEnabled ?? true,
+          messageQueue: config.mcpMessageQueueEnabled ?? true,
+          parallelToolExecution: config.mcpParallelToolExecution ?? true,
+          whatsapp: config.whatsappEnabled ?? false,
+        }, null, 2),
+      }],
       isError: false,
     }
   },
@@ -647,12 +470,6 @@ const toolHandlers: Record<string, ToolHandler> = {
     }
   },
 
-  // Backward compatibility alias for speak_to_user (deprecated, use respond_to_user instead)
-  speak_to_user: async (args: Record<string, unknown>, context: BuiltinToolContext): Promise<MCPToolResult> => {
-    // Delegate to respond_to_user with the same args and context
-    return toolHandlers.respond_to_user(args, context)
-  },
-
   mark_work_complete: async (args: Record<string, unknown>): Promise<MCPToolResult> => {
     if (typeof args.summary !== "string" || args.summary.trim() === "") {
       return {
@@ -683,50 +500,6 @@ const toolHandlers: Record<string, ToolHandler> = {
             summary,
             confidence,
             message: "Completion signal recorded. Provide the final user-facing response next.",
-          }, null, 2),
-        },
-      ],
-      isError: false,
-    }
-  },
-
-  toggle_whatsapp: async (args: Record<string, unknown>): Promise<MCPToolResult> => {
-    const config = configStore.get()
-    const currentValue = config.whatsappEnabled ?? false
-
-    // Validate enabled parameter if provided (optional)
-    if (args.enabled !== undefined && typeof args.enabled !== "boolean") {
-      return {
-        content: [{ type: "text", text: JSON.stringify({ success: false, error: "enabled must be a boolean if provided" }) }],
-        isError: true,
-      }
-    }
-
-    // Determine new value: use provided value or toggle
-    const enabled = typeof args.enabled === "boolean" ? args.enabled : !currentValue
-
-    configStore.save({
-      ...config,
-      whatsappEnabled: enabled,
-    })
-
-    // Trigger WhatsApp MCP server lifecycle changes
-    try {
-      await handleWhatsAppToggle(currentValue, enabled)
-    } catch (_e) {
-      // lifecycle is best-effort
-    }
-
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({
-            success: true,
-            setting: "whatsappEnabled",
-            previousValue: currentValue,
-            newValue: enabled,
-            message: `WhatsApp integration has been ${enabled ? "enabled" : "disabled"}.`,
           }, null, 2),
         },
       ],
@@ -916,109 +689,53 @@ const toolHandlers: Record<string, ToolHandler> = {
     }
   },
 
-  delete_memory: async (args: Record<string, unknown>): Promise<MCPToolResult> => {
-    if (typeof args.memoryId !== "string" || args.memoryId.trim() === "") {
+  delete_memories: async (args: Record<string, unknown>): Promise<MCPToolResult> => {
+    const hasIds = Array.isArray(args.memoryIds) && args.memoryIds.length > 0
+    const deleteAll = args.deleteAll === true
+
+    if (!hasIds && !deleteAll) {
       return {
-        content: [{ type: "text", text: JSON.stringify({ success: false, error: "memoryId required" }) }],
+        content: [{ type: "text", text: JSON.stringify({ success: false, error: "Provide memoryIds array or set deleteAll: true" }) }],
         isError: true,
       }
     }
-
-    const memoryId = args.memoryId.trim()
-
-    try {
-      const success = await memoryService.deleteMemory(memoryId)
+    if (hasIds && deleteAll) {
       return {
-        content: [{ type: "text", text: JSON.stringify({ success, deleted: memoryId }) }],
-        isError: !success,
-      }
-    } catch (error) {
-      return {
-        content: [{ type: "text", text: JSON.stringify({ success: false, error: String(error) }) }],
-        isError: true,
-      }
-    }
-  },
-
-  delete_multiple_memories: async (args: Record<string, unknown>): Promise<MCPToolResult> => {
-    if (!Array.isArray(args.memoryIds) || args.memoryIds.length === 0) {
-      return {
-        content: [{ type: "text", text: JSON.stringify({ success: false, error: "memoryIds must be a non-empty array of strings" }) }],
-        isError: true,
-      }
-    }
-
-    // Validate all IDs are strings, tracking ignored entries
-    const memoryIds: string[] = []
-    const ignoredIds: unknown[] = []
-    for (const id of args.memoryIds) {
-      if (typeof id === "string" && id.trim() !== "") {
-        memoryIds.push(id)
-      } else {
-        ignoredIds.push(id)
-      }
-    }
-    if (memoryIds.length === 0) {
-      return {
-        content: [{ type: "text", text: JSON.stringify({ success: false, error: "memoryIds must contain valid string IDs" }) }],
+        content: [{ type: "text", text: JSON.stringify({ success: false, error: "Cannot use both memoryIds and deleteAll" }) }],
         isError: true,
       }
     }
 
     try {
+      if (deleteAll) {
+        const result = await memoryService.deleteAllMemories()
+        if (result.error) {
+          return { content: [{ type: "text", text: JSON.stringify({ success: false, error: result.error }) }], isError: true }
+        }
+        return { content: [{ type: "text", text: JSON.stringify({ success: true, deletedCount: result.deletedCount }) }], isError: false }
+      }
+
+      // Delete by IDs
+      const memoryIds: string[] = []
+      for (const id of args.memoryIds as unknown[]) {
+        if (typeof id === "string" && id.trim() !== "") memoryIds.push(id.trim())
+      }
+      if (memoryIds.length === 0) {
+        return { content: [{ type: "text", text: JSON.stringify({ success: false, error: "memoryIds must contain valid string IDs" }) }], isError: true }
+      }
+
+      if (memoryIds.length === 1) {
+        const success = await memoryService.deleteMemory(memoryIds[0])
+        return { content: [{ type: "text", text: JSON.stringify({ success, deleted: memoryIds[0] }) }], isError: !success }
+      }
+
       const result = await memoryService.deleteMultipleMemories(memoryIds)
       if (result.error) {
-        return {
-          content: [{ type: "text", text: JSON.stringify({ success: false, error: result.error }) }],
-          isError: true,
-        }
+        return { content: [{ type: "text", text: JSON.stringify({ success: false, error: result.error }) }], isError: true }
       }
-      const response: { success: true; deletedCount: number; requestedCount: number; ignoredIds?: unknown[] } = {
-        success: true,
-        deletedCount: result.deletedCount,
-        requestedCount: args.memoryIds.length,
-      }
-      if (ignoredIds.length > 0) {
-        response.ignoredIds = ignoredIds
-      }
-      return {
-        content: [{ type: "text", text: JSON.stringify(response) }],
-        isError: false,
-      }
+      return { content: [{ type: "text", text: JSON.stringify({ success: true, deletedCount: result.deletedCount, requestedCount: memoryIds.length }) }], isError: false }
     } catch (error) {
-      return {
-        content: [{ type: "text", text: JSON.stringify({ success: false, error: String(error) }) }],
-        isError: true,
-      }
-    }
-  },
-
-  delete_all_memories: async (args: Record<string, unknown>): Promise<MCPToolResult> => {
-    // Require explicit confirmation
-    if (args.confirm !== true) {
-      return {
-        content: [{ type: "text", text: JSON.stringify({ success: false, error: "Must set confirm: true to delete all memories" }) }],
-        isError: true,
-      }
-    }
-
-    try {
-      const result = await memoryService.deleteAllMemories()
-      if (result.error) {
-        return {
-          content: [{ type: "text", text: JSON.stringify({ success: false, error: result.error }) }],
-          isError: true,
-        }
-      }
-      return {
-        content: [{ type: "text", text: JSON.stringify({ success: true, deletedCount: result.deletedCount, message: "All memories deleted for current profile" }) }],
-        isError: false,
-      }
-    } catch (error) {
-      return {
-        content: [{ type: "text", text: JSON.stringify({ success: false, error: String(error) }) }],
-        isError: true,
-      }
+      return { content: [{ type: "text", text: JSON.stringify({ success: false, error: String(error) }) }], isError: true }
     }
   },
 

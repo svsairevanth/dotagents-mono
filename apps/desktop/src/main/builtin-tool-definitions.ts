@@ -85,73 +85,43 @@ export const builtinToolDefinitions: BuiltinToolDefinition[] = [
   },
   {
     name: "kill_agent",
-    description: "Terminate a specific agent session by its session ID. This will abort any in-flight LLM requests, kill spawned processes, and stop the agent immediately.",
+    description: "Terminate agent sessions. Pass a sessionId to kill a specific agent, or omit it to kill ALL running agents. Aborts in-flight LLM requests, kills spawned processes, and stops agents immediately.",
     inputSchema: {
       type: "object",
       properties: {
         sessionId: {
           type: "string",
-          description: "The session ID of the agent to terminate (get this from list_running_agents)",
-        },
-      },
-      required: ["sessionId"],
-    },
-  },
-  {
-    name: "kill_all_agents",
-    description: "Emergency stop ALL running agent sessions. This will abort all in-flight LLM requests, kill all spawned processes, and stop all agents immediately. Use with caution.",
-    inputSchema: {
-      type: "object",
-      properties: {},
-      required: [],
-    },
-  },
-  {
-    name: "get_settings",
-    description: "Get the current status of DotAgents feature toggles including post-processing, TTS (text-to-speech), tool approval, verification, message queue, and parallel tool execution settings.",
-    inputSchema: {
-      type: "object",
-      properties: {},
-      required: [],
-    },
-  },
-  {
-    name: "toggle_post_processing",
-    description: "Enable or disable transcript post-processing. When enabled, transcripts are cleaned up and improved using AI.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        enabled: {
-          type: "boolean",
-          description: "Whether to enable (true) or disable (false) post-processing. If not provided, toggles to the opposite of the current state.",
+          description: "The session ID of the agent to terminate (get this from list_running_agents). Omit to kill all agents.",
         },
       },
       required: [],
     },
   },
   {
-    name: "toggle_tts",
-    description: "Enable or disable text-to-speech (TTS). When enabled, assistant responses are read aloud.",
+    name: "update_settings",
+    description: "Get or update DotAgents settings. Call with no arguments to read current values. Pass any combination of setting keys to update them. Available settings: postProcessing, tts, toolApproval, verification, whatsapp.",
     inputSchema: {
       type: "object",
       properties: {
-        enabled: {
+        postProcessing: {
           type: "boolean",
-          description: "Whether to enable (true) or disable (false) TTS. If not provided, toggles to the opposite of the current state.",
+          description: "Enable/disable transcript post-processing (AI-powered transcript cleanup)",
         },
-      },
-      required: [],
-    },
-  },
-  {
-    name: "toggle_tool_approval",
-    description: "Enable or disable tool approval. When enabled, a confirmation dialog appears before any tool executes. Recommended for safety.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        enabled: {
+        tts: {
           type: "boolean",
-          description: "Whether to enable (true) or disable (false) tool approval. If not provided, toggles to the opposite of the current state.",
+          description: "Enable/disable text-to-speech (assistant responses read aloud)",
+        },
+        toolApproval: {
+          type: "boolean",
+          description: "Enable/disable tool approval dialog before execution (new sessions only)",
+        },
+        verification: {
+          type: "boolean",
+          description: "Enable/disable task completion verification before finishing",
+        },
+        whatsapp: {
+          type: "boolean",
+          description: "Enable/disable WhatsApp integration",
         },
       },
       required: [],
@@ -161,20 +131,6 @@ export const builtinToolDefinitions: BuiltinToolDefinition[] = [
   // These tools are logically distinct from settings management but are all treated as
   // built-in tools for execution purposes (see isBuiltinTool in builtin-tools.ts).
   ...acpRouterToolDefinitions,
-  {
-    name: "toggle_verification",
-    description: "Enable or disable task completion verification. When enabled (default), the agent verifies whether the user's task has been completed before finishing. Disable for faster responses without verification.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        enabled: {
-          type: "boolean",
-          description: "Whether to enable (true) or disable (false) verification. If not provided, toggles to the opposite of the current state.",
-        },
-      },
-      required: [],
-    },
-  },
   {
     name: "respond_to_user",
     description:
@@ -192,23 +148,6 @@ export const builtinToolDefinitions: BuiltinToolDefinition[] = [
     },
   },
   {
-    name: "speak_to_user",
-    description:
-      "[DEPRECATED] Use respond_to_user instead. This is a backward compatibility alias for existing prompts/clients.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        text: {
-          type: "string",
-          description:
-            "The response text for the user. Write naturally and conversationally, without markdown or code formatting.",
-        },
-      },
-      required: ["text"],
-    },
-  },
-
-  {
     name: "mark_work_complete",
     description: "Signal explicit completion for the current task. Call this only when all requested work is actually finished and ready for final delivery.",
     inputSchema: {
@@ -224,20 +163,6 @@ export const builtinToolDefinitions: BuiltinToolDefinition[] = [
         },
       },
       required: ["summary"],
-    },
-  },
-  {
-    name: "toggle_whatsapp",
-    description: "Enable or disable WhatsApp integration. When enabled, allows sending and receiving WhatsApp messages through DotAgents.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        enabled: {
-          type: "boolean",
-          description: "Whether to enable (true) or disable (false) WhatsApp integration. If not provided, toggles to the opposite of the current state.",
-        },
-      },
-      required: [],
     },
   },
   {
@@ -292,22 +217,8 @@ export const builtinToolDefinitions: BuiltinToolDefinition[] = [
     },
   },
   {
-    name: "delete_memory",
-    description: "Delete a memory by ID. Use this to remove redundant or outdated memories. Call list_memories first to get IDs.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        memoryId: {
-          type: "string",
-          description: "The memory ID to delete (from list_memories)",
-        },
-      },
-      required: ["memoryId"],
-    },
-  },
-  {
-    name: "delete_multiple_memories",
-    description: "Delete multiple memories by their IDs in a single operation. More efficient than calling delete_memory repeatedly. Call list_memories first to get IDs.",
+    name: "delete_memories",
+    description: "Delete memories. Pass an array of memory IDs to delete specific ones, or set deleteAll to true to remove all memories. Call list_memories first to get IDs.",
     inputSchema: {
       type: "object",
       properties: {
@@ -316,22 +227,12 @@ export const builtinToolDefinitions: BuiltinToolDefinition[] = [
           items: { type: "string" },
           description: "Array of memory IDs to delete (from list_memories)",
         },
-      },
-      required: ["memoryIds"],
-    },
-  },
-  {
-    name: "delete_all_memories",
-    description: "Delete ALL memories for the current profile. Use with caution - this cannot be undone. Consider using delete_multiple_memories for selective deletion.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        confirm: {
+        deleteAll: {
           type: "boolean",
-          description: "Must be set to true to confirm deletion of all memories",
+          description: "Set to true to delete ALL memories. Cannot be used with memoryIds.",
         },
       },
-      required: ["confirm"],
+      required: [],
     },
   },
   {

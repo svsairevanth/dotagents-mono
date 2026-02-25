@@ -2137,12 +2137,12 @@ Return ONLY JSON per schema.`,
         break
       }
     } else {
-      // Check if the only tools called are communication-only (respond_to_user / speak_to_user).
+      // Check if the only tools called are communication-only (respond_to_user).
       // These don't represent real work progress — they're just the agent talking to the user.
       // If respond_to_user is called without mark_work_complete, don't reset the completion
       // counters; otherwise the agent can loop indefinitely: text → nudge → respond_to_user
       // (resets counters) → text → nudge → respond_to_user → … (#respond-to-user-spam)
-      const COMMUNICATION_ONLY_TOOLS = new Set([RESPOND_TO_USER_TOOL, "speak_to_user"])
+      const COMMUNICATION_ONLY_TOOLS = new Set([RESPOND_TO_USER_TOOL])
       const onlyCommunicationTools = toolCallsArray.every(tc => COMMUNICATION_ONLY_TOOLS.has(tc.name))
 
       if (onlyCommunicationTools) {

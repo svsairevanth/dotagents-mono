@@ -1,5 +1,4 @@
 import fs from "fs"
-import { spawn } from "child_process"
 import { logApp, logLLM, getDebugFlags } from "./debug"
 import { getRendererHandlers, tipc } from "@egoist/tipc/main"
 import {
@@ -621,85 +620,22 @@ type OpenFileResult = {
   success: boolean
   error?: string
   path?: string
-  openedWith?: "preferred-editor" | "default-app"
 }
 
-function normalizePreferredEditorCommands(config: Config): string[] {
-  const raw = config.preferredEditorCommands
-  if (!Array.isArray(raw)) return []
-
-  return raw
-    .map((command) => (typeof command === "string" ? command.trim() : ""))
-    .filter(Boolean)
-}
-
-function quoteFilePathForShell(filePath: string): string {
-  if (process.platform === "win32") {
-    return `"${filePath.replace(/"/g, '\\"')}"`
+function revealFileInFolder(filePath: string): OpenFileResult {
+  if (!fs.existsSync(filePath)) {
+    return { success: false, path: filePath, error: "File does not exist" }
   }
-  return `'${filePath.replace(/'/g, `'"'"'`)}'`
-}
 
-function createEditorCommand(commandTemplate: string, filePath: string): string {
-  const quotedPath = quoteFilePathForShell(filePath)
-  if (commandTemplate.includes("{file}")) {
-    return commandTemplate.split("{file}").join(quotedPath)
-  }
-  return `${commandTemplate} ${quotedPath}`
-}
-
-async function tryLaunchEditorCommand(commandLine: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    let settled = false
-    const settle = (value: boolean) => {
-      if (settled) return
-      settled = true
-      resolve(value)
+  try {
+    shell.showItemInFolder(filePath)
+    return { success: true, path: filePath }
+  } catch (error) {
+    return {
+      success: false,
+      path: filePath,
+      error: error instanceof Error ? error.message : String(error),
     }
-
-    try {
-      const child = spawn(commandLine, {
-        shell: true,
-        detached: true,
-        stdio: "ignore",
-        windowsHide: true,
-      })
-
-      child.once("error", () => settle(false))
-      child.once("exit", (code) => settle(code === 0))
-      child.once("spawn", () => {
-        // If the command keeps running for a short moment, assume the editor launched.
-        setTimeout(() => {
-          child.unref()
-          settle(true)
-        }, 250)
-      })
-    } catch {
-      settle(false)
-    }
-  })
-}
-
-async function openFileInPreferredEditor(filePath: string, config: Config): Promise<OpenFileResult> {
-  const commands = normalizePreferredEditorCommands(config)
-
-  for (const commandTemplate of commands) {
-    const commandLine = createEditorCommand(commandTemplate, filePath)
-    const launched = await tryLaunchEditorCommand(commandLine)
-    if (launched) {
-      return { success: true, path: filePath, openedWith: "preferred-editor" }
-    }
-  }
-
-  const shellError = await shell.openPath(filePath)
-  if (!shellError) {
-    return { success: true, path: filePath, openedWith: "default-app" }
-  }
-
-  return {
-    success: false,
-    path: filePath,
-    error: shellError,
   }
 }
 
@@ -2087,7 +2023,7 @@ export const router = {
       { onlyIfMissing: true, maxBackups: 10 },
     )
 
-    return openFileInPreferredEditor(targetLayer.systemPromptMdPath, config)
+    return revealFileInFolder(targetLayer.systemPromptMdPath)
   }),
 
   openAgentsGuidelinesFile: t.procedure.action(async () => {
@@ -2111,7 +2047,7 @@ export const router = {
       { onlyIfMissing: true, maxBackups: 10 },
     )
 
-    return openFileInPreferredEditor(targetLayer.agentsMdPath, config)
+    return revealFileInFolder(targetLayer.agentsMdPath)
   }),
 
   openMemoriesFolder: t.procedure.action(async () => {
@@ -4093,8 +4029,7 @@ export const router = {
         }
       }
 
-      const config = configStore.get()
-      return openFileInPreferredEditor(filePath, config)
+      return revealFileInFolder(filePath)
     }),
 
   scanSkillsFolder: t.procedure.action(async () => {
@@ -4315,8 +4250,7 @@ export const router = {
         filePath = taskIdToFilePath(globalLayer, input.loopId)
       }
 
-      const config = configStore.get()
-      return openFileInPreferredEditor(filePath, config)
+      return revealFileInFolder(filePath)
     }),
 
   saveLoop: t.procedure

@@ -220,11 +220,11 @@ export function Component() {
     },
     onSuccess: (result) => {
       if (!result?.success) {
-        toast.error(result?.error || "Failed to open skill file")
+        toast.error(result?.error || "Failed to reveal skill file")
       }
     },
     onError: (error: Error) => {
-      toast.error(`Failed to open skill file: ${error.message}`)
+      toast.error(`Failed to reveal skill file: ${error.message}`)
     },
   })
 
@@ -613,6 +613,8 @@ Write your skill instructions here.
                       variant="ghost"
                       size="sm"
                       onClick={() => openSkillFileMutation.mutate(skill.id)}
+                      title="Reveal skill file in Finder/Explorer"
+                      aria-label="Reveal skill file"
                     >
                       <FileText className="h-3 w-3" />
                     </Button>
