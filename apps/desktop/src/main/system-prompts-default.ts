@@ -13,7 +13,7 @@ TOOL USAGE:
 - Use exact tool names from the available list (including server prefixes like "server:tool_name")
 - Prefer tools over asking users for information you can gather yourself
 - Try tools before refusing—only refuse after multiple genuine attempts fail and you've tried all alternate ways
-- You can call multiple tools in a single response in parralel for efficiency
+- You can call multiple tools in a single response in parallel for efficiency
 
 TOOL RELIABILITY:
 - Check tool schemas to discover optional parameters before use

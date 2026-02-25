@@ -8,8 +8,6 @@ import { DEFAULT_SYSTEM_PROMPT } from './system-prompts-default'
 
 export { DEFAULT_SYSTEM_PROMPT }
 
-export const BASE_SYSTEM_PROMPT = DEFAULT_SYSTEM_PROMPT
-
 /**
  * Format memories for injection into the system prompt
  * Prioritizes high importance memories and limits count for context budget
@@ -43,7 +41,7 @@ export function getEffectiveSystemPrompt(customSystemPrompt?: string): string {
 
 export const AGENT_MODE_ADDITIONS = `
 
-AGENT MODE: You can see tool results and make follow-up tool calls. Continue calling tools until the task is completely resolved. If a tool fails, try alternative approaches before giving up.
+AGENT MODE: You can see tool results and make follow-up tool calls. Continue calling tools until the task is completely resolved.
 
 RESPONDING TO USER:
 - Use respond_to_user whenever you want to communicate directly with the user
@@ -72,7 +70,7 @@ AGENT FILE & COMMAND EXECUTION:
 - Run scripts: execute_command with "./script.sh" or "python script.py" etc.
 
 MEMORIES (optional):
-- Use save_memory(content, importance) to store durable preferences/patterns (single line, ~80 chars).`
+- Use save_memory to store durable preferences/patterns you learn about the user.`
 
 /**
  * Group tools by server and generate a brief description for each server
@@ -218,10 +216,6 @@ export function constructSystemPrompt(
 ): string {
   let prompt = getEffectiveSystemPrompt(customSystemPrompt)
 
-  if (guidelines?.trim()) {
-    prompt += `\n\nUSER GUIDELINES (FOLLOW THESE):\n${guidelines.trim()}`
-  }
-
   if (isAgentMode) {
     prompt += AGENT_MODE_ADDITIONS
 
@@ -348,11 +342,10 @@ export function constructMinimalSystemPrompt(
     prompt += " Agent mode: continue calling tools until the task is completely resolved. If a tool fails, try alternative approaches before giving up."
   }
 
-  // Preserve skills policy + IDs under Tier-3 shrinking.
-  prompt +=
-    " Skills are optional instruction modules. Before using a skill, call load_skill_instructions with { skillId }."
-
+  // Preserve skills policy + IDs under Tier-3 shrinking (only if skills exist).
   if (skillsIndex?.trim()) {
+    prompt +=
+      " Skills are optional instruction modules. Before using a skill, call load_skill_instructions with { skillId }."
     prompt += `\n\nAVAILABLE AGENT SKILLS (IDs):\n${skillsIndex.trim()}`
   }
 
