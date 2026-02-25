@@ -67,6 +67,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         const hasEmptyHistory = !update.conversationHistory || update.conversationHistory.length === 0
         const hasEmptySteps = !update.steps || update.steps.length === 0
 
+        // Detect session revival: transitioning from complete → active.
+        // Clear stale userResponse so the TTS engine doesn't re-read
+        // the previous run's spoken content when the session is continued.
+        const isRevival = existingProgress.isComplete && !update.isComplete
+
         // Merge delegation steps: preserve existing delegation steps and update/add new ones
         // This ensures parallel delegations and completed delegations persist
         const mergedSteps = (() => {
@@ -116,6 +121,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           mergedUpdate = {
             ...existingProgress,
             ...update,
+            // On revival, drop the old userResponse so TTS doesn't re-read it.
+            ...(isRevival ? { userResponse: undefined } : {}),
             // Explicitly handle pendingToolApproval: if update has the key (even if undefined),
             // use the update value; otherwise preserve existing. This ensures clearing works.
             pendingToolApproval: 'pendingToolApproval' in update
@@ -133,6 +140,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           mergedUpdate = {
             ...existingProgress,
             ...update,
+            // On revival, drop the old userResponse so TTS doesn't re-read it.
+            ...(isRevival ? { userResponse: undefined } : {}),
             // Explicitly handle pendingToolApproval: if update has the key (even if undefined),
             // use the update value; otherwise preserve existing. This ensures clearing works.
             pendingToolApproval: 'pendingToolApproval' in update
