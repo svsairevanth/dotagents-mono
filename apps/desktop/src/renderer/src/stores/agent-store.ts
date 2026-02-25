@@ -175,10 +175,17 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
       newMap.set(sessionId, mergedUpdate)
 
-      // Only auto-focus new sessions that aren't snoozed or complete
+      // Auto-focus new active sessions.
+      // Also steal focus from a completed session so the panel doesn't
+      // re-show an old finished session when a new one starts.
       let newFocusedSessionId = state.focusedSessionId
-      if (isNewSession && !state.focusedSessionId && !mergedUpdate.isSnoozed && !mergedUpdate.isComplete) {
-        newFocusedSessionId = sessionId
+      if (isNewSession && !mergedUpdate.isSnoozed && !mergedUpdate.isComplete) {
+        const currentFocusedProgress = state.focusedSessionId
+          ? newMap.get(state.focusedSessionId)
+          : undefined
+        if (!state.focusedSessionId || currentFocusedProgress?.isComplete) {
+          newFocusedSessionId = sessionId
+        }
       }
 
       return {
