@@ -2986,7 +2986,7 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
 
         {/* Message Queue Panel - shows queued messages in tile */}
         {hasQueuedMessages && progress.conversationId && (
-          <div className="px-3 py-2 border-t flex-shrink-0">
+          <div className="px-3 py-2 border-t flex-shrink-0" onClick={(e) => e.stopPropagation()}>
             <MessageQueuePanel
               conversationId={progress.conversationId}
               messages={queuedMessages}

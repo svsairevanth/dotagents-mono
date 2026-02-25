@@ -287,6 +287,12 @@ export function MessageQueuePanel({
     },
   })
 
+  const pauseMutation = useMutation({
+    mutationFn: async () => {
+      await tipcClient.pauseMessageQueue({ conversationId })
+    },
+  })
+
   // Check if any message is currently being processed
   // Disable Clear All when processing to prevent confusing UX where user thinks
   // they cancelled a running prompt while it actually continues running
@@ -315,7 +321,7 @@ export function MessageQueuePanel({
         )}>
           {messages.length} queued{isPaused ? " (paused)" : ""}
         </span>
-        {isPaused && (
+        {isPaused ? (
           <Button
             variant="ghost"
             size="icon"
@@ -325,6 +331,17 @@ export function MessageQueuePanel({
             title="Resume queue execution"
           >
             <Play className="h-3 w-3" />
+          </Button>
+        ) : (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-4 w-4 text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/30"
+            onClick={() => pauseMutation.mutate()}
+            disabled={pauseMutation.isPending || hasProcessingMessage}
+            title="Pause queue"
+          >
+            <Pause className="h-3 w-3" />
           </Button>
         )}
         <Button
@@ -379,7 +396,7 @@ export function MessageQueuePanel({
           </span>
         </div>
         <div className="flex items-center gap-1">
-          {isPaused && (
+          {isPaused ? (
             <Button
               variant="ghost"
               size="sm"
@@ -390,6 +407,18 @@ export function MessageQueuePanel({
             >
               <Play className="h-3 w-3 mr-1" />
               Resume
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 text-xs text-amber-700 dark:text-amber-300 hover:text-amber-900 dark:hover:text-amber-100 hover:bg-amber-200/50 dark:hover:bg-amber-800/50"
+              onClick={() => pauseMutation.mutate()}
+              disabled={pauseMutation.isPending || hasProcessingMessage}
+              title="Pause queue"
+            >
+              <Pause className="h-3 w-3 mr-1" />
+              Pause
             </Button>
           )}
           {!isListCollapsed && (

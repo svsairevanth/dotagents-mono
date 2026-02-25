@@ -3519,6 +3519,13 @@ export const router = {
           return messageQueueService.isQueuePaused(input.conversationId)
     }),
 
+  pauseMessageQueue: t.procedure
+    .input<{ conversationId: string }>()
+    .action(async ({ input }) => {
+      messageQueueService.pauseQueue(input.conversationId)
+      return true
+    }),
+
   resumeMessageQueue: t.procedure
     .input<{ conversationId: string }>()
     .action(async ({ input }) => {
