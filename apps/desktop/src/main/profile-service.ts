@@ -620,32 +620,36 @@ class ProfileService {
   }
 
   /**
-   * Check if a skill is enabled for a specific profile
+   * Check if a skill is enabled for a specific profile.
+   * When skillsConfig is undefined (unconfigured), all skills are enabled by default.
    */
   isSkillEnabledForProfile(profileId: string, skillId: string): boolean {
     const profile = this.getProfile(profileId)
     if (!profile) {
       return false
     }
-
-    const enabledSkillIds = profile.skillsConfig?.enabledSkillIds ?? []
-    return enabledSkillIds.includes(skillId)
+    // No skillsConfig = unconfigured = all skills enabled by default
+    if (!profile.skillsConfig || !profile.skillsConfig.allSkillsDisabledByDefault) return true
+    return (profile.skillsConfig.enabledSkillIds ?? []).includes(skillId)
   }
 
   /**
-   * Get all enabled skill IDs for a profile
+   * Get all enabled skill IDs for a profile.
+   * Returns null when all skills are enabled by default (unconfigured skillsConfig).
    */
-  getEnabledSkillIdsForProfile(profileId: string): string[] {
+  getEnabledSkillIdsForProfile(profileId: string): string[] | null {
     const profile = this.getProfile(profileId)
     if (!profile) {
       return []
     }
-    return profile.skillsConfig?.enabledSkillIds ?? []
+    // No skillsConfig = unconfigured = all skills enabled
+    if (!profile.skillsConfig || !profile.skillsConfig.allSkillsDisabledByDefault) return null
+    return profile.skillsConfig.enabledSkillIds ?? []
   }
 
   /**
-   * Enable a skill for the current profile (used when installing new skills)
-   * This allows newly installed skills to be immediately usable by the agent
+   * Enable a skill for the current profile (used when installing new skills).
+   * If the profile has no skillsConfig (all skills enabled by default), this is a no-op.
    */
   enableSkillForCurrentProfile(skillId: string): Profile | undefined {
     const currentProfile = this.getCurrentProfile()
@@ -653,7 +657,12 @@ class ProfileService {
       return undefined
     }
 
-    const currentEnabledSkills = currentProfile.skillsConfig?.enabledSkillIds ?? []
+    // If all skills are enabled by default (no skillsConfig), no need to add explicitly
+    if (!currentProfile.skillsConfig || !currentProfile.skillsConfig.allSkillsDisabledByDefault) {
+      return currentProfile
+    }
+
+    const currentEnabledSkills = currentProfile.skillsConfig.enabledSkillIds ?? []
 
     // Already enabled, no need to update
     if (currentEnabledSkills.includes(skillId)) {
@@ -662,7 +671,7 @@ class ProfileService {
 
     return this.updateProfileSkillsConfig(currentProfile.id, {
       enabledSkillIds: [...currentEnabledSkills, skillId],
-      allSkillsDisabledByDefault: true, // Maintain opt-in behavior
+      allSkillsDisabledByDefault: true,
     })
   }
 

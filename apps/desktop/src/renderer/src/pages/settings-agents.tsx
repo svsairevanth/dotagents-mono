@@ -74,7 +74,7 @@ function emptyAgent(): EditingAgent {
     displayName: "", description: "", systemPrompt: "", guidelines: "",
     connectionType: "internal", enabled: true,
     modelConfig: undefined, toolConfig: undefined,
-    skillsConfig: { enabledSkillIds: [] }, properties: {},
+    skillsConfig: undefined, properties: {},
   }
 }
 
@@ -155,7 +155,7 @@ export function SettingsAgents() {
       enabled: agent.enabled, autoSpawn: agent.autoSpawn,
       modelConfig: agent.modelConfig ? { ...agent.modelConfig } : undefined,
       toolConfig: agent.toolConfig ? { ...agent.toolConfig } : undefined,
-      skillsConfig: agent.skillsConfig ? { ...agent.skillsConfig } : { enabledSkillIds: [] },
+      skillsConfig: agent.skillsConfig ? { ...agent.skillsConfig } : undefined,
       properties: agent.properties ? { ...agent.properties } : {},
       avatarDataUrl: agent.avatarDataUrl ?? null,
     })
@@ -224,7 +224,9 @@ export function SettingsAgents() {
   }
 
   const isSkillEnabled = (skillId: string): boolean => {
-    return (editing?.skillsConfig?.enabledSkillIds || []).includes(skillId)
+    // When skillsConfig is undefined or allSkillsDisabledByDefault is false, all skills are enabled
+    if (!editing?.skillsConfig || !editing.skillsConfig.allSkillsDisabledByDefault) return true
+    return (editing.skillsConfig.enabledSkillIds || []).includes(skillId)
   }
 
   const toggleServer = (serverName: string) => {
@@ -271,10 +273,21 @@ export function SettingsAgents() {
 
   const toggleSkill = (skillId: string) => {
     if (!editing) return
-    const ids = [...(editing.skillsConfig?.enabledSkillIds || [])]
+    // Transitioning from "all enabled by default" to explicit opt-in mode
+    if (!editing.skillsConfig || !editing.skillsConfig.allSkillsDisabledByDefault) {
+      const allExcept = skills.map(s => s.id).filter(id => id !== skillId)
+      setEditing({ ...editing, skillsConfig: { enabledSkillIds: allExcept, allSkillsDisabledByDefault: true } })
+      return
+    }
+    const ids = [...(editing.skillsConfig.enabledSkillIds || [])]
     const idx = ids.indexOf(skillId)
     if (idx >= 0) ids.splice(idx, 1); else ids.push(skillId)
-    setEditing({ ...editing, skillsConfig: { ...editing.skillsConfig, enabledSkillIds: ids } })
+    // If all skills are re-enabled, reset to default state
+    if (ids.length === skills.length) {
+      setEditing({ ...editing, skillsConfig: { enabledSkillIds: [], allSkillsDisabledByDefault: false } })
+    } else {
+      setEditing({ ...editing, skillsConfig: { ...editing.skillsConfig, enabledSkillIds: ids } })
+    }
   }
 
   // Section collapse helpers
@@ -370,8 +383,8 @@ export function SettingsAgents() {
                 {(agent.toolConfig?.enabledServers?.length ?? 0) > 0 && (
                   <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 bg-muted/30 font-normal"><Server className="h-2.5 w-2.5 mr-0.5 text-muted-foreground" />{agent.toolConfig!.enabledServers!.length}</Badge>
                 )}
-                {(agent.skillsConfig?.enabledSkillIds?.length ?? 0) > 0 && (
-                  <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 bg-muted/30 font-normal"><Sparkles className="h-2.5 w-2.5 mr-0.5 text-muted-foreground" />{agent.skillsConfig!.enabledSkillIds!.length}</Badge>
+                {skills.length > 0 && (
+                  <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 bg-muted/30 font-normal"><Sparkles className="h-2.5 w-2.5 mr-0.5 text-muted-foreground" />{(!agent.skillsConfig || !agent.skillsConfig.allSkillsDisabledByDefault) ? skills.length : (agent.skillsConfig.enabledSkillIds?.length ?? 0)}</Badge>
                 )}
                 {agent.properties && Object.keys(agent.properties).length > 0 && (
                   <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 bg-muted/30 font-normal">{Object.keys(agent.properties).length} props</Badge>

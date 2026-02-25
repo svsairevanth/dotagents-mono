@@ -72,14 +72,28 @@ export function AgentCapabilitiesSidebar() {
 
   // ── Capability helpers (per agent) ──
 
-  const isSkillEnabled = (agent: AgentProfile, skillId: string) =>
-    (agent.skillsConfig?.enabledSkillIds || []).includes(skillId)
+  // When skillsConfig is undefined or allSkillsDisabledByDefault is false, all skills are enabled
+  const isSkillEnabled = (agent: AgentProfile, skillId: string) => {
+    if (!agent.skillsConfig || !agent.skillsConfig.allSkillsDisabledByDefault) return true
+    return (agent.skillsConfig.enabledSkillIds || []).includes(skillId)
+  }
 
   const toggleSkill = (agent: AgentProfile, skillId: string) => {
-    const ids = [...(agent.skillsConfig?.enabledSkillIds || [])]
+    // Transitioning from "all enabled by default" to explicit opt-in mode
+    if (!agent.skillsConfig || !agent.skillsConfig.allSkillsDisabledByDefault) {
+      const allExcept = skills.map(s => s.id).filter(id => id !== skillId)
+      updateAgent(agent.id, { skillsConfig: { enabledSkillIds: allExcept, allSkillsDisabledByDefault: true } })
+      return
+    }
+    const ids = [...(agent.skillsConfig.enabledSkillIds || [])]
     const idx = ids.indexOf(skillId)
     if (idx >= 0) ids.splice(idx, 1); else ids.push(skillId)
-    updateAgent(agent.id, { skillsConfig: { ...agent.skillsConfig, enabledSkillIds: ids } })
+    // If all skills are re-enabled, reset to default (all enabled) state
+    if (ids.length === skills.length) {
+      updateAgent(agent.id, { skillsConfig: { enabledSkillIds: [], allSkillsDisabledByDefault: false } })
+    } else {
+      updateAgent(agent.id, { skillsConfig: { ...agent.skillsConfig, enabledSkillIds: ids } })
+    }
   }
 
   const isServerEnabled = (agent: AgentProfile, serverName: string) => {

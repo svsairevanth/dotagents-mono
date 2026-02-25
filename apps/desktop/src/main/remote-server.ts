@@ -1764,7 +1764,9 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
     try {
       const skills = skillsService.getSkills()
       const currentProfile = agentProfileService.getCurrentProfile()
-      const enabledSkillIds = currentProfile?.skillsConfig?.enabledSkillIds || []
+      // When skillsConfig is undefined or allSkillsDisabledByDefault is false, all skills are enabled
+      const allEnabledByDefault = !currentProfile?.skillsConfig || !currentProfile.skillsConfig.allSkillsDisabledByDefault
+      const enabledSkillIds = allEnabledByDefault ? skills.map(s => s.id) : (currentProfile?.skillsConfig?.enabledSkillIds || [])
 
       return reply.send({
         skills: skills.map(s => ({
@@ -1801,13 +1803,17 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
         return reply.code(400).send({ error: "No current profile set" })
       }
 
-      const updatedProfile = agentProfileService.toggleProfileSkill(currentProfile.id, params.id)
-      const newEnabledSkillIds = updatedProfile?.skillsConfig?.enabledSkillIds || []
+      const allSkillIds = skills.map(s => s.id)
+      const updatedProfile = agentProfileService.toggleProfileSkill(currentProfile.id, params.id, allSkillIds)
+      // Check enablement using the new semantics
+      const isNowEnabled = !updatedProfile?.skillsConfig || !updatedProfile.skillsConfig.allSkillsDisabledByDefault
+        ? true
+        : (updatedProfile.skillsConfig.enabledSkillIds || []).includes(params.id)
 
       return reply.send({
         success: true,
         skillId: params.id,
-        enabledForProfile: newEnabledSkillIds.includes(params.id),
+        enabledForProfile: isNowEnabled,
       })
     } catch (error: any) {
       diagnosticsService.logError("remote-server", "Failed to toggle skill", error)

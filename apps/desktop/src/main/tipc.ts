@@ -3958,7 +3958,8 @@ export const router = {
     .input<{ profileId: string }>()
     .action(async ({ input }) => {
       const profile = agentProfileService.getById(input.profileId)
-      return profile?.skillsConfig ?? { enabledSkillIds: [], allSkillsDisabledByDefault: true }
+      // When skillsConfig is undefined, all skills are enabled by default
+      return profile?.skillsConfig ?? { enabledSkillIds: [], allSkillsDisabledByDefault: false }
     }),
 
   updateProfileSkillsConfig: t.procedure
@@ -3971,7 +3972,11 @@ export const router = {
   toggleProfileSkill: t.procedure
     .input<{ profileId: string; skillId: string }>()
     .action(async ({ input }) => {
-      return agentProfileService.toggleProfileSkill(input.profileId, input.skillId)
+      // Pass all available skill IDs so the toggle can properly transition
+      // from "all enabled by default" to explicit opt-in mode
+      const { skillsService } = await import("./skills-service")
+      const allSkillIds = skillsService.getSkills().map(s => s.id)
+      return agentProfileService.toggleProfileSkill(input.profileId, input.skillId, allSkillIds)
     }),
 
   isSkillEnabledForProfile: t.procedure
@@ -3983,7 +3988,13 @@ export const router = {
   getEnabledSkillIdsForProfile: t.procedure
     .input<{ profileId: string }>()
     .action(async ({ input }) => {
-      return agentProfileService.getEnabledSkillIdsForProfile(input.profileId)
+      const enabledSkillIds = agentProfileService.getEnabledSkillIdsForProfile(input.profileId)
+      if (enabledSkillIds === null) {
+        // null means "all skills enabled" — return all available skill IDs
+        const { skillsService } = await import("./skills-service")
+        return skillsService.getSkills().map(s => s.id)
+      }
+      return enabledSkillIds
     }),
 
   // Get enabled skills instructions for a specific profile
@@ -3992,6 +4003,11 @@ export const router = {
     .action(async ({ input }) => {
       const { skillsService } = await import("./skills-service")
       const enabledSkillIds = agentProfileService.getEnabledSkillIdsForProfile(input.profileId)
+      if (enabledSkillIds === null) {
+        // null means "all skills enabled" — use all available skill IDs
+        const allSkillIds = skillsService.getSkills().map(s => s.id)
+        return skillsService.getEnabledSkillsInstructionsForProfile(allSkillIds)
+      }
       return skillsService.getEnabledSkillsInstructionsForProfile(enabledSkillIds)
     }),
 

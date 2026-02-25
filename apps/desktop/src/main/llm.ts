@@ -183,9 +183,13 @@ export async function processTranscriptWithTools(
   const { agentProfileService } = await import("./agent-profile-service")
   const mainAgent = agentProfileService.getCurrentProfile()
   const userGuidelines = mainAgent?.guidelines || ""
-  const enabledSkillIds = mainAgent
+  const enabledSkillIdsOrNull = mainAgent
     ? agentProfileService.getEnabledSkillIdsForProfile(mainAgent.id)
     : []
+  // null means "all skills enabled by default" — resolve to all available skill IDs
+  const enabledSkillIds = enabledSkillIdsOrNull === null
+    ? skillsService.getSkills().map(s => s.id)
+    : enabledSkillIdsOrNull
   const skillsInstructions = skillsService.getEnabledSkillsInstructionsForProfile(enabledSkillIds)
   const skillsIndex = extractSkillsIndexForMinimalPrompt(skillsInstructions)
 
@@ -811,7 +815,11 @@ export async function processTranscriptWithAgentMode(
   let profileSkillsInstructions: string | undefined
   if (!agentSkillsInstructions) {
     const { skillsService } = await import("./skills-service")
-    const enabledSkillIds = effectiveProfileSnapshot?.skillsConfig?.enabledSkillIds ?? []
+    const snapshotSkillsConfig = effectiveProfileSnapshot?.skillsConfig
+    // When skillsConfig is undefined or allSkillsDisabledByDefault is false, all skills are enabled
+    const enabledSkillIds = (!snapshotSkillsConfig || !snapshotSkillsConfig.allSkillsDisabledByDefault)
+      ? skillsService.getSkills().map(s => s.id)
+      : (snapshotSkillsConfig.enabledSkillIds ?? [])
     logLLM(`[processTranscriptWithAgentMode] Loading skills for session ${currentSessionId}. enabledSkillIds: [${enabledSkillIds.join(', ')}]`)
     profileSkillsInstructions = skillsService.getEnabledSkillsInstructionsForProfile(enabledSkillIds)
     logLLM(`[processTranscriptWithAgentMode] Skills instructions loaded: ${profileSkillsInstructions ? `${profileSkillsInstructions.length} chars` : 'none'}`)
