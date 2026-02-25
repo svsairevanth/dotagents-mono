@@ -1644,6 +1644,11 @@ const MidTurnUserResponseBubble: React.FC<{
     // Mark as playing before starting generation
     if (ttsKey) {
       markTTSPlayed(ttsKey)
+      // Also mark the non-prefixed key that the completion path will check
+      // to prevent double TTS playback when session completes
+      if (sessionId) {
+        markTTSPlayed(`${sessionId}:${userResponse}`)
+      }
       inFlightTtsKeyRef.current = ttsKey
     }
 
