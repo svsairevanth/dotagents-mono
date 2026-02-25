@@ -1864,7 +1864,6 @@ Return ONLY JSON per schema.`,
     // Handle no-op iterations (no tool calls).
     if (!hasToolCalls) {
       noOpCount++
-      logLLM(`[LOOP-DEBUG] No tool calls. noOpCount=${noOpCount}, totalNudgeCount=${totalNudgeCount}, completionSignalHintCount=${completionSignalHintCount}`)
 
       const hasToolsAvailable = activeTools.length > 0
       const hasCompletionSignalTool = activeTools.some(
@@ -2095,8 +2094,7 @@ Return ONLY JSON per schema.`,
 
       // Nudge path for non-deliverable/no-progress responses.
       if (config.mcpVerifyCompletionEnabled && (noOpCount >= 2 || (hasToolsAvailable && noOpCount >= 1))) {
-        logLLM(`[LOOP-DEBUG] Nudge path hit. noOpCount=${noOpCount}, totalNudgeCount=${totalNudgeCount}, MAX_NUDGES=${MAX_NUDGES}`)
-      if (totalNudgeCount >= MAX_NUDGES) {
+        if (totalNudgeCount >= MAX_NUDGES) {
           finalContent = buildIncompleteTaskFallback(contentText)
           addMessage("assistant", finalContent)
           emit({
@@ -2148,10 +2146,10 @@ Return ONLY JSON per schema.`,
       const onlyCommunicationTools = toolCallsArray.every(tc => COMMUNICATION_ONLY_TOOLS.has(tc.name))
 
       if (onlyCommunicationTools) {
-        // Communication-only batch: reset noOpCount (a tool was called) but preserve
-        // nudge/hint counters so the safety valves still fire if the agent keeps looping.
-        noOpCount = 0
-        logLLM(`[LOOP-DEBUG] Communication-only tools (${toolCallsArray.map(tc => tc.name).join(",")}). noOpCount=0, totalNudgeCount=${totalNudgeCount}, completionSignalHintCount=${completionSignalHintCount} (preserved)`)
+        // Communication-only batch: increment noOpCount (no real progress) and preserve
+        // nudge/hint counters so the safety valves fire if the agent keeps looping.
+        // This ensures repeated respond_to_user calls trigger the nudge path.
+        noOpCount++
       } else {
         // Real work tools: full counter reset
         noOpCount = 0
@@ -2160,7 +2158,6 @@ Return ONLY JSON per schema.`,
         // If the agent gets stuck again later, it should have a fresh nudge budget.
         totalNudgeCount = 0
         completionSignalHintCount = 0
-        logLLM(`[LOOP-DEBUG] Real work tools (${toolCallsArray.map(tc => tc.name).join(",")}). All counters reset.`)
       }
     }
 
