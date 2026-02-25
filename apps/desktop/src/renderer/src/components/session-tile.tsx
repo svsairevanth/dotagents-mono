@@ -20,6 +20,7 @@ import {
   OctagonX,
   Check,
   Loader2,
+  Volume2,
 } from "lucide-react"
 import { Button } from "@renderer/components/ui/button"
 import { Badge } from "@renderer/components/ui/badge"
@@ -27,6 +28,10 @@ import { MarkdownRenderer } from "@renderer/components/markdown-renderer"
 import { MessageQueuePanel } from "@renderer/components/message-queue-panel"
 import { useMessageQueue, useIsQueuePaused } from "@renderer/stores"
 import { tipcClient } from "@renderer/lib/tipc-client"
+import { AudioPlayer } from "@renderer/components/audio-player"
+import { useConfigQuery } from "@renderer/lib/queries"
+import { ttsManager } from "@renderer/lib/tts-manager"
+import { removeTTSKey } from "@renderer/lib/tts-tracking"
 
 const MIN_HEIGHT = 120
 const MAX_HEIGHT = 4000 // Allow tiles to fill large displays - effectively no practical limit
@@ -83,11 +88,29 @@ export function SessionTile({
     return `${message.timestamp || index}-${message.role}`
   }
 
-  // Cleanup timeout on unmount
+  // TTS state
+  const [audioData, setAudioData] = useState<ArrayBuffer | null>(null)
+  const [isGeneratingAudio, setIsGeneratingAudio] = useState(false)
+  const [ttsError, setTtsError] = useState<string | null>(null)
+  const [isTTSPlaying, setIsTTSPlaying] = useState(false)
+  const inFlightTtsKeyRef = useRef<string | null>(null)
+  const configQuery = useConfigQuery()
+  const ttsGenerationIdRef = useRef(0)
+
+  // Cleanup timeout and in-flight TTS key on unmount
   useEffect(() => {
     return () => {
       if (copyTimeoutRef.current) {
         clearTimeout(copyTimeoutRef.current)
+      }
+      const inFlightKeyAtUnmount = inFlightTtsKeyRef.current
+      if (inFlightKeyAtUnmount) {
+        queueMicrotask(() => {
+          if (inFlightTtsKeyRef.current === inFlightKeyAtUnmount) {
+            removeTTSKey(inFlightKeyAtUnmount)
+            inFlightTtsKeyRef.current = null
+          }
+        })
       }
     }
   }, [])
@@ -109,6 +132,72 @@ export function SessionTile({
       copyTimeoutRef.current = setTimeout(() => setCopiedMessageId(null), 2000)
     } catch (err) {
       console.error("Failed to copy message:", err)
+    }
+  }
+
+  // TTS audio generation
+  const lastAssistantContent = React.useMemo(() => {
+    const msgs = progress?.conversationHistory || []
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].role === "assistant" && msgs[i].content?.trim()) {
+        return msgs[i].content
+      }
+    }
+    return null
+  }, [progress?.conversationHistory])
+
+  const latestTtsSourceRef = useRef(lastAssistantContent)
+  latestTtsSourceRef.current = lastAssistantContent
+
+  const isSessionComplete = session.status === "completed" || session.status === "error" || session.status === "stopped"
+  const shouldShowTTS = !!lastAssistantContent && isSessionComplete && !!configQuery.data?.ttsEnabled
+
+  // Invalidate cached audio when the TTS source text changes
+  const prevTtsSourceRef = useRef(lastAssistantContent)
+  useEffect(() => {
+    if (prevTtsSourceRef.current !== lastAssistantContent) {
+      prevTtsSourceRef.current = lastAssistantContent
+      setAudioData(null)
+      setTtsError(null)
+    }
+  }, [lastAssistantContent])
+
+  const generateAudio = async (): Promise<ArrayBuffer> => {
+    if (!configQuery.data?.ttsEnabled || !lastAssistantContent) {
+      throw new Error("TTS is not enabled")
+    }
+
+    const generationId = ++ttsGenerationIdRef.current
+    const generationSource = lastAssistantContent
+
+    setIsGeneratingAudio(true)
+    setTtsError(null)
+
+    try {
+      const result = await tipcClient.generateSpeech({ text: generationSource })
+
+      if (ttsGenerationIdRef.current !== generationId || latestTtsSourceRef.current !== generationSource) {
+        return result.audio
+      }
+
+      setAudioData(result.audio)
+      return result.audio
+    } catch (error) {
+      console.error("[SessionTile TTS] Failed to generate audio:", error)
+      let errorMessage = "Failed to generate audio"
+      if (error instanceof Error) {
+        if (error.message.includes("API key")) errorMessage = "TTS API key not configured"
+        else if (error.message.includes("rate limit")) errorMessage = "Rate limit exceeded"
+        else errorMessage = `TTS error: ${error.message}`
+      }
+      if (ttsGenerationIdRef.current === generationId) {
+        setTtsError(errorMessage)
+      }
+      throw error
+    } finally {
+      if (ttsGenerationIdRef.current === generationId) {
+        setIsGeneratingAudio(false)
+      }
     }
   }
 
@@ -325,6 +414,27 @@ export function SessionTile({
         </div>
         {/* Action buttons - clicking these should NOT trigger collapse */}
         <div className="flex items-center gap-1">
+          {/* TTS playing indicator — click to pause */}
+          {(isTTSPlaying || isGeneratingAudio) && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                ttsManager.stopAll()
+              }}
+              className={cn(
+                "p-1 rounded hover:bg-muted/30 transition-colors",
+                isTTSPlaying && "animate-pulse"
+              )}
+              title={isGeneratingAudio ? "Generating audio…" : "Pause TTS"}
+              aria-label={isGeneratingAudio ? "Generating audio" : "Pause TTS"}
+            >
+              {isGeneratingAudio ? (
+                <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
+              ) : (
+                <Volume2 className="h-3 w-3 text-blue-500" />
+              )}
+            </button>
+          )}
           {isActive && !isSnoozed && onSnooze && (
             <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); onSnooze(); }} title="Minimize">
               <Minimize2 className="h-3 w-3" />
@@ -382,6 +492,11 @@ export function SessionTile({
                     )
                   }
 
+                  // Check if this is the last assistant message (for TTS)
+                  const isLastAssistant = message.role === "assistant" &&
+                    typeof message.content === "string" &&
+                    message.content === lastAssistantContent
+
                   return (
                     <div
                       key={messageId}
@@ -418,6 +533,26 @@ export function SessionTile({
                         <span>{JSON.stringify(message.content)}</span>
                       )}
                     </div>
+                    {/* TTS Audio Player for last assistant message */}
+                    {isLastAssistant && shouldShowTTS && (
+                      <div className="mt-2">
+                        <AudioPlayer
+                          audioData={audioData || undefined}
+                          text={lastAssistantContent}
+                          onGenerateAudio={generateAudio}
+                          isGenerating={isGeneratingAudio}
+                          error={ttsError}
+                          compact={true}
+                          autoPlay={configQuery.data?.ttsAutoPlay ?? true}
+                          onPlayStateChange={setIsTTSPlaying}
+                        />
+                        {ttsError && (
+                          <div className="mt-1 rounded-md bg-red-50 p-2 text-xs text-red-700 dark:bg-red-900/20 dark:text-red-300">
+                            <span className="font-medium">Audio generation failed:</span> {ttsError}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                   )
                 })
