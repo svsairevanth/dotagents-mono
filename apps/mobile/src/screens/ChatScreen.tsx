@@ -814,6 +814,33 @@ export default function ChatScreen({ route, navigation }: any) {
   const stoppingRef = useRef(false);
   const lastGrantTimeRef = useRef(0);
   const minHoldMs = 200;
+  // Ref for mic button container so web can attach native DOM listeners.
+  const micButtonRef = useRef<View>(null);
+
+  // On web, prevent browser long-press behavior from stealing hold-to-talk.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !micButtonRef.current) return;
+
+    // @ts-ignore - React Native Web ref resolves to a DOM element at runtime
+    const domNode = micButtonRef.current as any;
+    if (!domNode || typeof domNode.addEventListener !== 'function') return;
+
+    const handleTouchStart = (e: any) => {
+      if (e.cancelable) e.preventDefault();
+    };
+
+    const handleContextMenu = (e: any) => {
+      e.preventDefault();
+    };
+
+    domNode.addEventListener('touchstart', handleTouchStart, { passive: false });
+    domNode.addEventListener('contextmenu', handleContextMenu, { passive: false });
+
+    return () => {
+      domNode.removeEventListener('touchstart', handleTouchStart);
+      domNode.removeEventListener('contextmenu', handleContextMenu);
+    };
+  }, []);
 
   const userReleasedButtonRef = useRef(false);
 
@@ -2734,11 +2761,17 @@ export default function ChatScreen({ route, navigation }: any) {
             </TouchableOpacity>
           </View>
           {/* Large mic button - ~20% of screen height */}
-          <View style={styles.micWrapper}>
-            <TouchableOpacity
-              style={[styles.mic, listening && styles.micOn]}
-              activeOpacity={0.7}
-              delayPressIn={0}
+          <View
+            ref={micButtonRef}
+            style={styles.micWrapper}
+          >
+            <Pressable
+              style={[
+                styles.mic,
+                listening && styles.micOn,
+                // @ts-ignore - Web-only CSS to disable long-press selection/callouts
+                Platform.OS === 'web' && { userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' },
+              ]}
               onPressIn={!handsFree ? (e: GestureResponderEvent) => {
 					lastGrantTimeRef.current = Date.now();
 					voiceLog('mic:onPressIn', {
@@ -2778,13 +2811,13 @@ export default function ChatScreen({ route, navigation }: any) {
 					if (!listeningRef.current) startRecording(); else stopRecordingAndHandle();
               } : undefined}
             >
-              <Text style={styles.micText}>
+              <Text style={styles.micText} selectable={false}>
                 {listening ? '🎙️' : '🎤'}
               </Text>
-              <Text style={[styles.micLabel, listening && styles.micLabelOn]}>
+              <Text style={[styles.micLabel, listening && styles.micLabelOn]} selectable={false}>
                 {handsFree ? (listening ? 'Stop' : 'Talk') : (listening ? '...' : 'Hold')}
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </View>
       </View>
