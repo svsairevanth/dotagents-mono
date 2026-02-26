@@ -668,18 +668,26 @@ export default function ChatScreen({ route, navigation }: any) {
   // Auto-send initialMessage from route params (e.g. from rapid fire mode in SessionListScreen)
   const initialMessageRef = useRef<string | null>(route?.params?.initialMessage ?? null);
   const initialMessageSentRef = useRef(false);
+	useEffect(() => {
+		const nextInitial = route?.params?.initialMessage;
+		if (!nextInitial || typeof nextInitial !== 'string') return;
+		initialMessageRef.current = nextInitial;
+		initialMessageSentRef.current = false;
+		voiceLog('route initialMessage received', { initialMessage: nextInitial });
+	}, [route?.params?.initialMessage, voiceLog]);
   useEffect(() => {
     if (!initialMessageRef.current || initialMessageSentRef.current) return;
     if (!sessionStore.currentSessionId) return;
     initialMessageSentRef.current = true;
     const msg = initialMessageRef.current;
     initialMessageRef.current = null;
+		try { navigation?.setParams?.({ initialMessage: undefined }); } catch {}
     // Small delay to ensure the session is fully loaded and the component is rendered
     const timer = setTimeout(() => {
       void sendRef.current(msg);
     }, 300);
     return () => clearTimeout(timer);
-  }, [sessionStore.currentSessionId]);
+	}, [navigation, sessionStore.currentSessionId]);
 
   const prevMessagesLengthRef = useRef(0);
   const prevSessionIdRef = useRef<string | null>(null);
@@ -816,6 +824,10 @@ export default function ChatScreen({ route, navigation }: any) {
   const minHoldMs = 200;
   // Ref for mic button container so web can attach native DOM listeners.
   const micButtonRef = useRef<View>(null);
+  const userReleasedButtonRef = useRef(false);
+  // Track whether press-in was observed by Pressable so we can debug/fallback if press-out is swallowed.
+  const webPressInSeenRef = useRef(false);
+  const stopRecordingAndHandleRef = useRef<(() => Promise<void>) | null>(null);
 
   // On web, prevent browser long-press behavior from stealing hold-to-talk.
   useEffect(() => {
@@ -825,24 +837,94 @@ export default function ChatScreen({ route, navigation }: any) {
     const domNode = micButtonRef.current as any;
     if (!domNode || typeof domNode.addEventListener !== 'function') return;
 
+		const summarizeDomEvent = (e: any) => ({
+			type: e?.type,
+			cancelable: !!e?.cancelable,
+			defaultPrevented: !!e?.defaultPrevented,
+			touches: typeof e?.touches?.length === 'number' ? e.touches.length : undefined,
+			changedTouches: typeof e?.changedTouches?.length === 'number' ? e.changedTouches.length : undefined,
+			pointerType: e?.pointerType,
+			targetTag: e?.target?.tagName,
+		});
+
+		const stopFromDomFallback = (source: string, e: any) => {
+			const details = summarizeDomEvent(e);
+			if (handsFreeRef.current || !webPressInSeenRef.current || !listeningRef.current || userReleasedButtonRef.current) {
+				voiceLog(`web:dom:${source} (no-op)`, {
+					...details,
+					handsFree: handsFreeRef.current,
+					pressInSeen: webPressInSeenRef.current,
+					listening: listeningRef.current,
+					userReleased: userReleasedButtonRef.current,
+				});
+				return;
+			}
+
+			const dt = Date.now() - lastGrantTimeRef.current;
+			const delay = Math.max(0, minHoldMs - dt);
+			voiceLog(`web:dom:${source} -> fallback stop`, { ...details, dt, delay });
+			const maybeStop = () => {
+				if (!listeningRef.current || userReleasedButtonRef.current) return;
+				webPressInSeenRef.current = false;
+				void stopRecordingAndHandleRef.current?.();
+			};
+			if (delay > 0) setTimeout(maybeStop, delay);
+			else maybeStop();
+		};
+
+		voiceLog('web:dom listeners attached', { nodeTag: domNode?.tagName });
+
     const handleTouchStart = (e: any) => {
+			voiceLog('web:dom:touchstart', summarizeDomEvent(e));
       if (e.cancelable) e.preventDefault();
     };
 
+		const handleTouchEnd = (e: any) => {
+			stopFromDomFallback('touchend', e);
+		};
+
+		const handleTouchCancel = (e: any) => {
+			stopFromDomFallback('touchcancel', e);
+		};
+
+		const handlePointerUp = (e: any) => {
+			stopFromDomFallback('pointerup', e);
+		};
+
+		const handlePointerCancel = (e: any) => {
+			stopFromDomFallback('pointercancel', e);
+		};
+
     const handleContextMenu = (e: any) => {
+			voiceLog('web:dom:contextmenu', summarizeDomEvent(e));
       e.preventDefault();
     };
 
     domNode.addEventListener('touchstart', handleTouchStart, { passive: false });
+    domNode.addEventListener('touchend', handleTouchEnd, { passive: false });
+    domNode.addEventListener('touchcancel', handleTouchCancel, { passive: false });
+    domNode.addEventListener('pointerup', handlePointerUp, { passive: true });
+    domNode.addEventListener('pointercancel', handlePointerCancel, { passive: true });
     domNode.addEventListener('contextmenu', handleContextMenu, { passive: false });
+    document.addEventListener('touchend', handleTouchEnd, { passive: false });
+    document.addEventListener('touchcancel', handleTouchCancel, { passive: false });
+    document.addEventListener('pointerup', handlePointerUp, { passive: true });
+    document.addEventListener('pointercancel', handlePointerCancel, { passive: true });
 
     return () => {
+			voiceLog('web:dom listeners removed');
       domNode.removeEventListener('touchstart', handleTouchStart);
+      domNode.removeEventListener('touchend', handleTouchEnd);
+      domNode.removeEventListener('touchcancel', handleTouchCancel);
+      domNode.removeEventListener('pointerup', handlePointerUp);
+      domNode.removeEventListener('pointercancel', handlePointerCancel);
       domNode.removeEventListener('contextmenu', handleContextMenu);
+			document.removeEventListener('touchend', handleTouchEnd);
+			document.removeEventListener('touchcancel', handleTouchCancel);
+			document.removeEventListener('pointerup', handlePointerUp);
+			document.removeEventListener('pointercancel', handlePointerCancel);
     };
-  }, []);
-
-  const userReleasedButtonRef = useRef(false);
+  }, [voiceLog]);
 
   const handsFreeDebounceMs = 1500;
   const handsFreeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1002,7 +1084,9 @@ export default function ChatScreen({ route, navigation }: any) {
     setLastFailedMessage(null);
 
     const userMsg: ChatMessage = { role: 'user', content: text };
-    const messageCountBeforeTurn = messages.length;
+	    // Use ref to avoid stale closures (notably auto-send after rapid-fire session switch).
+	    const currentMessages = messagesRef.current;
+	    const messageCountBeforeTurn = currentMessages.length;
     // Clear progress messages ref for this new request (#1083)
     progressMessagesRef.current = [];
     setMessages((m) => [...m, userMsg, { role: 'assistant', content: 'Assistant is thinking...' }]);
@@ -1046,7 +1130,7 @@ export default function ChatScreen({ route, navigation }: any) {
       let midTurnTTSPlayed = false;
 
       const serverConversationId = sessionStore.getServerConversationId();
-      console.log('[ChatScreen] Starting chat request with', messages.length + 1, 'messages, conversationId:', serverConversationId || 'new');
+	      console.log('[ChatScreen] Starting chat request with', currentMessages.length + 1, 'messages, conversationId:', serverConversationId || 'new');
       setDebugInfo('Request sent, waiting for response...');
 
       const onProgress = (update: AgentProgressUpdate) => {
@@ -1129,7 +1213,7 @@ export default function ChatScreen({ route, navigation }: any) {
         });
       };
 
-      const response = await client.chat([...messages, userMsg], onToken, onProgress, serverConversationId);
+	      const response = await client.chat([...currentMessages, userMsg], onToken, onProgress, serverConversationId);
       const finalText = response.content || streamingText;
       console.log('[ChatScreen] Chat completed, conversationId:', response.conversationId);
 
@@ -1227,7 +1311,7 @@ export default function ChatScreen({ route, navigation }: any) {
           if (isLatestForSession) {
             console.log('[ChatScreen] Persisting completed response to background session:', requestSessionId);
             // Build the final messages array: messages before this turn + user message + new assistant messages
-            const messagesBeforeTurn = messages.slice(0, messageCountBeforeTurn);
+	            const messagesBeforeTurn = currentMessages.slice(0, messageCountBeforeTurn);
             const finalMessages = [...messagesBeforeTurn, userMsg, ...newMessages];
             await sessionStore.setMessagesForSession(requestSessionId, finalMessages);
           } else {
@@ -1274,7 +1358,7 @@ export default function ChatScreen({ route, navigation }: any) {
           // This prevents an older request from overwriting newer history (PR review fix #14)
           if (isLatestForSession) {
             console.log('[ChatScreen] Persisting fallback response to background session:', requestSessionId);
-            const messagesBeforeTurn = messages.slice(0, messageCountBeforeTurn);
+	            const messagesBeforeTurn = currentMessages.slice(0, messageCountBeforeTurn);
             const finalMessages = [...messagesBeforeTurn, userMsg, { role: 'assistant' as const, content: finalText }];
             await sessionStore.setMessagesForSession(requestSessionId, finalMessages);
           } else {
@@ -2212,6 +2296,7 @@ export default function ChatScreen({ route, navigation }: any) {
 	      setListeningValue(false);
     } finally {
       startYRef.current = null;
+			webPressInSeenRef.current = false;
       stoppingRef.current = false;
 			voiceLog('stopRecordingAndHandle finished', {
 				gestureId: voiceGestureIdRef.current,
@@ -2219,6 +2304,8 @@ export default function ChatScreen({ route, navigation }: any) {
 			});
     }
   };
+
+		stopRecordingAndHandleRef.current = stopRecordingAndHandle;
 
 
   return (
@@ -2774,14 +2861,18 @@ export default function ChatScreen({ route, navigation }: any) {
               ]}
               onPressIn={!handsFree ? (e: GestureResponderEvent) => {
 					lastGrantTimeRef.current = Date.now();
+						webPressInSeenRef.current = true;
 					voiceLog('mic:onPressIn', {
 						gestureId: voiceGestureIdRef.current,
 						listening: listeningRef.current,
 						starting: startingRef.current,
+							pageX: e.nativeEvent.pageX,
+							pageY: e.nativeEvent.pageY,
 					});
 					if (!listeningRef.current) startRecording(e);
               } : undefined}
               onPressOut={!handsFree ? () => {
+						webPressInSeenRef.current = false;
                 const now = Date.now();
                 const dt = now - lastGrantTimeRef.current;
                 const delay = Math.max(0, minHoldMs - dt);

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { View, Text, FlatList, TouchableOpacity, Pressable, StyleSheet, Alert, Platform, Image, GestureResponderEvent, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EventEmitter } from 'expo-modules-core';
@@ -9,6 +9,7 @@ import { useConnectionManager } from '../store/connectionManager';
 import { useTunnelConnection } from '../store/tunnelConnection';
 import { useProfile } from '../store/profile';
 import { ConnectionStatusIndicator } from '../ui/ConnectionStatusIndicator';
+import { ChatMessage, AgentProgressUpdate } from '../lib/openaiClient';
 import { SessionListItem, isStubSession } from '../types/session';
 
 const darkSpinner = require('../../assets/loading-spinner.gif');
@@ -42,9 +43,224 @@ export default function SessionListScreen({ navigation }: Props) {
   const rfGrantTimeRef = useRef(0);
   const rfUserReleasedRef = useRef(false);
   const rfWebRecRef = useRef<any>(null);
+  const rfButtonRef = useRef<View>(null);
+  const rfPressInSeenRef = useRef(false);
+  const rfStopAndFireRef = useRef<(() => Promise<void>) | null>(null);
+  const rfInFlightSessionIdsRef = useRef<Set<string>>(new Set());
   const rfMinHoldMs = 200;
   const sessionStoreRef = useRef<SessionStore | null>(null);
   const rfStatusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const rfLog = useCallback((msg: string, extra?: any) => {
+    if (!__DEV__) return;
+    if (typeof extra !== 'undefined') console.log(`[RapidFireDebug] ${msg}`, extra);
+    else console.log(`[RapidFireDebug] ${msg}`);
+  }, []);
+
+  const normalizeVoiceText = useCallback((t?: string) => (t || '').replace(/\s+/g, ' ').trim(), []);
+  const mergeVoiceText = useCallback((base?: string, live?: string) => {
+    const a = normalizeVoiceText(base);
+    const b = normalizeVoiceText(live);
+    if (!a) return b;
+    if (!b) return a;
+    if (a === b) return a;
+    if (b.startsWith(a)) return b;
+    if (a.startsWith(b)) return a;
+    const bWordBoundary = new RegExp(`(?:^|\\s)${b.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\s|$)`);
+    if (bWordBoundary.test(a)) return a;
+    const aWordBoundary = new RegExp(`(?:^|\\s)${a.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\s|$)`);
+    if (aWordBoundary.test(b)) return b;
+    const aWords = a.split(' ');
+    const bWords = b.split(' ');
+    const maxOverlap = Math.min(aWords.length, bWords.length);
+    for (let k = maxOverlap; k > 0; k--) {
+      const aSuffix = aWords.slice(-k).join(' ');
+      const bPrefix = bWords.slice(0, k).join(' ');
+      if (aSuffix === bPrefix) {
+        const prefix = aWords.slice(0, aWords.length - k).join(' ');
+        return normalizeVoiceText(`${prefix} ${b}`);
+      }
+    }
+    return normalizeVoiceText(`${a} ${b}`);
+  }, [normalizeVoiceText]);
+
+  const rfBuildMessagesFromHistory = useCallback((history: any[]): ChatMessage[] => {
+    if (!history || history.length === 0) return [];
+
+    let currentTurnStartIndex = 0;
+    for (let i = 0; i < history.length; i++) {
+      if (history[i]?.role === 'user') {
+        currentTurnStartIndex = i;
+      }
+    }
+
+    const messages: ChatMessage[] = [];
+    for (let i = currentTurnStartIndex + 1; i < history.length; i++) {
+      const historyMsg = history[i];
+      if (!historyMsg) continue;
+
+      // Merge tool results into the preceding assistant message, matching ChatScreen behavior.
+      if (historyMsg.role === 'tool' && messages.length > 0) {
+        const lastMessage = messages[messages.length - 1];
+        if (lastMessage.role === 'assistant' && lastMessage.toolCalls && lastMessage.toolCalls.length > 0) {
+          const hasToolResults = historyMsg.toolResults && historyMsg.toolResults.length > 0;
+          const hasContent = historyMsg.content && historyMsg.content.trim().length > 0;
+          if (hasToolResults) {
+            lastMessage.toolResults = [
+              ...(lastMessage.toolResults || []),
+              ...(historyMsg.toolResults || []),
+            ];
+            if (hasContent) {
+              lastMessage.content = (lastMessage.content || '') +
+                (lastMessage.content ? '\n' : '') + historyMsg.content;
+            }
+            continue;
+          }
+        }
+      }
+
+      messages.push({
+        role: historyMsg.role === 'tool' ? 'assistant' : historyMsg.role,
+        content: historyMsg.content || '',
+        toolCalls: historyMsg.toolCalls,
+        toolResults: historyMsg.toolResults,
+      });
+    }
+
+    return messages;
+  }, []);
+
+  const rfRunBackgroundSend = useCallback(async (sessionId: string, userText: string) => {
+    const initialMessages: ChatMessage[] = [{ role: 'user', content: userText }];
+    const ss = sessionStoreRef.current;
+    if (!ss) return;
+
+    const requestId = Date.now();
+
+    rfInFlightSessionIdsRef.current.add(sessionId);
+    connectionManager.setLatestRequestId(sessionId, requestId);
+    connectionManager.incrementActiveRequests(sessionId);
+
+    let streamingText = '';
+    let persistTimer: ReturnType<typeof setTimeout> | null = null;
+    let pendingMessages: ChatMessage[] | null = null;
+    let finalized = false;
+
+    const isLatestForSession = () => connectionManager.getLatestRequestId(sessionId) === requestId;
+
+    const schedulePersist = (messages: ChatMessage[]) => {
+      pendingMessages = messages;
+      if (persistTimer) return;
+      persistTimer = setTimeout(() => {
+        persistTimer = null;
+        const toPersist = pendingMessages;
+        pendingMessages = null;
+        if (!toPersist || !isLatestForSession()) return;
+        const latestStore = sessionStoreRef.current;
+        if (!latestStore) return;
+        void latestStore.setMessagesForSession(sessionId, toPersist);
+      }, 180);
+    };
+
+    const flushPersist = async () => {
+      if (persistTimer) {
+        clearTimeout(persistTimer);
+        persistTimer = null;
+      }
+      const toPersist = pendingMessages;
+      pendingMessages = null;
+      if (!toPersist || !isLatestForSession()) return;
+      const latestStore = sessionStoreRef.current;
+      if (!latestStore) return;
+      await latestStore.setMessagesForSession(sessionId, toPersist);
+    };
+
+    const onToken = (tok: string) => {
+      if (finalized) return;
+      if (!isLatestForSession()) return;
+      if (tok.startsWith(streamingText) && tok.length >= streamingText.length) {
+        streamingText = tok;
+      } else {
+        streamingText += tok;
+      }
+      schedulePersist([...initialMessages, { role: 'assistant', content: streamingText }]);
+    };
+
+    const onProgress = (update: AgentProgressUpdate) => {
+      if (finalized) return;
+      if (!isLatestForSession()) return;
+      if (update.conversationHistory && update.conversationHistory.length > 0) {
+        const assistantMessages = rfBuildMessagesFromHistory(update.conversationHistory as any[]);
+        schedulePersist([...initialMessages, ...assistantMessages]);
+        return;
+      }
+      const fullText = update.streamingContent?.text;
+      if (fullText) {
+        streamingText = fullText;
+        schedulePersist([...initialMessages, { role: 'assistant', content: streamingText }]);
+      }
+    };
+
+    try {
+      const connection = connectionManager.getOrCreateConnection(sessionId);
+      const client = connection.client;
+      rfLog('backgroundSend:start', { sessionId, requestId });
+      const response = await client.chat(initialMessages, onToken, onProgress, undefined);
+      if (!isLatestForSession()) return;
+      finalized = true;
+
+      if (response.conversationId) {
+        await ss.setServerConversationIdForSession(sessionId, response.conversationId);
+      }
+
+      let finalMessages: ChatMessage[];
+      if (response.conversationHistory && response.conversationHistory.length > 0) {
+        finalMessages = [...initialMessages, ...rfBuildMessagesFromHistory(response.conversationHistory as any[])];
+      } else {
+        const finalText = (response.content || streamingText).trim();
+        finalMessages = finalText
+          ? [...initialMessages, { role: 'assistant', content: finalText }]
+          : initialMessages;
+      }
+
+      const authoritativeFinalText = (response.content || streamingText).trim();
+      if (authoritativeFinalText) {
+        let lastAssistantIndex = -1;
+        for (let i = finalMessages.length - 1; i >= 0; i--) {
+          if (finalMessages[i].role === 'assistant') {
+            lastAssistantIndex = i;
+            break;
+          }
+        }
+        if (lastAssistantIndex >= 0) {
+          finalMessages[lastAssistantIndex] = {
+            ...finalMessages[lastAssistantIndex],
+            content: authoritativeFinalText,
+          };
+        } else {
+          finalMessages = [...finalMessages, { role: 'assistant', content: authoritativeFinalText }];
+        }
+      }
+
+      pendingMessages = finalMessages;
+      await flushPersist();
+      rfLog('backgroundSend:done', { sessionId, requestId, messageCount: finalMessages.length });
+    } catch (err) {
+      finalized = true;
+      rfLog('backgroundSend:error', { sessionId, requestId, error: (err as any)?.message || String(err) });
+      const errorContent = (err as any)?.message
+        ? `Error: ${(err as any).message}`
+        : 'Error: Failed to get response.';
+      pendingMessages = [...initialMessages, { role: 'assistant', content: errorContent }];
+      await flushPersist();
+    } finally {
+      if (persistTimer) {
+        clearTimeout(persistTimer);
+      }
+      rfInFlightSessionIdsRef.current.delete(sessionId);
+      connectionManager.decrementActiveRequests(sessionId);
+    }
+  }, [connectionManager, rfBuildMessagesFromHistory, rfLog]);
 
   const rfSetListening = useCallback((v: boolean) => {
     rfListeningRef.current = v;
@@ -73,7 +289,94 @@ export default function SessionListScreen({ navigation }: Props) {
     }, clearAfterMs);
   }, []);
 
+  // On web, capture raw DOM release events in case RN Pressable misses onPressOut on long-press.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !rfButtonRef.current) return;
+
+    // @ts-ignore - React Native Web ref resolves to a DOM element at runtime
+    const domNode = rfButtonRef.current as any;
+    if (!domNode || typeof domNode.addEventListener !== 'function') return;
+
+    const summarizeDomEvent = (e: any) => ({
+      type: e?.type,
+      cancelable: !!e?.cancelable,
+      defaultPrevented: !!e?.defaultPrevented,
+      touches: typeof e?.touches?.length === 'number' ? e.touches.length : undefined,
+      changedTouches: typeof e?.changedTouches?.length === 'number' ? e.changedTouches.length : undefined,
+      pointerType: e?.pointerType,
+      targetTag: e?.target?.tagName,
+    });
+
+    const stopFromDomFallback = (source: string, e: any) => {
+      const details = summarizeDomEvent(e);
+      if (!rfPressInSeenRef.current || !rfListeningRef.current || rfUserReleasedRef.current) {
+        rfLog(`web:dom:${source} (no-op)`, {
+          ...details,
+          pressInSeen: rfPressInSeenRef.current,
+          listening: rfListeningRef.current,
+          userReleased: rfUserReleasedRef.current,
+        });
+        return;
+      }
+      const dt = Date.now() - rfGrantTimeRef.current;
+      const delay = Math.max(0, rfMinHoldMs - dt);
+      rfLog(`web:dom:${source} -> fallback stop`, { ...details, dt, delay });
+      const maybeStop = () => {
+        if (!rfListeningRef.current || rfUserReleasedRef.current) return;
+        rfPressInSeenRef.current = false;
+        void rfStopAndFireRef.current?.();
+      };
+      if (delay > 0) setTimeout(maybeStop, delay);
+      else maybeStop();
+    };
+
+    const handleTouchStart = (e: any) => {
+      rfLog('web:dom:touchstart', summarizeDomEvent(e));
+      if (e.cancelable) e.preventDefault();
+    };
+    const handleTouchEnd = (e: any) => stopFromDomFallback('touchend', e);
+    const handleTouchCancel = (e: any) => stopFromDomFallback('touchcancel', e);
+    const handlePointerUp = (e: any) => stopFromDomFallback('pointerup', e);
+    const handlePointerCancel = (e: any) => stopFromDomFallback('pointercancel', e);
+    const handleContextMenu = (e: any) => {
+      rfLog('web:dom:contextmenu', summarizeDomEvent(e));
+      e.preventDefault();
+    };
+
+    rfLog('web:dom listeners attached', { nodeTag: domNode?.tagName });
+    domNode.addEventListener('touchstart', handleTouchStart, { passive: false });
+    domNode.addEventListener('touchend', handleTouchEnd, { passive: false });
+    domNode.addEventListener('touchcancel', handleTouchCancel, { passive: false });
+    domNode.addEventListener('pointerup', handlePointerUp, { passive: true });
+    domNode.addEventListener('pointercancel', handlePointerCancel, { passive: true });
+    domNode.addEventListener('contextmenu', handleContextMenu, { passive: false });
+    document.addEventListener('touchend', handleTouchEnd, { passive: false });
+    document.addEventListener('touchcancel', handleTouchCancel, { passive: false });
+    document.addEventListener('pointerup', handlePointerUp, { passive: true });
+    document.addEventListener('pointercancel', handlePointerCancel, { passive: true });
+
+    return () => {
+      rfLog('web:dom listeners removed');
+      domNode.removeEventListener('touchstart', handleTouchStart);
+      domNode.removeEventListener('touchend', handleTouchEnd);
+      domNode.removeEventListener('touchcancel', handleTouchCancel);
+      domNode.removeEventListener('pointerup', handlePointerUp);
+      domNode.removeEventListener('pointercancel', handlePointerCancel);
+      domNode.removeEventListener('contextmenu', handleContextMenu);
+      document.removeEventListener('touchend', handleTouchEnd);
+      document.removeEventListener('touchcancel', handleTouchCancel);
+      document.removeEventListener('pointerup', handlePointerUp);
+      document.removeEventListener('pointercancel', handlePointerCancel);
+    };
+  }, [rfLog]);
+
   const rfStartRecording = useCallback(async (e?: GestureResponderEvent) => {
+    rfLog('startRecording called', {
+      starting: rfStartingRef.current,
+      listening: rfListeningRef.current,
+      pageX: e?.nativeEvent?.pageX,
+      pageY: e?.nativeEvent?.pageY,
+    });
     if (rfStartingRef.current || rfListeningRef.current) return;
     rfStartingRef.current = true;
     rfStoppingRef.current = false;
@@ -94,8 +397,17 @@ export default function SessionListScreen({ navigation }: Props) {
           rfCleanupSubs();
           const subResult = rfSrEmitterRef.current.addListener('result', (event: any) => {
             const t = event?.results?.[0]?.transcript ?? event?.text ?? event?.transcript ?? '';
-            if (t) { rfLiveRef.current = t; setRfTranscript(t); }
-            if (event?.isFinal && t) { rfFinalRef.current = rfFinalRef.current ? `${rfFinalRef.current} ${t}` : t; }
+            if (event?.isFinal && t) {
+              rfFinalRef.current = mergeVoiceText(rfFinalRef.current, t);
+            }
+            const preview = mergeVoiceText(rfFinalRef.current, event?.isFinal ? '' : t);
+            rfLiveRef.current = preview;
+            setRfTranscript(preview);
+            rfLog('native:onresult', {
+              isFinal: !!event?.isFinal,
+              chunk: normalizeVoiceText(t),
+              preview,
+            });
           });
           const subError = rfSrEmitterRef.current.addListener('error', (event: any) => {
             console.error('[RapidFire] SR error:', JSON.stringify(event));
@@ -158,16 +470,31 @@ export default function SessionListScreen({ navigation }: Props) {
               if (res.isFinal) finalText += txt;
               else interim += txt;
             }
-            if (interim) { rfLiveRef.current = interim; setRfTranscript(interim); }
             if (finalText) {
-              rfFinalRef.current = rfFinalRef.current ? `${rfFinalRef.current} ${finalText}` : finalText;
+              rfFinalRef.current = mergeVoiceText(rfFinalRef.current, finalText);
             }
+            const preview = mergeVoiceText(rfFinalRef.current, interim);
+            rfLiveRef.current = preview;
+            setRfTranscript(preview);
+            rfLog('web:onresult', {
+              interim: normalizeVoiceText(interim),
+              finalChunk: normalizeVoiceText(finalText),
+              preview,
+            });
           };
           rec.onerror = (ev: any) => {
             console.error('[RapidFire] Web SR error:', ev?.error || ev);
+            rfLog('web:onerror', ev?.error || ev);
             rfSetTransientStatus('error');
           };
           rec.onend = () => {
+            rfLog('web:onend', {
+              userReleased: rfUserReleasedRef.current,
+              stopping: rfStoppingRef.current,
+              hasRec: !!rfWebRecRef.current,
+              final: rfFinalRef.current,
+              live: rfLiveRef.current,
+            });
             // If user hasn't released, SR ended spuriously – try to restart
             if (!rfUserReleasedRef.current && !rfStoppingRef.current && rfWebRecRef.current) {
               try { rfWebRecRef.current.start(); return; } catch {}
@@ -186,12 +513,19 @@ export default function SessionListScreen({ navigation }: Props) {
     }
     rfSetListening(false);
     rfStartingRef.current = false;
-  }, [rfCleanupSubs, rfSetListening, rfSetTransientStatus]);
+  }, [mergeVoiceText, normalizeVoiceText, rfCleanupSubs, rfLog, rfSetListening, rfSetTransientStatus]);
 
   const rfStopAndFire = useCallback(async () => {
+    rfLog('stopAndFire called', {
+      stopping: rfStoppingRef.current,
+      listening: rfListeningRef.current,
+      final: rfFinalRef.current,
+      live: rfLiveRef.current,
+    });
     if (rfStoppingRef.current) return;
     rfStoppingRef.current = true;
     rfUserReleasedRef.current = true;
+    rfPressInSeenRef.current = false;
     try {
       if (Platform.OS !== 'web') {
         const SR: any = await import('expo-speech-recognition');
@@ -205,7 +539,7 @@ export default function SessionListScreen({ navigation }: Props) {
     rfCleanupSubs();
     rfSetListening(false);
     setRfStatus('sending');
-    const finalText = (rfFinalRef.current || rfLiveRef.current).trim();
+    const finalText = mergeVoiceText(rfFinalRef.current, rfLiveRef.current).trim();
     rfFinalRef.current = '';
     rfLiveRef.current = '';
     setRfTranscript('');
@@ -225,6 +559,8 @@ export default function SessionListScreen({ navigation }: Props) {
           ss.setCurrentSession(prevSessionId);
           await ss.setMessagesForSession(newSession.id, [{ role: 'user', content: finalText }]);
           setRfTranscript(finalText);
+          // Fire the agent request in the background so the Sessions list updates live.
+          void rfRunBackgroundSend(newSession.id, finalText);
           rfSetTransientStatus('sent');
         } catch (err) {
           console.error('[RapidFire] Failed to persist transcript:', err);
@@ -236,7 +572,10 @@ export default function SessionListScreen({ navigation }: Props) {
     } else {
       rfSetTransientStatus('empty');
     }
-  }, [rfCleanupSubs, rfSetListening, rfSetTransientStatus]);
+    rfStoppingRef.current = false;
+  }, [mergeVoiceText, rfCleanupSubs, rfLog, rfRunBackgroundSend, rfSetListening, rfSetTransientStatus]);
+
+  rfStopAndFireRef.current = rfStopAndFire;
   // ── end Rapid Fire ─────────────────────────────────────────────────────────
 
   useLayoutEffect(() => {
@@ -320,7 +659,30 @@ export default function SessionListScreen({ navigation }: Props) {
     navigation.navigate('Chat');
   };
 
-  const handleSelectSession = (sessionId: string) => {
+  const handleSelectSession = async (sessionId: string) => {
+    const selectedSession = sessionStore.sessions.find(s => s.id === sessionId) || null;
+    const rfBackgroundInFlight = rfInFlightSessionIdsRef.current.has(sessionId);
+    const pendingUserOnlyText = selectedSession && selectedSession.messages.length === 1
+      && selectedSession.messages[0].role === 'user'
+      && !selectedSession.serverConversationId
+      && !rfBackgroundInFlight
+      ? (selectedSession.messages[0].content || '').trim()
+      : '';
+
+    // Fallback only: if a user-only stub exists and no background rapid-fire request
+    // is running, auto-send when opening chat.
+    if (pendingUserOnlyText) {
+      rfLog('selectSession -> pending user-only session detected', { sessionId, pendingUserOnlyText });
+      try {
+        await sessionStore.setMessagesForSession(sessionId, []);
+      } catch (err) {
+        console.warn('[RapidFire] Failed to clear pending user-only session before auto-send:', err);
+      }
+      sessionStore.setCurrentSession(sessionId);
+      navigation.navigate('Chat', { initialMessage: pendingUserOnlyText });
+      return;
+    }
+
     sessionStore.setCurrentSession(sessionId);
     navigation.navigate('Chat');
   };
@@ -493,22 +855,37 @@ export default function SessionListScreen({ navigation }: Props) {
           {rfHintText}
         </Text>
         <Pressable
+          ref={rfButtonRef}
           accessibilityRole="button"
           accessibilityLabel={rfListening ? 'Release to send' : 'Hold to talk, Rapid Fire'}
           style={({ pressed }) => [
             styles.rfButton,
             rfListening && styles.rfButtonOn,
+            // @ts-ignore - Web-only CSS to disable long-press selection/callouts
+            Platform.OS === 'web' && { userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' },
             pressed && !rfListening && { opacity: 0.8 },
           ]}
           onPressIn={(e: GestureResponderEvent) => {
             rfGrantTimeRef.current = Date.now();
+            rfPressInSeenRef.current = true;
+            rfLog('mic:onPressIn', {
+              listening: rfListeningRef.current,
+              starting: rfStartingRef.current,
+              pageX: e.nativeEvent.pageX,
+              pageY: e.nativeEvent.pageY,
+            });
             if (!rfListeningRef.current) { void rfStartRecording(e); }
           }}
           onPressOut={() => {
+            rfPressInSeenRef.current = false;
             const dt = Date.now() - rfGrantTimeRef.current;
             const delay = Math.max(0, rfMinHoldMs - dt);
+            rfLog('mic:onPressOut', { listening: rfListeningRef.current, dt, delay });
             if (delay > 0) {
-              setTimeout(() => { if (rfListeningRef.current) { void rfStopAndFire(); } }, delay);
+              setTimeout(() => {
+                rfLog('mic:onPressOut -> delayed stop fired', { listening: rfListeningRef.current });
+                if (rfListeningRef.current) { void rfStopAndFire(); }
+              }, delay);
             } else {
               if (rfListeningRef.current) { void rfStopAndFire(); }
             }
