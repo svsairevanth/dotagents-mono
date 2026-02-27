@@ -1058,15 +1058,16 @@ export async function processTranscriptWithAgentMode(
   ): Array<{ role: "user" | "assistant"; content: string }> => {
     const mapped = conversationHistory
       .map((entry) => {
+        const rawContent = typeof entry.content === "string" ? entry.content : ""
+        const content = sanitizeMessageContentForDisplay(rawContent).trim()
+        if (!content) return null
+
         if (entry.role === "tool") {
-          const text = (entry.content || "").trim()
-          if (!text) return null
           // Tool results already contain tool name prefix (format: [toolName] content...)
           // Just pass through without adding generic "Tool execution results:" wrapper
-          return { role: "user" as const, content: text }
+          return { role: "user" as const, content }
         }
-        const content = (entry.content || "").trim()
-        if (!content) return null
+
         return { role: entry.role as "user" | "assistant", content }
       })
       .filter(Boolean) as Array<{ role: "user" | "assistant"; content: string }>

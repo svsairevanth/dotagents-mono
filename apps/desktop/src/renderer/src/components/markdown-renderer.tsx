@@ -60,6 +60,56 @@ const markdownUrlTransform = (url: string, key?: string) => {
   return isAllowed ? url : ""
 }
 
+const markdownLinkComponent = ({
+  children,
+  href,
+}: {
+  children?: React.ReactNode
+  href?: string
+}) => (
+  isAllowedMarkdownLinkUrl(href) ? (
+    <a
+      href={href}
+      className="text-primary underline hover:text-primary/80"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      {children}
+    </a>
+  ) : null
+)
+
+const markdownImageComponent = ({
+  src,
+  alt,
+}: {
+  src?: string
+  alt?: string
+}) => {
+  if (!src || !isAllowedMarkdownImageUrl(src)) return null
+
+  return (
+    <img
+      src={src}
+      alt={alt || "Image"}
+      loading="lazy"
+      decoding="async"
+      onError={() => {
+        logUI("[MarkdownRenderer] image failed to render", {
+          alt: alt || "Image",
+          srcPreview: src.slice(0, 64),
+        })
+      }}
+      className="mb-3 max-h-[28rem] w-full rounded-md border border-border bg-muted/20 object-contain"
+    />
+  )
+}
+
+const sharedMarkdownComponents = {
+  a: markdownLinkComponent,
+  img: markdownImageComponent,
+}
+
 const ThinkSection: React.FC<ThinkSectionProps> = ({
   content,
   defaultCollapsed = true,
@@ -110,7 +160,7 @@ const ThinkSection: React.FC<ThinkSectionProps> = ({
               remarkPlugins={[remarkGfm]}
               rehypePlugins={[rehypeHighlight]}
               urlTransform={markdownUrlTransform}
-              components={{}}
+              components={sharedMarkdownComponents}
             >
               {content}
             </ReactMarkdown>
@@ -193,6 +243,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
               rehypePlugins={[rehypeHighlight]}
               urlTransform={markdownUrlTransform}
               components={{
+                ...sharedMarkdownComponents,
                 // Custom components for better styling
                 h1: ({ children }) => (
                   <h1 className="mb-3 text-xl font-bold text-foreground">
@@ -258,37 +309,6 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
                     {children}
                   </pre>
                 ),
-                a: ({ children, href }) => (
-                  isAllowedMarkdownLinkUrl(href) ? (
-                    <a
-                      href={href}
-                      className="text-primary underline hover:text-primary/80"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      {children}
-                    </a>
-                  ) : null
-                ),
-                img: ({ src, alt }) => {
-                  if (!src || !isAllowedMarkdownImageUrl(src)) return null
-
-                  return (
-                    <img
-                      src={src}
-                      alt={alt || "Image"}
-                      loading="lazy"
-                      decoding="async"
-                      onError={() => {
-                        logUI("[MarkdownRenderer] image failed to render", {
-                          alt: alt || "Image",
-                          srcPreview: src.slice(0, 64),
-                        })
-                      }}
-                      className="mb-3 max-h-[28rem] w-full rounded-md border border-border bg-muted/20 object-contain"
-                    />
-                  )
-                },
                 table: ({ children }) => (
                   <div className="mb-3 overflow-x-auto">
                     <table className="min-w-full border-collapse border border-border">

@@ -231,19 +231,6 @@ export function Component() {
     })
   }, [agentProgressById, sessionOrder, getLastActivityTimestamp, pendingConversationId])
 
-  // Log visible sessions for debugging
-  useEffect(() => {
-    logUI('[Sessions] Visible sessions:', {
-      count: allProgressEntries.length,
-      pending: !!pendingConversationId,
-      sessions: allProgressEntries.map(([id, p]) => ({
-        id: id.substring(0, 20),
-        complete: p?.isComplete ?? false,
-        conversationId: p?.conversationId?.substring(0, 12),
-      })),
-    })
-  }, [allProgressEntries, pendingConversationId])
-
   // Sync session order when new sessions appear
   useEffect(() => {
     const currentIds = Array.from(agentProgressById.keys())

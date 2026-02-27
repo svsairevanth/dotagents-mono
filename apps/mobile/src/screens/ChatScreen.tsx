@@ -109,6 +109,27 @@ const buildMessageWithPendingImages = (text: string, images: PendingImageAttachm
   return [trimmed, imageMarkdown].filter(Boolean).join('\n\n');
 };
 
+const INLINE_DATA_IMAGE_MARKDOWN_REGEX = /!\[([^\]]*)\]\((data:image\/[^)]+)\)/gi;
+
+const sanitizeMessageContentForModel = (content: string) =>
+  content.replace(INLINE_DATA_IMAGE_MARKDOWN_REGEX, (_match, altText: string) => {
+    const cleanedAlt = altText?.trim();
+    return cleanedAlt ? `[Image: ${cleanedAlt}]` : '[Image]';
+  });
+
+const sanitizeMessagesForModel = (messages: ChatMessage[]): ChatMessage[] =>
+  messages.map((message) => {
+    const rawContent = typeof message.content === 'string' ? message.content : '';
+    const sanitizedContent = sanitizeMessageContentForModel(rawContent);
+    if (sanitizedContent === rawContent) {
+      return message;
+    }
+    return {
+      ...message,
+      content: sanitizedContent,
+    };
+  });
+
 const getCollapsedMessagePreview = (content: string) =>
   content
     .replace(/!\[[^\]]*\]\((?:data:image\/[^)]+|[^)]+)\)/gi, '[Image]')
@@ -1408,7 +1429,8 @@ export default function ChatScreen({ route, navigation }: any) {
         });
       };
 
-	      const response = await client.chat([...currentMessages, userMsg], onToken, onProgress, serverConversationId);
+      const modelMessages = sanitizeMessagesForModel([...currentMessages, userMsg]);
+	      const response = await client.chat(modelMessages, onToken, onProgress, serverConversationId);
       const finalText = response.content || streamingText;
 	      const finalDisplayText = lastUserResponse || finalText;
       console.log('[ChatScreen] Chat completed, conversationId:', response.conversationId);
@@ -1817,7 +1839,8 @@ export default function ChatScreen({ route, navigation }: any) {
         });
       };
 
-      const response = await client.chat([...currentMessages, userMsg], onToken, onProgress, serverConversationId);
+      const modelMessages = sanitizeMessagesForModel([...currentMessages, userMsg]);
+      const response = await client.chat(modelMessages, onToken, onProgress, serverConversationId);
       const finalText = response.content || streamingText;
       const finalDisplayText = lastUserResponse || finalText;
 
