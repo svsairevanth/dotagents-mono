@@ -111,6 +111,19 @@ function createBaseWindow({
   win.on("focus", () => logUI(`[WINDOW ${_label}] focus`))
   win.on("blur", () => logUI(`[WINDOW ${_label}] blur`))
 
+  if (process.env.IS_MAC) {
+    // Suppress accidental app hide (Cmd+H) for all windows, not just main.
+    // Global modifier-heavy workflows make this easy to trigger by mistake.
+    win.webContents.on("before-input-event", (event, input) => {
+      if (input.type !== "keyDown") return
+      if (!input.meta || input.control || input.alt || input.shift) return
+      const key = (input.key || "").toLowerCase()
+      if (key === "h") {
+        event.preventDefault()
+      }
+    })
+  }
+
   if (showWhenReady) {
     win.on("ready-to-show", () => {
       logUI(`[WINDOW ${_label}] ready-to-show event fired`)
@@ -129,8 +142,14 @@ function createBaseWindow({
     }
   }
 
+  // "close" can be prevented (e.g. macOS close-to-hide behavior), so only
+  // remove from map once the window is actually destroyed.
   win.on("close", () => {
     logUI(`[WINDOW ${_label}] close`)
+  })
+
+  win.on("closed", () => {
+    logUI(`[WINDOW ${_label}] closed`)
     WINDOWS.delete(id)
   })
 
@@ -192,6 +211,10 @@ export function createMainWindow({ url }: { url?: string } = {}): BrowserWindow 
     },
   })
 
+  // One-shot flag for intentional hide paths (e.g. close-to-hide on macOS).
+  // If main is hidden without this flag, we treat it as accidental and recover.
+  let allowExpectedMainHide = false
+
   // Hide floating panel when main window is focused (if setting is enabled)
   // But skip hiding if panel was intentionally opened alongside main window
   win.on("focus", () => {
@@ -233,6 +256,42 @@ export function createMainWindow({ url }: { url?: string } = {}): BrowserWindow 
   // since the context of "panel opened alongside main" no longer applies
   win.on("hide", () => {
     clearPanelOpenedWithMain()
+
+    if (!process.env.IS_MAC) return
+
+    const cfg = configStore.get()
+    const shouldRecoverFromUnexpectedHide =
+      !isAppQuitting && !cfg.hideDockIcon && !allowExpectedMainHide && !win.isMinimized()
+
+    if (shouldRecoverFromUnexpectedHide) {
+      logApp(
+        `[main.hide] Unexpected hide detected; recovering main window (dockVisible=${app.dock?.isVisible?.()})`,
+      )
+
+      try {
+        app.setActivationPolicy("regular")
+        if (!app.dock?.isVisible?.()) {
+          app.dock?.show()
+        }
+      } catch {
+        // best-effort recovery
+      }
+
+      // Defer to avoid racing the native hide transition.
+      setTimeout(() => {
+        try {
+          app.show()
+          if (!win.isVisible()) {
+            win.show()
+          }
+        } catch {
+          // best-effort recovery
+        }
+      }, 0)
+    }
+
+    // Consume one-shot expectation regardless of hide cause.
+    allowExpectedMainHide = false
   })
 
   // Clear the flag on close for all platforms (not just macOS)
@@ -247,17 +306,27 @@ export function createMainWindow({ url }: { url?: string } = {}): BrowserWindow 
     // via dock click (app "activate" event) or hotkey. Only allow actual close
     // during app quit (isAppQuitting).
     win.on("close", (e) => {
+      const cfg = configStore.get()
+      const shouldHideDock = cfg.hideDockIcon === true
       if (!isAppQuitting) {
         e.preventDefault()
+        allowExpectedMainHide = true
         win.hide()
-        if (configStore.get().hideDockIcon) {
+        if (shouldHideDock) {
           app.setActivationPolicy("accessory")
           app.dock.hide()
+        } else {
+          // Defensive recovery: if activation policy drifted to accessory for any
+          // reason, restore regular policy so the app remains Cmd+Tab-able.
+          app.setActivationPolicy("regular")
+          if (!app.dock.isVisible()) {
+            app.dock.show()
+          }
         }
         return
       }
       // App is quitting — allow the close to proceed
-      if (configStore.get().hideDockIcon) {
+      if (shouldHideDock) {
         app.setActivationPolicy("accessory")
         app.dock.hide()
       }

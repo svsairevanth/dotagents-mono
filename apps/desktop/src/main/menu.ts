@@ -21,7 +21,9 @@ export const createAppMenu = () => {
               { type: "separator" as const },
               { role: "services" as const },
               { type: "separator" as const },
-              { role: "hide" as const },
+              // Intentionally omit the default Cmd+H hide action.
+              // DotAgents relies on global modifiers/hotkeys, and accidental
+              // Cmd+H was hiding the whole app unexpectedly.
               { role: "hideOthers" as const },
               { role: "unhide" as const },
               { type: "separator" as const },

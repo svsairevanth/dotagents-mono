@@ -1,4 +1,4 @@
-import { app, Menu } from "electron"
+import { app, Menu, globalShortcut } from "electron"
 import { electronApp, optimizer } from "@electron-toolkit/utils"
 import {
   createMainWindow,
@@ -248,6 +248,25 @@ app.whenReady().then(async () => {
   Menu.setApplicationMenu(createAppMenu())
   logApp("Application menu created")
 
+  if (process.platform === "darwin") {
+    // Defense-in-depth: explicitly capture and suppress app-hide shortcuts.
+    // This catches cases where macOS handles Cmd+H before renderer input events.
+    try {
+      const cmdHRegistered = globalShortcut.register("Command+H", () => {
+        // no-op: intentionally swallow app hide shortcut
+      })
+      const cmdAltHRegistered = globalShortcut.register("Command+Alt+H", () => {
+        // no-op: intentionally swallow hide-others shortcut
+      })
+      logApp(
+        `[shortcut] macOS hide blockers registered cmd+h=${cmdHRegistered} cmd+alt+h=${cmdAltHRegistered}`,
+      )
+    } catch (e) {
+      logApp("[shortcut] Failed to register macOS hide blockers:", e)
+    }
+
+  }
+
   registerIpcMain(router)
   logApp("IPC main registered")
 
@@ -448,15 +467,25 @@ app.whenReady().then(async () => {
   })
 
   app.on("activate", function () {
+    const mainWin = WINDOWS.get("main")
+    const cfg = configStore.get()
+
+    if (process.platform === "darwin" && !cfg.hideDockIcon) {
+      // Ensure Cmd+Tab presence and a visible dock icon when app is activated.
+      // This recovers from rare activation-policy drift to "accessory".
+      app.setActivationPolicy("regular")
+      if (!app.dock?.isVisible?.()) {
+        app.dock?.show()
+      }
+    }
+
     if (accessibilityGranted) {
-      const mainWin = WINDOWS.get("main")
       if (mainWin) {
         // Window exists (may be hidden on macOS close-to-hide) — just show it
         mainWin.show()
       } else {
         // Check if onboarding has been completed
         // Skip for existing users who have already configured models (pre-onboarding installs)
-        const cfg = configStore.get()
         const hasCustomPresets = cfg.modelPresets && cfg.modelPresets.length > 0
         const hasSelectedPreset = cfg.currentModelPresetId !== undefined
         const needsOnboarding = !cfg.onboardingCompleted && !hasCustomPresets && !hasSelectedPreset
@@ -479,6 +508,15 @@ app.whenReady().then(async () => {
   const CLEANUP_TIMEOUT_MS = 5000 // 5 second timeout for graceful cleanup
 
   app.on("before-quit", async (event) => {
+    if (process.platform === "darwin") {
+      try {
+        globalShortcut.unregister("Command+H")
+        globalShortcut.unregister("Command+Alt+H")
+      } catch {
+        // noop
+      }
+    }
+
     setAppQuitting()
     makePanelWindowClosable()
     loopService.stopAllLoops()
