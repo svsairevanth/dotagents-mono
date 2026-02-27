@@ -5,7 +5,7 @@ const INLINE_DATA_IMAGE_REGEX = /!\[([^\]]*)\]\((data:image\/[^)]+)\)/gi
 const MARKDOWN_IMAGE_REGEX = /!\[([^\]]*)\]\(([^)]+)\)/gi
 
 export function hasInlineDataImage(content: string): boolean {
-  return !!content && content.includes("data:image/")
+  return !!content && /data:image\//i.test(content)
 }
 
 export function sanitizeMessageContentForDisplay(content: string): string {

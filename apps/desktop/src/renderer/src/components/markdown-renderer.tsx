@@ -23,12 +23,12 @@ interface ThinkSectionProps {
   onToggle?: () => void
 }
 
-const isAllowedMarkdownUrl = (rawUrl?: string) => {
+const isAllowedMarkdownLinkUrl = (rawUrl?: string) => {
   if (!rawUrl) return false
 
   const url = rawUrl.trim().toLowerCase()
 
-  // Allow in-app anchors and common safe external schemes.
+  // Allow in-app anchors and common safe external link schemes.
   if (
     url.startsWith("#") ||
     url.startsWith("http://") ||
@@ -38,12 +38,27 @@ const isAllowedMarkdownUrl = (rawUrl?: string) => {
     return true
   }
 
-  // Explicitly allow inline image uploads rendered via markdown image syntax.
-  return url.startsWith("data:image/")
+  return false
 }
 
-const markdownUrlTransform = (url: string) =>
-  isAllowedMarkdownUrl(url) ? url : ""
+const isAllowedMarkdownImageUrl = (rawUrl?: string) => {
+  if (!rawUrl) return false
+
+  const url = rawUrl.trim().toLowerCase()
+  return (
+    url.startsWith("http://") ||
+    url.startsWith("https://") ||
+    url.startsWith("data:image/")
+  )
+}
+
+const markdownUrlTransform = (url: string, key?: string) => {
+  const isImageSrc = key === "src"
+  const isAllowed = isImageSrc
+    ? isAllowedMarkdownImageUrl(url)
+    : isAllowedMarkdownLinkUrl(url)
+  return isAllowed ? url : ""
+}
 
 const ThinkSection: React.FC<ThinkSectionProps> = ({
   content,
@@ -244,17 +259,19 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
                   </pre>
                 ),
                 a: ({ children, href }) => (
-                  <a
-                    href={href}
-                    className="text-primary underline hover:text-primary/80"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    {children}
-                  </a>
+                  isAllowedMarkdownLinkUrl(href) ? (
+                    <a
+                      href={href}
+                      className="text-primary underline hover:text-primary/80"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {children}
+                    </a>
+                  ) : null
                 ),
                 img: ({ src, alt }) => {
-                  if (!src || !isAllowedMarkdownUrl(src)) return null
+                  if (!src || !isAllowedMarkdownImageUrl(src)) return null
 
                   return (
                     <img

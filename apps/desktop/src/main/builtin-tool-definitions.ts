@@ -23,6 +23,7 @@ export interface BuiltinToolDefinition {
     type: string
     properties: Record<string, unknown>
     required: string[]
+    [key: string]: unknown
   }
 }
 
@@ -140,7 +141,6 @@ export const builtinToolDefinitions: BuiltinToolDefinition[] = [
       properties: {
         text: {
           type: "string",
-          minLength: 1,
           description:
             "Optional response text for the user. Write naturally and conversationally. Markdown is allowed when helpful (for example links or image captions).",
         },
@@ -171,7 +171,14 @@ export const builtinToolDefinitions: BuiltinToolDefinition[] = [
       },
       required: [],
       anyOf: [
-        { required: ["text"] },
+        {
+          required: ["text"],
+          properties: {
+            text: {
+              minLength: 1,
+            },
+          },
+        },
         { required: ["images"] },
       ],
     },
