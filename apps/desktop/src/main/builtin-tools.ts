@@ -655,6 +655,7 @@ const toolHandlers: Record<string, ToolHandler> = {
             success: true,
             message: "Response recorded for delivery to user.",
             textLength: text.length,
+            responseContentLength: responseContent.length,
             imageCount: imageMarkdownBlocks.length,
             localImageCount,
           }, null, 2),

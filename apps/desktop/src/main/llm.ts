@@ -1536,8 +1536,11 @@ Return ONLY JSON per schema.`,
       { role: "system", content: currentSystemPrompt },
       ...conversationHistory
         .map((entry) => {
+          const rawContent = typeof entry.content === "string" ? entry.content : ""
+          const sanitizedContent = sanitizeMessageContentForDisplay(rawContent)
+
           if (entry.role === "tool") {
-            const text = (entry.content || "").trim()
+            const text = sanitizedContent.trim()
             if (!text) return null
             // Tool results already contain tool name prefix (format: [toolName] content...)
             // Pass through directly without adding redundant wrapper
@@ -1549,7 +1552,7 @@ Return ONLY JSON per schema.`,
           // For assistant messages, ensure non-empty content
           // Anthropic API requires all messages to have non-empty content
           // except for the optional final assistant message
-          let content = entry.content
+          let content = sanitizedContent
           if (entry.role === "assistant" && !content?.trim()) {
             // If assistant message has tool calls but no content, describe the tool calls
             if (entry.toolCalls && entry.toolCalls.length > 0) {

@@ -43,12 +43,13 @@ const toDataUrl = (file: File) =>
 
 const toOptimizedDataUrl = async (file: File) => {
   const originalDataUrl = await toDataUrl(file)
+  const originalEmbeddedSizeBytes = estimateDataUrlSizeBytes(originalDataUrl) || file.size
 
   // Keep GIFs unmodified so we don't drop animation.
   if (file.type === "image/gif") {
     return {
       dataUrl: originalDataUrl,
-      sizeBytes: file.size,
+      sizeBytes: originalEmbeddedSizeBytes,
       optimized: false,
       originalSizeBytes: file.size,
     }
@@ -71,14 +72,14 @@ const toOptimizedDataUrl = async (file: File) => {
     if (!context) {
       return {
         dataUrl: originalDataUrl,
-        sizeBytes: file.size,
+        sizeBytes: originalEmbeddedSizeBytes,
         optimized: false,
         originalSizeBytes: file.size,
       }
     }
 
     let bestDataUrl = originalDataUrl
-    let bestSizeBytes = file.size
+    let bestSizeBytes = originalEmbeddedSizeBytes
     let quality = INITIAL_JPEG_QUALITY
 
     for (let attempt = 0; attempt < 6; attempt++) {
@@ -114,13 +115,13 @@ const toOptimizedDataUrl = async (file: File) => {
     return {
       dataUrl: bestDataUrl,
       sizeBytes: bestSizeBytes,
-      optimized: bestSizeBytes < file.size,
+      optimized: bestSizeBytes < originalEmbeddedSizeBytes,
       originalSizeBytes: file.size,
     }
   } catch {
     return {
       dataUrl: originalDataUrl,
-      sizeBytes: file.size,
+      sizeBytes: originalEmbeddedSizeBytes,
       optimized: false,
       originalSizeBytes: file.size,
     }

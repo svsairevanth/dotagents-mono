@@ -176,6 +176,7 @@ export const builtinToolDefinitions: BuiltinToolDefinition[] = [
           properties: {
             text: {
               minLength: 1,
+              pattern: "\\S",
             },
           },
         },
