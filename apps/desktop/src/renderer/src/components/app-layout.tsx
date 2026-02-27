@@ -296,10 +296,159 @@ export const Component = () => {
 
           {/* Scrollable area: Settings + Sessions scroll together */}
           {isCollapsed ? (
-            /* Collapsed: Show settings icons then sessions icon */
-            <div className={cn("px-1")}>
-              {/* Settings Section - Collapsed: Show all settings icons for quick navigation */}
+            /* Collapsed: Sessions quick actions first, then settings shortcuts */
+            <div className="mt-2 px-1">
               <div className="grid gap-1">
+                <button
+                  type="button"
+                  onClick={handleToggleGlobalTTS}
+                  disabled={!configQuery.data || saveConfigMutation.isPending}
+                  className={cn(
+                    "flex h-8 w-full items-center justify-center rounded-md transition-all duration-200",
+                    "text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:opacity-50",
+                  )}
+                  title={
+                    isGlobalTTSEnabled
+                      ? "Disable global TTS"
+                      : "Enable global TTS"
+                  }
+                  aria-label={
+                    isGlobalTTSEnabled
+                      ? "Disable global TTS"
+                      : "Enable global TTS"
+                  }
+                >
+                  {saveConfigMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : isGlobalTTSEnabled ? (
+                    <Volume2 className="h-4 w-4" />
+                  ) : (
+                    <VolumeX className="h-4 w-4" />
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleEmergencyStopAll}
+                  disabled={isEmergencyStopping}
+                  className={cn(
+                    "flex h-8 w-full items-center justify-center rounded-md transition-all duration-200",
+                    "text-destructive hover:bg-destructive/10 disabled:opacity-50",
+                  )}
+                  title="Emergency stop all agent sessions"
+                  aria-label="Emergency stop all agent sessions"
+                >
+                  {isEmergencyStopping ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <OctagonX className="h-4 w-4" />
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPastSessionsDialogOpen(true)}
+                  className={cn(
+                    "flex h-8 w-full items-center justify-center rounded-md transition-all duration-200",
+                    pastSessionsDialogOpen
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                  )}
+                  title="Past Sessions"
+                  aria-label="Past Sessions"
+                  aria-pressed={pastSessionsDialogOpen || undefined}
+                >
+                  <Clock className="h-4 w-4" />
+                </button>
+
+                <NavLink
+                  to="/"
+                  end
+                  className={cn(
+                    "flex h-8 w-full items-center justify-center rounded-md transition-all duration-200",
+                    isSessionsActive
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                  )}
+                  title="Sessions"
+                  aria-label="Sessions"
+                  aria-current={isSessionsActive ? "page" : undefined}
+                >
+                  <div className="relative flex items-center justify-center">
+                    <span className="i-mingcute-chat-3-line"></span>
+                    {collapsedActiveSessions.length > 0 && (
+                      <span className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-500 px-1 text-[9px] font-semibold text-white">
+                        {collapsedActiveSessions.length > 9
+                          ? "9+"
+                          : collapsedActiveSessions.length}
+                      </span>
+                    )}
+                  </div>
+                </NavLink>
+
+                {collapsedPreviewSessions.map((session) => {
+                  const isFocused = focusedSessionId === session.id
+                  const sessionProgress = agentProgressById.get(session.id)
+                  const hasPendingApproval =
+                    !!sessionProgress?.pendingToolApproval
+                  const isSnoozed =
+                    sessionProgress?.isSnoozed ?? session.isSnoozed ?? false
+                  const statusDotColor = hasPendingApproval
+                    ? "bg-amber-500"
+                    : isSnoozed
+                      ? "bg-muted-foreground"
+                      : "bg-blue-500"
+                  const title =
+                    session.conversationTitle?.trim() || "Untitled session"
+                  const initial = title.charAt(0).toUpperCase()
+
+                  return (
+                    <button
+                      key={session.id}
+                      type="button"
+                      onClick={() => handleCollapsedSessionClick(session.id)}
+                      className={cn(
+                        "group relative flex h-8 w-full items-center justify-center rounded-md transition-all duration-200",
+                        isFocused
+                          ? "text-foreground bg-blue-500/15"
+                          : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                      )}
+                      title={title}
+                      aria-label={`Open session ${title}`}
+                    >
+                      <span className="text-xs font-semibold">{initial}</span>
+                      <span
+                        className={cn(
+                          "border-background absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border",
+                          statusDotColor,
+                          !isSnoozed && !hasPendingApproval && "animate-pulse",
+                        )}
+                      />
+                    </button>
+                  )
+                })}
+
+                {collapsedActiveSessions.length >
+                  collapsedPreviewSessions.length && (
+                  <button
+                    type="button"
+                    onClick={() => navigate("/")}
+                    className={cn(
+                      "flex h-8 w-full items-center justify-center rounded-md text-[10px] font-semibold transition-all duration-200",
+                      "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                    )}
+                    title={`View ${collapsedActiveSessions.length - collapsedPreviewSessions.length} more sessions`}
+                    aria-label="View more sessions"
+                  >
+                    +
+                    {collapsedActiveSessions.length -
+                      collapsedPreviewSessions.length}
+                  </button>
+                )}
+              </div>
+
+              {/* Settings Section - collapsed quick navigation */}
+              <div className="mt-2 grid gap-1">
                 {settingsNavLinks.map((link) => {
                   const isActive = isNavLinkActive(link.href)
                   return (
@@ -360,158 +509,6 @@ export const Component = () => {
                   </div>
                 )}
               </div>
-            </div>
-          )}
-
-          {/* Sessions icon when collapsed - navigates to sessions page */}
-          {isCollapsed && (
-            <div className="mt-2 grid gap-1 px-1">
-              <button
-                type="button"
-                onClick={handleToggleGlobalTTS}
-                disabled={!configQuery.data || saveConfigMutation.isPending}
-                className={cn(
-                  "flex h-8 w-full items-center justify-center rounded-md transition-all duration-200",
-                  "text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:opacity-50",
-                )}
-                title={
-                  isGlobalTTSEnabled
-                    ? "Disable global TTS"
-                    : "Enable global TTS"
-                }
-                aria-label={
-                  isGlobalTTSEnabled
-                    ? "Disable global TTS"
-                    : "Enable global TTS"
-                }
-              >
-                {saveConfigMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : isGlobalTTSEnabled ? (
-                  <Volume2 className="h-4 w-4" />
-                ) : (
-                  <VolumeX className="h-4 w-4" />
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={handleEmergencyStopAll}
-                disabled={isEmergencyStopping}
-                className={cn(
-                  "flex h-8 w-full items-center justify-center rounded-md transition-all duration-200",
-                  "text-destructive hover:bg-destructive/10 disabled:opacity-50",
-                )}
-                title="Emergency stop all agent sessions"
-                aria-label="Emergency stop all agent sessions"
-              >
-                {isEmergencyStopping ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <OctagonX className="h-4 w-4" />
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setPastSessionsDialogOpen(true)}
-                className={cn(
-                  "flex h-8 w-full items-center justify-center rounded-md transition-all duration-200",
-                  pastSessionsDialogOpen
-                    ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-                )}
-                title="Past Sessions"
-                aria-label="Past Sessions"
-                aria-pressed={pastSessionsDialogOpen || undefined}
-              >
-                <Clock className="h-4 w-4" />
-              </button>
-
-              <NavLink
-                to="/"
-                end
-                className={cn(
-                  "flex h-8 w-full items-center justify-center rounded-md transition-all duration-200",
-                  isSessionsActive
-                    ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-                )}
-                title="Sessions"
-                aria-label="Sessions"
-                aria-current={isSessionsActive ? "page" : undefined}
-              >
-                <div className="relative flex items-center justify-center">
-                  <span className="i-mingcute-chat-3-line"></span>
-                  {collapsedActiveSessions.length > 0 && (
-                    <span className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-500 px-1 text-[9px] font-semibold text-white">
-                      {collapsedActiveSessions.length > 9
-                        ? "9+"
-                        : collapsedActiveSessions.length}
-                    </span>
-                  )}
-                </div>
-              </NavLink>
-
-              {collapsedPreviewSessions.map((session) => {
-                const isFocused = focusedSessionId === session.id
-                const sessionProgress = agentProgressById.get(session.id)
-                const hasPendingApproval =
-                  !!sessionProgress?.pendingToolApproval
-                const isSnoozed =
-                  sessionProgress?.isSnoozed ?? session.isSnoozed ?? false
-                const statusDotColor = hasPendingApproval
-                  ? "bg-amber-500"
-                  : isSnoozed
-                    ? "bg-muted-foreground"
-                    : "bg-blue-500"
-                const title =
-                  session.conversationTitle?.trim() || "Untitled session"
-                const initial = title.charAt(0).toUpperCase()
-
-                return (
-                  <button
-                    key={session.id}
-                    type="button"
-                    onClick={() => handleCollapsedSessionClick(session.id)}
-                    className={cn(
-                      "group relative flex h-8 w-full items-center justify-center rounded-md transition-all duration-200",
-                      isFocused
-                        ? "text-foreground bg-blue-500/15"
-                        : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-                    )}
-                    title={title}
-                    aria-label={`Open session ${title}`}
-                  >
-                    <span className="text-xs font-semibold">{initial}</span>
-                    <span
-                      className={cn(
-                        "border-background absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border",
-                        statusDotColor,
-                        !isSnoozed && !hasPendingApproval && "animate-pulse",
-                      )}
-                    />
-                  </button>
-                )
-              })}
-
-              {collapsedActiveSessions.length >
-                collapsedPreviewSessions.length && (
-                <button
-                  type="button"
-                  onClick={() => navigate("/")}
-                  className={cn(
-                    "flex h-8 w-full items-center justify-center rounded-md text-[10px] font-semibold transition-all duration-200",
-                    "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-                  )}
-                  title={`View ${collapsedActiveSessions.length - collapsedPreviewSessions.length} more sessions`}
-                  aria-label="View more sessions"
-                >
-                  +
-                  {collapsedActiveSessions.length -
-                    collapsedPreviewSessions.length}
-                </button>
-              )}
             </div>
           )}
 
