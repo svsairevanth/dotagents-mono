@@ -1,6 +1,9 @@
 import { create } from 'zustand'
 import { AgentProgressUpdate, QueuedMessage } from '@shared/types'
 import { clearSessionTTSTracking } from '@renderer/lib/tts-tracking'
+import {
+  sanitizeAgentProgressUpdateForDisplay,
+} from '@shared/message-display-utils'
 
 export type SessionViewMode = 'grid' | 'list' | 'kanban'
 export type SessionFilter = 'all' | 'active' | 'completed' | 'error'
@@ -54,7 +57,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   sortBy: 'recent' as SessionSortBy,
   pinnedSessionIds: new Set<string>(),
 
-  updateSessionProgress: (update: AgentProgressUpdate) => {
+  updateSessionProgress: (incomingUpdate: AgentProgressUpdate) => {
+    const update = sanitizeAgentProgressUpdateForDisplay(incomingUpdate)
     const sessionId = update.sessionId
 
     set((state) => {

@@ -5,6 +5,7 @@ import { AgentProgressUpdate } from "../shared/types"
 import { isPanelAutoShowSuppressed, agentSessionStateManager } from "./state"
 import { agentSessionTracker } from "./agent-session-tracker"
 import { configStore } from "./config"
+import { sanitizeAgentProgressUpdateForDisplay } from "../shared/message-display-utils"
 
 // Throttle interval for non-critical progress updates (ms).
 // Updates within this window are collapsed — only the latest is sent.
@@ -59,11 +60,13 @@ function sendToWindows(update: AgentProgressUpdate): void {
 
 /**
  * Determine whether an update must be sent immediately (not throttled).
- * Critical updates include: completion, tool approvals, errors, and the first update for a session.
+ * Critical updates include: completion, tool approvals, user responses, errors,
+ * and the first update for a session.
  */
 function isCriticalUpdate(update: AgentProgressUpdate): boolean {
   if (update.isComplete) return true
   if (update.pendingToolApproval) return true
+  if (typeof update.userResponse === "string" && update.userResponse.trim().length > 0) return true
   // First update for a session — send immediately
   if (update.sessionId && !sessionThrottleState.has(update.sessionId)) return true
   // Steps with error or awaiting_approval status
@@ -72,23 +75,25 @@ function isCriticalUpdate(update: AgentProgressUpdate): boolean {
 }
 
 export async function emitAgentProgress(update: AgentProgressUpdate): Promise<void> {
+  const displayUpdate = sanitizeAgentProgressUpdateForDisplay(update)
+
   // Skip updates for stopped sessions, except final completion updates
-  if (update.sessionId && !update.isComplete) {
-    const shouldStop = agentSessionStateManager.shouldStopSession(update.sessionId)
+  if (displayUpdate.sessionId && !displayUpdate.isComplete) {
+    const shouldStop = agentSessionStateManager.shouldStopSession(displayUpdate.sessionId)
     if (shouldStop) {
-      const state = sessionThrottleState.get(update.sessionId)
+      const state = sessionThrottleState.get(displayUpdate.sessionId)
       if (state?.timer) {
         clearTimeout(state.timer)
       }
-      sessionThrottleState.delete(update.sessionId)
+      sessionThrottleState.delete(displayUpdate.sessionId)
       return
     }
   }
 
-  const sessionId = update.sessionId || "__global__"
+  const sessionId = displayUpdate.sessionId || "__global__"
 
   // Critical updates bypass the throttle entirely
-  if (isCriticalUpdate(update)) {
+  if (isCriticalUpdate(displayUpdate)) {
     // Flush any pending throttled update for this session first
     const state = sessionThrottleState.get(sessionId)
     if (state?.timer) {
@@ -98,7 +103,7 @@ export async function emitAgentProgress(update: AgentProgressUpdate): Promise<vo
     }
 
     // Send immediately
-    sendToWindows(update)
+    sendToWindows(displayUpdate)
 
     // Update throttle state
     sessionThrottleState.set(sessionId, {
@@ -108,7 +113,7 @@ export async function emitAgentProgress(update: AgentProgressUpdate): Promise<vo
     })
 
     // Clean up throttle state when session completes
-    if (update.isComplete) {
+    if (displayUpdate.isComplete) {
       sessionThrottleState.delete(sessionId)
     }
     return
@@ -132,10 +137,10 @@ export async function emitAgentProgress(update: AgentProgressUpdate): Promise<vo
     }
     state.pendingUpdate = null
     state.lastSendTime = now
-    sendToWindows(update)
+    sendToWindows(displayUpdate)
   } else {
     // Within throttle window — store as pending and schedule a trailing send
-    state.pendingUpdate = update
+    state.pendingUpdate = displayUpdate
     if (!state.timer) {
       const remaining = THROTTLE_INTERVAL_MS - elapsed
       state.timer = setTimeout(() => {

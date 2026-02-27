@@ -23,6 +23,7 @@ export interface BuiltinToolDefinition {
     type: string
     properties: Record<string, unknown>
     required: string[]
+    [key: string]: unknown
   }
 }
 
@@ -141,10 +142,52 @@ export const builtinToolDefinitions: BuiltinToolDefinition[] = [
         text: {
           type: "string",
           description:
-            "The response text for the user. Write naturally and conversationally, without markdown or code formatting.",
+            "Optional response text for the user. Write naturally and conversationally. Markdown is allowed when helpful (for example links or image captions).",
+        },
+        images: {
+          type: "array",
+          description:
+            "Optional images to include in the message. Each image can be provided as a URL/data URL, or as a local file path that will be embedded automatically.",
+          items: {
+            type: "object",
+            properties: {
+              url: {
+                type: "string",
+                description: "HTTP(S) URL or data:image URL for the image.",
+              },
+              path: {
+                type: "string",
+                description: "Local image file path (absolute, or relative to the current working directory).",
+              },
+              alt: {
+                type: "string",
+                description: "Optional alt text shown with markdown image syntax.",
+              },
+            },
+            required: [],
+          },
         },
       },
-      required: ["text"],
+      required: [],
+      anyOf: [
+        {
+          required: ["text"],
+          properties: {
+            text: {
+              minLength: 1,
+              pattern: "\\S",
+            },
+          },
+        },
+        {
+          required: ["images"],
+          properties: {
+            images: {
+              minItems: 1,
+            },
+          },
+        },
+      ],
     },
   },
   {

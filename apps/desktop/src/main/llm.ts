@@ -41,6 +41,7 @@ import { filterEphemeralMessages } from "./conversation-history-utils"
 import {
   filterNamedItemsToAllowedTools,
 } from "./llm-tool-gating"
+import { sanitizeMessageContentForDisplay } from "../shared/message-display-utils"
 
 /**
  * Clean error message by removing stack traces and noise
@@ -511,6 +512,7 @@ export async function processTranscriptWithAgentMode(
     ? getCurrentPresetName(config.currentModelPresetId, config.modelPresets)
     : providerId === "groq" ? "Groq" : providerId === "gemini" ? "Gemini" : providerId
   const modelInfoRef = { provider: providerDisplayName, model: modelName }
+  let lastEmittedUserResponse: string | undefined
 
   // Create bound emitter that always includes sessionId, conversationId, snooze state, sessionStartIndex, conversationTitle, and contextInfo
   const emit = (
@@ -535,17 +537,20 @@ export async function processTranscriptWithAgentMode(
       (update.isComplete && !isKillSwitchCompletion
         ? update.finalContent
         : undefined)
+    const shouldEmitUserResponse =
+      userResponseForUpdate !== undefined &&
+      userResponseForUpdate !== lastEmittedUserResponse
 
     // Get history of past respond_to_user calls (excluding current)
     const responseHistory = getSessionUserResponseHistory(currentSessionId)
 
     const fullUpdate: AgentProgressUpdate = {
       ...update,
-	      // Only include userResponse when it has a value, so undefined doesn't
-	      // overwrite a previously-set value during the renderer's spread-merge.
-	      ...(userResponseForUpdate !== undefined ? { userResponse: userResponseForUpdate } : {}),
+      // Only include userResponse when it changed. This avoids re-sending large
+      // image payloads on every progress tick while preserving merge behavior.
+      ...(shouldEmitUserResponse ? { userResponse: userResponseForUpdate } : {}),
       // Include response history if there are past responses
-      ...(responseHistory.length > 0 ? { userResponseHistory: responseHistory } : {}),
+      ...(shouldEmitUserResponse && responseHistory.length > 0 ? { userResponseHistory: responseHistory } : {}),
       sessionId: currentSessionId,
       conversationId: currentConversationId,
       conversationTitle,
@@ -560,6 +565,10 @@ export async function processTranscriptWithAgentMode(
       // Dual-model summarization data (from service - single source of truth)
       stepSummaries: summarizationService.getSummaries(currentSessionId),
       latestSummary: summarizationService.getLatestSummary(currentSessionId),
+    }
+
+    if (shouldEmitUserResponse) {
+      lastEmittedUserResponse = userResponseForUpdate
     }
 
     // Fire and forget - don't await, but catch errors
@@ -1049,15 +1058,16 @@ export async function processTranscriptWithAgentMode(
   ): Array<{ role: "user" | "assistant"; content: string }> => {
     const mapped = conversationHistory
       .map((entry) => {
+        const rawContent = typeof entry.content === "string" ? entry.content : ""
+        const content = sanitizeMessageContentForDisplay(rawContent).trim()
+        if (!content) return null
+
         if (entry.role === "tool") {
-          const text = (entry.content || "").trim()
-          if (!text) return null
           // Tool results already contain tool name prefix (format: [toolName] content...)
           // Just pass through without adding generic "Tool execution results:" wrapper
-          return { role: "user" as const, content: text }
+          return { role: "user" as const, content }
         }
-        const content = (entry.content || "").trim()
-        if (!content) return null
+
         return { role: entry.role as "user" | "assistant", content }
       })
       .filter(Boolean) as Array<{ role: "user" | "assistant"; content: string }>
@@ -1154,6 +1164,7 @@ export async function processTranscriptWithAgentMode(
     const maxItems = Math.max(1, config.mcpVerifyContextMaxItems || 20)
     const recent = conversationHistory.slice(-maxItems)
     const messages: Array<{ role: "user" | "assistant" | "system"; content: string }> = []
+    const coerceMessageContent = (value: unknown): string => typeof value === "string" ? value : ""
 
     // Track the last assistant content added to avoid duplicates
     let lastAddedAssistantContent: string | null = null
@@ -1183,23 +1194,24 @@ IMPORTANT - Do NOT mark complete just because:
 
 Return ONLY JSON per schema.`,
     })
-    messages.push({ role: "user", content: `Original request:\n${transcript}` })
+    messages.push({ role: "user", content: `Original request:\n${sanitizeMessageContentForDisplay(transcript)}` })
     for (const entry of recent) {
+      const rawContent = coerceMessageContent(entry.content)
       if (entry.role === "tool") {
-        const text = (entry.content || "").trim()
+        const text = sanitizeMessageContentForDisplay(rawContent.trim())
         // Tool results already contain tool name prefix (format: [toolName] content...)
         // Pass through directly without adding redundant wrapper
         messages.push({ role: "user", content: text || "[No tool output]" })
       } else if (entry.role === "user") {
         // Skip empty user messages
-        const text = (entry.content || "").trim()
+        const text = sanitizeMessageContentForDisplay(rawContent.trim())
         if (text) {
           messages.push({ role: "user", content: text })
         }
       } else {
         // Ensure non-empty content for assistant messages (Anthropic API requirement)
-        let content = entry.content
-        if (entry.role === "assistant" && !content?.trim()) {
+        let content = sanitizeMessageContentForDisplay(rawContent)
+        if (entry.role === "assistant" && !content.trim()) {
           if (entry.toolCalls && entry.toolCalls.length > 0) {
             const toolNames = entry.toolCalls.map(tc => tc.name).join(", ")
             content = `[Calling tools: ${toolNames}]`
@@ -1214,8 +1226,9 @@ Return ONLY JSON per schema.`,
       }
     }
     // Only add finalAssistantText if it's different from the last assistant message added
-    if (finalAssistantText?.trim() && finalAssistantText.trim() !== lastAddedAssistantContent?.trim()) {
-      messages.push({ role: "assistant", content: finalAssistantText })
+    const sanitizedFinalAssistantText = sanitizeMessageContentForDisplay(finalAssistantText || "")
+    if (sanitizedFinalAssistantText.trim() && sanitizedFinalAssistantText.trim() !== lastAddedAssistantContent?.trim()) {
+      messages.push({ role: "assistant", content: sanitizedFinalAssistantText })
     }
 
     // Build the JSON request with optional verification attempt note (combined into single message)
@@ -1523,8 +1536,11 @@ Return ONLY JSON per schema.`,
       { role: "system", content: currentSystemPrompt },
       ...conversationHistory
         .map((entry) => {
+          const rawContent = typeof entry.content === "string" ? entry.content : ""
+          const sanitizedContent = sanitizeMessageContentForDisplay(rawContent)
+
           if (entry.role === "tool") {
-            const text = (entry.content || "").trim()
+            const text = sanitizedContent.trim()
             if (!text) return null
             // Tool results already contain tool name prefix (format: [toolName] content...)
             // Pass through directly without adding redundant wrapper
@@ -1536,7 +1552,7 @@ Return ONLY JSON per schema.`,
           // For assistant messages, ensure non-empty content
           // Anthropic API requires all messages to have non-empty content
           // except for the optional final assistant message
-          let content = entry.content
+          let content = sanitizedContent
           if (entry.role === "assistant" && !content?.trim()) {
             // If assistant message has tool calls but no content, describe the tool calls
             if (entry.toolCalls && entry.toolCalls.length > 0) {

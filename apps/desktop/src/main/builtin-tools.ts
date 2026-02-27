@@ -21,6 +21,7 @@ import { executeACPRouterTool, isACPRouterTool } from "./acp/acp-router-tools"
 import { memoryService } from "./memory-service"
 import { messageQueueService } from "./message-queue-service"
 import { setSessionUserResponse } from "./session-user-response-store"
+import { promises as fs } from "fs"
 import { exec } from "child_process"
 import { promisify } from "util"
 import path from "path"
@@ -42,6 +43,91 @@ import { BUILTIN_SERVER_NAME, builtinToolDefinitions } from "./builtin-tool-defi
 
 interface BuiltinToolContext {
   sessionId?: string
+}
+
+const MAX_RESPOND_TO_USER_IMAGES = 4
+const MAX_RESPOND_TO_USER_IMAGE_FILE_BYTES = 8 * 1024 * 1024
+const MAX_RESPOND_TO_USER_TOTAL_EMBEDDED_IMAGE_BYTES = 12 * 1024 * 1024
+const MAX_RESPOND_TO_USER_RESPONSE_CONTENT_BYTES = 12 * 1024 * 1024
+const DATA_IMAGE_BASE64_PREFIX_REGEX = /^data:image\/[a-z0-9.+-]+;base64,/i
+
+const IMAGE_MIME_BY_EXTENSION: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".bmp": "image/bmp",
+  ".svg": "image/svg+xml",
+}
+
+const escapeMarkdownAltText = (value: string) => value.replace(/[\[\]\\]/g, "").trim()
+
+const getImageMimeTypeFromPath = (imagePath: string): string | undefined =>
+  IMAGE_MIME_BY_EXTENSION[path.extname(imagePath).toLowerCase()]
+
+const isAllowedRespondToUserImageUrl = (url: string): boolean => {
+  const normalized = url.trim().toLowerCase()
+  return (
+    normalized.startsWith("https://") ||
+    normalized.startsWith("http://") ||
+    DATA_IMAGE_BASE64_PREFIX_REGEX.test(normalized)
+  )
+}
+
+const getDecodedBase64ByteLength = (rawBase64: string): number => {
+  const normalized = rawBase64.replace(/\s+/g, "")
+  if (!normalized) {
+    return 0
+  }
+  const padding = normalized.endsWith("==")
+    ? 2
+    : normalized.endsWith("=")
+      ? 1
+      : 0
+  return Math.max(0, Math.floor((normalized.length * 3) / 4) - padding)
+}
+
+const getDataImageBytesFromUrl = (url: string): number | null => {
+  const trimmed = url.trim()
+  if (!DATA_IMAGE_BASE64_PREFIX_REGEX.test(trimmed)) {
+    return null
+  }
+  const commaIndex = trimmed.indexOf(",")
+  if (commaIndex < 0 || commaIndex === trimmed.length - 1) {
+    return 0
+  }
+  const base64Payload = trimmed.slice(commaIndex + 1)
+  return getDecodedBase64ByteLength(base64Payload)
+}
+
+const getUtf8ByteLength = (value: string): number =>
+  Buffer.byteLength(value, "utf8")
+
+async function imagePathToDataUrl(rawPath: string): Promise<string> {
+  const resolvedPath = path.isAbsolute(rawPath)
+    ? rawPath
+    : path.resolve(process.cwd(), rawPath)
+
+  const stat = await fs.stat(resolvedPath)
+  if (!stat.isFile()) {
+    throw new Error(`Image path is not a file: ${rawPath}`)
+  }
+  if (stat.size <= 0) {
+    throw new Error(`Image file is empty: ${rawPath}`)
+  }
+  if (stat.size > MAX_RESPOND_TO_USER_IMAGE_FILE_BYTES) {
+    const maxMb = Math.round(MAX_RESPOND_TO_USER_IMAGE_FILE_BYTES / (1024 * 1024))
+    throw new Error(`Image file is larger than ${maxMb}MB: ${rawPath}`)
+  }
+
+  const mimeType = getImageMimeTypeFromPath(resolvedPath)
+  if (!mimeType) {
+    throw new Error(`Unsupported image extension for path: ${rawPath}`)
+  }
+
+  const fileBuffer = await fs.readFile(resolvedPath)
+  return `data:${mimeType};base64,${fileBuffer.toString("base64")}`
 }
 
 // Tool execution handlers
@@ -438,13 +524,6 @@ const toolHandlers: Record<string, ToolHandler> = {
   },
 
   respond_to_user: async (args: Record<string, unknown>, context: BuiltinToolContext): Promise<MCPToolResult> => {
-    if (typeof args.text !== "string" || args.text.trim() === "") {
-      return {
-        content: [{ type: "text", text: JSON.stringify({ success: false, error: "text must be a non-empty string" }) }],
-        isError: true,
-      }
-    }
-
     if (!context.sessionId) {
       return {
         content: [{ type: "text", text: JSON.stringify({ success: false, error: "respond_to_user requires an active agent session" }) }],
@@ -452,8 +531,154 @@ const toolHandlers: Record<string, ToolHandler> = {
       }
     }
 
-    const text = args.text.trim()
-    setSessionUserResponse(context.sessionId, text)
+    const text = typeof args.text === "string" ? args.text.trim() : ""
+    if (args.text !== undefined && typeof args.text !== "string") {
+      return {
+        content: [{ type: "text", text: JSON.stringify({ success: false, error: "text must be a string if provided" }) }],
+        isError: true,
+      }
+    }
+
+    if (args.images !== undefined && !Array.isArray(args.images)) {
+      return {
+        content: [{ type: "text", text: JSON.stringify({ success: false, error: "images must be an array if provided" }) }],
+        isError: true,
+      }
+    }
+
+    const imageInputs = Array.isArray(args.images)
+      ? args.images
+      : []
+
+    if (imageInputs.length > MAX_RESPOND_TO_USER_IMAGES) {
+      return {
+        content: [{ type: "text", text: JSON.stringify({ success: false, error: `You can include up to ${MAX_RESPOND_TO_USER_IMAGES} images.` }) }],
+        isError: true,
+      }
+    }
+
+    const imageMarkdownBlocks: string[] = []
+    let localImageCount = 0
+    let embeddedImageBytes = 0
+
+    for (let index = 0; index < imageInputs.length; index++) {
+      const rawItem = imageInputs[index]
+      if (!rawItem || typeof rawItem !== "object" || Array.isArray(rawItem)) {
+        return {
+          content: [{ type: "text", text: JSON.stringify({ success: false, error: `images[${index}] must be an object` }) }],
+          isError: true,
+        }
+      }
+
+      const imageItem = rawItem as Record<string, unknown>
+      const url = typeof imageItem.url === "string" ? imageItem.url.trim() : ""
+      const imagePath = typeof imageItem.path === "string" ? imageItem.path.trim() : ""
+      const preferredAlt = typeof imageItem.alt === "string" ? imageItem.alt.trim() : ""
+
+      if (!url && !imagePath) {
+        return {
+          content: [{ type: "text", text: JSON.stringify({ success: false, error: `images[${index}] must include either url or path` }) }],
+          isError: true,
+        }
+      }
+
+      if (url && imagePath) {
+        return {
+          content: [{ type: "text", text: JSON.stringify({ success: false, error: `images[${index}] cannot include both url and path` }) }],
+          isError: true,
+        }
+      }
+
+      const fallbackAlt = imagePath
+        ? path.basename(imagePath)
+        : `Image ${index + 1}`
+      const safeAlt = escapeMarkdownAltText(preferredAlt || fallbackAlt) || `Image ${index + 1}`
+
+      if (url) {
+        if (!isAllowedRespondToUserImageUrl(url)) {
+          return {
+            content: [{ type: "text", text: JSON.stringify({ success: false, error: `images[${index}].url must be http(s) or data:image` }) }],
+            isError: true,
+          }
+        }
+        const dataImageBytes = getDataImageBytesFromUrl(url)
+        if (dataImageBytes !== null) {
+          if (dataImageBytes <= 0) {
+            return {
+              content: [{ type: "text", text: JSON.stringify({ success: false, error: `images[${index}].url contains an invalid data:image payload` }) }],
+              isError: true,
+            }
+          }
+          if (dataImageBytes > MAX_RESPOND_TO_USER_IMAGE_FILE_BYTES) {
+            const maxMb = Math.round(MAX_RESPOND_TO_USER_IMAGE_FILE_BYTES / (1024 * 1024))
+            return {
+              content: [{ type: "text", text: JSON.stringify({ success: false, error: `images[${index}].url exceeds the ${maxMb}MB limit` }) }],
+              isError: true,
+            }
+          }
+          const dataImageUrlBytes = getUtf8ByteLength(url)
+          if (embeddedImageBytes + dataImageUrlBytes > MAX_RESPOND_TO_USER_TOTAL_EMBEDDED_IMAGE_BYTES) {
+            const maxMb = Math.round(MAX_RESPOND_TO_USER_TOTAL_EMBEDDED_IMAGE_BYTES / (1024 * 1024))
+            return {
+              content: [{ type: "text", text: JSON.stringify({ success: false, error: `Total embedded image payload exceeds the ${maxMb}MB limit` }) }],
+              isError: true,
+            }
+          }
+          embeddedImageBytes += dataImageUrlBytes
+        }
+        imageMarkdownBlocks.push(`![${safeAlt}](${url})`)
+        continue
+      }
+
+      try {
+        const dataUrl = await imagePathToDataUrl(imagePath)
+        const dataImageUrlBytes = getUtf8ByteLength(dataUrl)
+        if (embeddedImageBytes + dataImageUrlBytes > MAX_RESPOND_TO_USER_TOTAL_EMBEDDED_IMAGE_BYTES) {
+          const maxMb = Math.round(MAX_RESPOND_TO_USER_TOTAL_EMBEDDED_IMAGE_BYTES / (1024 * 1024))
+          return {
+            content: [{ type: "text", text: JSON.stringify({ success: false, error: `Total embedded image payload exceeds the ${maxMb}MB limit` }) }],
+            isError: true,
+          }
+        }
+        embeddedImageBytes += dataImageUrlBytes
+        imageMarkdownBlocks.push(`![${safeAlt}](${dataUrl})`)
+        localImageCount++
+      } catch (error) {
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              success: false,
+              error: error instanceof Error
+                ? `Failed to load images[${index}].path: ${error.message}`
+                : `Failed to load images[${index}].path`,
+            }),
+          }],
+          isError: true,
+        }
+      }
+    }
+
+    const imageMarkdown = imageMarkdownBlocks.join("\n\n")
+    const responseContent = [text, imageMarkdown].filter(Boolean).join("\n\n")
+    const responseContentBytes = getUtf8ByteLength(responseContent)
+
+    if (!responseContent.trim()) {
+      return {
+        content: [{ type: "text", text: JSON.stringify({ success: false, error: "respond_to_user requires text and/or images" }) }],
+        isError: true,
+      }
+    }
+
+    if (responseContentBytes > MAX_RESPOND_TO_USER_RESPONSE_CONTENT_BYTES) {
+      const maxMb = Math.round(MAX_RESPOND_TO_USER_RESPONSE_CONTENT_BYTES / (1024 * 1024))
+      return {
+        content: [{ type: "text", text: JSON.stringify({ success: false, error: `Response content exceeds the ${maxMb}MB limit` }) }],
+        isError: true,
+      }
+    }
+
+    setSessionUserResponse(context.sessionId, responseContent)
 
     return {
       content: [
@@ -463,6 +688,11 @@ const toolHandlers: Record<string, ToolHandler> = {
             success: true,
             message: "Response recorded for delivery to user.",
             textLength: text.length,
+            responseContentLength: responseContent.length,
+            responseContentBytes,
+            imageCount: imageMarkdownBlocks.length,
+            localImageCount,
+            embeddedImageBytes,
           }, null, 2),
         },
       ],

@@ -6,7 +6,7 @@ import { ChevronDown, ChevronRight, Brain } from "lucide-react"
 import { cn } from "@renderer/lib/utils"
 import "highlight.js/styles/github.css"
 
-import { logExpand } from "@renderer/lib/debug"
+import { logExpand, logUI } from "@renderer/lib/debug"
 
 interface MarkdownRendererProps {
   content: string
@@ -21,6 +21,97 @@ interface ThinkSectionProps {
   defaultCollapsed?: boolean
   isCollapsed?: boolean
   onToggle?: () => void
+}
+
+const isAllowedMarkdownLinkUrl = (rawUrl?: string) => {
+  if (!rawUrl) return false
+
+  const url = rawUrl.trim().toLowerCase()
+
+  // Allow in-app anchors and common safe external link schemes.
+  if (
+    url.startsWith("#") ||
+    url.startsWith("http://") ||
+    url.startsWith("https://") ||
+    url.startsWith("mailto:")
+  ) {
+    return true
+  }
+
+  return false
+}
+
+const isAllowedMarkdownImageUrl = (rawUrl?: string) => {
+  if (!rawUrl) return false
+
+  const url = rawUrl.trim().toLowerCase()
+  return (
+    url.startsWith("http://") ||
+    url.startsWith("https://") ||
+    url.startsWith("data:image/")
+  )
+}
+
+const markdownUrlTransform = (url: string, key?: string) => {
+  const isImageSrc = key === "src"
+  const isAllowed = isImageSrc
+    ? isAllowedMarkdownImageUrl(url)
+    : isAllowedMarkdownLinkUrl(url)
+  return isAllowed ? url : ""
+}
+
+const markdownLinkComponent = ({
+  children,
+  href,
+}: {
+  children?: React.ReactNode
+  href?: string
+}) => {
+  if (isAllowedMarkdownLinkUrl(href)) {
+    return (
+    <a
+      href={href}
+      className="text-primary underline hover:text-primary/80"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      {children}
+    </a>
+    )
+  }
+
+  return <>{children}</>
+}
+
+const markdownImageComponent = ({
+  src,
+  alt,
+}: {
+  src?: string
+  alt?: string
+}) => {
+  if (!src || !isAllowedMarkdownImageUrl(src)) return null
+
+  return (
+    <img
+      src={src}
+      alt={alt || "Image"}
+      loading="lazy"
+      decoding="async"
+      onError={() => {
+        logUI("[MarkdownRenderer] image failed to render", {
+          alt: alt || "Image",
+          srcPreview: src.slice(0, 64),
+        })
+      }}
+      className="mb-3 max-h-[28rem] w-full rounded-md border border-border bg-muted/20 object-contain"
+    />
+  )
+}
+
+const sharedMarkdownComponents = {
+  a: markdownLinkComponent,
+  img: markdownImageComponent,
 }
 
 const ThinkSection: React.FC<ThinkSectionProps> = ({
@@ -72,7 +163,8 @@ const ThinkSection: React.FC<ThinkSectionProps> = ({
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               rehypePlugins={[rehypeHighlight]}
-              components={{}}
+              urlTransform={markdownUrlTransform}
+              components={sharedMarkdownComponents}
             >
               {content}
             </ReactMarkdown>
@@ -153,7 +245,9 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
               key={`text-${index}`}
               remarkPlugins={[remarkGfm]}
               rehypePlugins={[rehypeHighlight]}
+              urlTransform={markdownUrlTransform}
               components={{
+                ...sharedMarkdownComponents,
                 // Custom components for better styling
                 h1: ({ children }) => (
                   <h1 className="mb-3 text-xl font-bold text-foreground">
@@ -218,16 +312,6 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
                   <pre className="mb-3 overflow-x-auto rounded-lg bg-muted p-3">
                     {children}
                   </pre>
-                ),
-                a: ({ children, href }) => (
-                  <a
-                    href={href}
-                    className="text-primary underline hover:text-primary/80"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    {children}
-                  </a>
                 ),
                 table: ({ children }) => (
                   <div className="mb-3 overflow-x-auto">
