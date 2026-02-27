@@ -122,9 +122,9 @@ export function OverlayFollowUpInput({
     }
   }
 
-  const handleImageButtonClick = async (e: React.MouseEvent) => {
+  const handleImageButtonClick = (e: React.MouseEvent) => {
     e.stopPropagation()
-    await handleInputInteraction()
+    void handleInputInteraction()
     fileInputRef.current?.click()
   }
 
@@ -377,4 +377,3 @@ export function OverlayFollowUpInput({
     </form>
   )
 }
-

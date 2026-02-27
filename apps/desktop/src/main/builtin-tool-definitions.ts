@@ -146,7 +146,6 @@ export const builtinToolDefinitions: BuiltinToolDefinition[] = [
         },
         images: {
           type: "array",
-          minItems: 1,
           description:
             "Optional images to include in the message. Each image can be provided as a URL/data URL, or as a local file path that will be embedded automatically.",
           items: {
@@ -180,7 +179,14 @@ export const builtinToolDefinitions: BuiltinToolDefinition[] = [
             },
           },
         },
-        { required: ["images"] },
+        {
+          required: ["images"],
+          properties: {
+            images: {
+              minItems: 1,
+            },
+          },
+        },
       ],
     },
   },

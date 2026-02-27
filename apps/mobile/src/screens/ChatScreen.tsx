@@ -130,6 +130,11 @@ const sanitizeMessagesForModel = (messages: ChatMessage[]): ChatMessage[] =>
     };
   });
 
+const getMessageLogMeta = (content: string) => ({
+  length: content.length,
+  inlineImageCount: (content.match(/!\[[^\]]*\]\((?:data:image\/[^)]+)\)/gi) || []).length,
+});
+
 const getCollapsedMessagePreview = (content: string) =>
   content
     .replace(/!\[[^\]]*\]\((?:data:image\/[^)]+|[^)]+)\)/gi, '[Image]')
@@ -1273,7 +1278,7 @@ export default function ChatScreen({ route, navigation }: any) {
 
     // If message queue is enabled and we're already responding, queue the message
     if (messageQueueEnabled && responding) {
-      console.log('[ChatScreen] Agent busy, queuing message:', text);
+      console.log('[ChatScreen] Agent busy, queuing message:', getMessageLogMeta(text));
       messageQueue.enqueue(currentConversationId, text);
       setInput('');
       if (options?.fromComposer) {
@@ -1282,7 +1287,7 @@ export default function ChatScreen({ route, navigation }: any) {
       return;
     }
 
-    console.log('[ChatScreen] Sending message:', text);
+    console.log('[ChatScreen] Sending message:', getMessageLogMeta(text));
 
     // Get client from connection manager (preserves connections across session switches)
     const client = getSessionClient();
@@ -1748,7 +1753,7 @@ export default function ChatScreen({ route, navigation }: any) {
       return;
     }
 
-    console.log('[ChatScreen] Processing queued message:', queuedMsg.id, text);
+    console.log('[ChatScreen] Processing queued message:', queuedMsg.id, getMessageLogMeta(text));
 
     // Get client from connection manager (preserves connections across session switches)
     const client = getSessionClient();
