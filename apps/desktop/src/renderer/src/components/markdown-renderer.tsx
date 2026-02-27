@@ -28,12 +28,9 @@ const isAllowedMarkdownUrl = (rawUrl?: string) => {
 
   const url = rawUrl.trim().toLowerCase()
 
-  // Allow in-app anchors/relative paths and common safe external schemes.
+  // Allow in-app anchors and common safe external schemes.
   if (
     url.startsWith("#") ||
-    url.startsWith("/") ||
-    url.startsWith("./") ||
-    url.startsWith("../") ||
     url.startsWith("http://") ||
     url.startsWith("https://") ||
     url.startsWith("mailto:")

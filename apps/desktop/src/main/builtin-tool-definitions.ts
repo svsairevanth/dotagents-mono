@@ -140,11 +140,13 @@ export const builtinToolDefinitions: BuiltinToolDefinition[] = [
       properties: {
         text: {
           type: "string",
+          minLength: 1,
           description:
             "Optional response text for the user. Write naturally and conversationally. Markdown is allowed when helpful (for example links or image captions).",
         },
         images: {
           type: "array",
+          minItems: 1,
           description:
             "Optional images to include in the message. Each image can be provided as a URL/data URL, or as a local file path that will be embedded automatically.",
           items: {
@@ -168,6 +170,10 @@ export const builtinToolDefinitions: BuiltinToolDefinition[] = [
         },
       },
       required: [],
+      anyOf: [
+        { required: ["text"] },
+        { required: ["images"] },
+      ],
     },
   },
   {

@@ -47,6 +47,7 @@ interface BuiltinToolContext {
 
 const MAX_RESPOND_TO_USER_IMAGES = 4
 const MAX_RESPOND_TO_USER_IMAGE_FILE_BYTES = 8 * 1024 * 1024
+const DATA_IMAGE_BASE64_PREFIX_REGEX = /^data:image\/[a-z0-9.+-]+;base64,/i
 
 const IMAGE_MIME_BY_EXTENSION: Record<string, string> = {
   ".png": "image/png",
@@ -68,8 +69,34 @@ const isAllowedRespondToUserImageUrl = (url: string): boolean => {
   return (
     normalized.startsWith("https://") ||
     normalized.startsWith("http://") ||
-    normalized.startsWith("data:image/")
+    DATA_IMAGE_BASE64_PREFIX_REGEX.test(normalized)
   )
+}
+
+const getDecodedBase64ByteLength = (rawBase64: string): number => {
+  const normalized = rawBase64.replace(/\s+/g, "")
+  if (!normalized) {
+    return 0
+  }
+  const padding = normalized.endsWith("==")
+    ? 2
+    : normalized.endsWith("=")
+      ? 1
+      : 0
+  return Math.max(0, Math.floor((normalized.length * 3) / 4) - padding)
+}
+
+const getDataImageBytesFromUrl = (url: string): number | null => {
+  const trimmed = url.trim()
+  if (!DATA_IMAGE_BASE64_PREFIX_REGEX.test(trimmed)) {
+    return null
+  }
+  const commaIndex = trimmed.indexOf(",")
+  if (commaIndex < 0 || commaIndex === trimmed.length - 1) {
+    return 0
+  }
+  const base64Payload = trimmed.slice(commaIndex + 1)
+  return getDecodedBase64ByteLength(base64Payload)
 }
 
 async function imagePathToDataUrl(rawPath: string): Promise<string> {
@@ -566,6 +593,22 @@ const toolHandlers: Record<string, ToolHandler> = {
           return {
             content: [{ type: "text", text: JSON.stringify({ success: false, error: `images[${index}].url must be http(s) or data:image` }) }],
             isError: true,
+          }
+        }
+        const dataImageBytes = getDataImageBytesFromUrl(url)
+        if (dataImageBytes !== null) {
+          if (dataImageBytes <= 0) {
+            return {
+              content: [{ type: "text", text: JSON.stringify({ success: false, error: `images[${index}].url contains an invalid data:image payload` }) }],
+              isError: true,
+            }
+          }
+          if (dataImageBytes > MAX_RESPOND_TO_USER_IMAGE_FILE_BYTES) {
+            const maxMb = Math.round(MAX_RESPOND_TO_USER_IMAGE_FILE_BYTES / (1024 * 1024))
+            return {
+              content: [{ type: "text", text: JSON.stringify({ success: false, error: `images[${index}].url exceeds the ${maxMb}MB limit` }) }],
+              isError: true,
+            }
           }
         }
         imageMarkdownBlocks.push(`![${safeAlt}](${url})`)

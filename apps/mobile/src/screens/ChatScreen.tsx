@@ -57,7 +57,44 @@ interface PendingImageAttachment {
 const MAX_PENDING_IMAGES = 4;
 const MAX_PENDING_IMAGE_FILE_SIZE_BYTES = 4 * 1024 * 1024;
 
+const IMAGE_MIME_BY_EXTENSION: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.bmp': 'image/bmp',
+  '.svg': 'image/svg+xml',
+  '.heic': 'image/heic',
+  '.heif': 'image/heif',
+};
+
 const escapeMarkdownImageAlt = (value: string) => value.replace(/[\[\]\\]/g, '').trim();
+
+const getApproxBase64Bytes = (base64: string) => {
+  const normalized = base64.replace(/\s+/g, '');
+  if (!normalized) return 0;
+  const padding = normalized.endsWith('==') ? 2 : normalized.endsWith('=') ? 1 : 0;
+  return Math.max(0, Math.floor((normalized.length * 3) / 4) - padding);
+};
+
+const inferImageMimeType = (asset: {
+  mimeType?: string | null;
+  fileName?: string | null;
+  uri?: string | null;
+}) => {
+  const mimeType = asset.mimeType?.trim().toLowerCase();
+  if (mimeType?.startsWith('image/')) {
+    return mimeType;
+  }
+
+  const pathLike = (asset.fileName || asset.uri || '').split('?')[0].split('#')[0];
+  const extensionMatch = pathLike.match(/\.([a-z0-9]+)$/i);
+  if (!extensionMatch) {
+    return null;
+  }
+  return IMAGE_MIME_BY_EXTENSION[`.${extensionMatch[1].toLowerCase()}`] || null;
+};
 
 const buildMessageWithPendingImages = (text: string, images: PendingImageAttachment[]) => {
   const trimmed = text.trim();
@@ -1144,20 +1181,31 @@ export default function ChatScreen({ route, navigation }: any) {
       const nextImages: PendingImageAttachment[] = [];
       const missingBase64Names: string[] = [];
       const oversizedImageNames: string[] = [];
+      const unknownMimeNames: string[] = [];
 
       selectedAssets.forEach((asset, index) => {
-        if (asset.fileSize && asset.fileSize > MAX_PENDING_IMAGE_FILE_SIZE_BYTES) {
-          oversizedImageNames.push(asset.fileName || `Image ${index + 1}`);
-          return;
-        }
-
+        const displayName = asset.fileName || `Image ${index + 1}`;
         if (!asset.base64) {
-          missingBase64Names.push(asset.fileName || `Image ${index + 1}`);
+          missingBase64Names.push(displayName);
           return;
         }
 
-        const mimeType = asset.mimeType || 'image/jpeg';
-        const fileName = asset.fileName || `image-${Date.now()}-${index + 1}.jpg`;
+        const inferredBytes = getApproxBase64Bytes(asset.base64);
+        const fileSizeBytes = typeof asset.fileSize === 'number' && asset.fileSize > 0
+          ? asset.fileSize
+          : inferredBytes;
+        if (fileSizeBytes > MAX_PENDING_IMAGE_FILE_SIZE_BYTES) {
+          oversizedImageNames.push(displayName);
+          return;
+        }
+
+        const mimeType = inferImageMimeType(asset);
+        if (!mimeType) {
+          unknownMimeNames.push(displayName);
+          return;
+        }
+
+        const fileName = asset.fileName || `image-${Date.now()}-${index + 1}`;
         nextImages.push({
           id: `${Date.now()}-${index}-${asset.uri}`,
           name: fileName,
@@ -1181,6 +1229,13 @@ export default function ChatScreen({ route, navigation }: any) {
         Alert.alert(
           'Image too large',
           `${oversizedImageNames.join(', ')} exceed the 4MB limit.`
+        );
+      }
+
+      if (unknownMimeNames.length > 0) {
+        Alert.alert(
+          'Unsupported image format',
+          `${unknownMimeNames.join(', ')} could not be attached because the image type could not be determined.`
         );
       }
     } catch (error: any) {

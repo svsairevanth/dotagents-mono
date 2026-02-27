@@ -1163,6 +1163,7 @@ export async function processTranscriptWithAgentMode(
     const maxItems = Math.max(1, config.mcpVerifyContextMaxItems || 20)
     const recent = conversationHistory.slice(-maxItems)
     const messages: Array<{ role: "user" | "assistant" | "system"; content: string }> = []
+    const coerceMessageContent = (value: unknown): string => typeof value === "string" ? value : ""
 
     // Track the last assistant content added to avoid duplicates
     let lastAddedAssistantContent: string | null = null
@@ -1194,21 +1195,22 @@ Return ONLY JSON per schema.`,
     })
     messages.push({ role: "user", content: `Original request:\n${sanitizeMessageContentForDisplay(transcript)}` })
     for (const entry of recent) {
+      const rawContent = coerceMessageContent(entry.content)
       if (entry.role === "tool") {
-        const text = sanitizeMessageContentForDisplay((entry.content || "").trim())
+        const text = sanitizeMessageContentForDisplay(rawContent.trim())
         // Tool results already contain tool name prefix (format: [toolName] content...)
         // Pass through directly without adding redundant wrapper
         messages.push({ role: "user", content: text || "[No tool output]" })
       } else if (entry.role === "user") {
         // Skip empty user messages
-        const text = sanitizeMessageContentForDisplay((entry.content || "").trim())
+        const text = sanitizeMessageContentForDisplay(rawContent.trim())
         if (text) {
           messages.push({ role: "user", content: text })
         }
       } else {
         // Ensure non-empty content for assistant messages (Anthropic API requirement)
-        let content = sanitizeMessageContentForDisplay(entry.content)
-        if (entry.role === "assistant" && !content?.trim()) {
+        let content = sanitizeMessageContentForDisplay(rawContent)
+        if (entry.role === "assistant" && !content.trim()) {
           if (entry.toolCalls && entry.toolCalls.length > 0) {
             const toolNames = entry.toolCalls.map(tc => tc.name).join(", ")
             content = `[Calling tools: ${toolNames}]`

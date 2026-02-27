@@ -242,7 +242,7 @@ export function Component() {
         conversationId: p?.conversationId?.substring(0, 12),
       })),
     })
-  }, [allProgressEntries.length, pendingConversationId])
+  }, [allProgressEntries, pendingConversationId])
 
   // Sync session order when new sessions appear
   useEffect(() => {
