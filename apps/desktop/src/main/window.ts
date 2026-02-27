@@ -116,7 +116,7 @@ function createBaseWindow({
     // Global modifier-heavy workflows make this easy to trigger by mistake.
     win.webContents.on("before-input-event", (event, input) => {
       if (input.type !== "keyDown") return
-      if (!input.meta || input.control || input.alt || input.shift) return
+      if (!input.meta || input.control || input.shift) return
       const key = (input.key || "").toLowerCase()
       if (key === "h") {
         event.preventDefault()
@@ -260,8 +260,9 @@ export function createMainWindow({ url }: { url?: string } = {}): BrowserWindow 
     if (!process.env.IS_MAC) return
 
     const cfg = configStore.get()
+    const isAppHidden = app.isHidden()
     const shouldRecoverFromUnexpectedHide =
-      !isAppQuitting && !cfg.hideDockIcon && !allowExpectedMainHide && !win.isMinimized()
+      !isAppQuitting && !cfg.hideDockIcon && !allowExpectedMainHide && !win.isMinimized() && !isAppHidden
 
     if (shouldRecoverFromUnexpectedHide) {
       logApp(
