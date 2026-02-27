@@ -304,14 +304,14 @@ export function ActiveAgentsSidebar({
           className="flex items-center gap-2 flex-1 min-w-0 focus:outline-none focus:ring-1 focus:ring-ring rounded"
         >
           <span className="i-mingcute-grid-line h-3.5 w-3.5"></span>
-          <span>Sessions</span>
+          <span className="truncate">Sessions</span>
           {activeSessions.length > 0 && (
-            <span className="ml-auto flex h-4 w-4 items-center justify-center rounded-full bg-blue-500 text-[10px] font-semibold text-white">
+            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-blue-500 text-[10px] font-semibold text-white">
               {activeSessions.length}
             </span>
           )}
         </button>
-        <div className="ml-auto flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           <button
             onClick={handleToggleGlobalTTS}
             disabled={!configQuery.data || saveConfigMutation.isPending}
