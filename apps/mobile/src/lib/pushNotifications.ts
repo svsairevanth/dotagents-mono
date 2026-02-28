@@ -18,16 +18,19 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const PUSH_TOKEN_KEY = 'push_token_v2';
 const SERVER_REGISTERED_KEY = 'push_server_registered_v2';
 
-// Configure how notifications are handled when the app is in foreground
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+// Configure how notifications are handled when the app is in foreground.
+// Expo notifications APIs are not fully available on web.
+if (Platform.OS !== 'web') {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+}
 
 export interface NotificationData {
   type?: 'message' | 'system';
@@ -44,7 +47,7 @@ export interface NotificationData {
  * Check if push notifications are supported (requires physical device)
  */
 export function isSupported(): boolean {
-  return Device.isDevice;
+  return Platform.OS !== 'web' && Device.isDevice;
 }
 
 /**
@@ -58,7 +61,7 @@ function normalizeBaseUrl(baseUrl: string): string {
  * Request notification permissions and configure Android channels
  */
 async function requestPermissions(): Promise<boolean> {
-  if (!Device.isDevice) return false;
+  if (!isSupported()) return false;
 
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   let finalStatus = existingStatus;
@@ -86,7 +89,7 @@ async function requestPermissions(): Promise<boolean> {
  * Get Expo push token for this device
  */
 async function getPushToken(): Promise<string | null> {
-  if (!Device.isDevice) return null;
+  if (!isSupported()) return null;
 
   const projectId = Constants.expoConfig?.extra?.eas?.projectId
     ?? Constants.easConfig?.projectId;
@@ -194,8 +197,13 @@ export async function isRegisteredWithServer(): Promise<boolean> {
  * Clear all notifications and badge (call when app opens)
  */
 export async function clearNotifications(): Promise<void> {
-  await Notifications.dismissAllNotificationsAsync();
-  await Notifications.setBadgeCountAsync(0);
+  if (Platform.OS === 'web') return;
+  try {
+    await Notifications.dismissAllNotificationsAsync();
+    await Notifications.setBadgeCountAsync(0);
+  } catch (error) {
+    console.warn('[Push] Failed to clear notifications:', error);
+  }
 }
 
 /**
@@ -252,6 +260,13 @@ export function usePushNotifications(): UsePushNotificationsResult {
   // Initialize state
   useEffect(() => {
     async function init() {
+      if (!isSupported()) {
+        setPermissionStatus(null);
+        setIsRegistered(false);
+        setIsLoading(false);
+        return;
+      }
+
       const { status } = await Notifications.getPermissionsAsync();
       setPermissionStatus(status);
 
@@ -281,6 +296,7 @@ export function usePushNotifications(): UsePushNotificationsResult {
 
   // Set up notification tap listener
   useEffect(() => {
+    if (!isSupported()) return;
     const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response.notification.request.content.data as NotificationData;
       if (data && onTapRef.current) {
@@ -291,6 +307,7 @@ export function usePushNotifications(): UsePushNotificationsResult {
   }, []);
 
   const register = useCallback(async (baseUrl: string, apiKey: string): Promise<boolean> => {
+    if (!isSupported()) return false;
     setIsLoading(true);
     const success = await registerWithServer(baseUrl, apiKey);
     if (success) {
@@ -303,6 +320,10 @@ export function usePushNotifications(): UsePushNotificationsResult {
   }, []);
 
   const unregister = useCallback(async (baseUrl: string, apiKey: string): Promise<boolean> => {
+    if (!isSupported()) {
+      setIsRegistered(false);
+      return true;
+    }
     setIsLoading(true);
     const success = await unregisterFromServer(baseUrl, apiKey);
     if (success) setIsRegistered(false);

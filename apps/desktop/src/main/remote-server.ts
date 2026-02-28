@@ -638,7 +638,7 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
     // When origin is ["*"] or includes "*", use true to reflect the request origin
     // This is needed because credentials: true doesn't work with literal "*"
     origin: corsOrigins.includes("*") ? true : corsOrigins,
-    methods: ["GET", "POST", "PUT", "PATCH", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
     maxAge: 86400, // Cache preflight for 24 hours
@@ -2414,6 +2414,241 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
     } catch (error: any) {
       diagnosticsService.logError("remote-server", "Failed to run repeat task", error)
       return reply.code(500).send({ error: error?.message || "Failed to run repeat task" })
+    }
+  })
+
+  // POST /v1/memories - Create a new memory
+  fastify.post("/v1/memories", async (req, reply) => {
+    try {
+      const body = req.body as {
+        title?: string
+        content?: string
+        importance?: string
+        tags?: string[]
+      }
+
+      if (!body.title || !body.content) {
+        return reply.code(400).send({ error: "title and content are required" })
+      }
+
+      const validImportance = ["low", "medium", "high", "critical"]
+      const importance = validImportance.includes(body.importance ?? "")
+        ? (body.importance as "low" | "medium" | "high" | "critical")
+        : "medium"
+
+      const now = Date.now()
+      const id = `memory_${now}_${Math.random().toString(36).slice(2, 11)}`
+
+      const memory = {
+        id,
+        title: body.title,
+        content: body.content,
+        importance,
+        tags: Array.isArray(body.tags) ? body.tags : [],
+        createdAt: now,
+        updatedAt: now,
+      }
+
+      const success = await memoryService.saveMemory(memory)
+      if (!success) {
+        return reply.code(500).send({ error: "Failed to save memory" })
+      }
+
+      return reply.send({ memory })
+    } catch (error: any) {
+      diagnosticsService.logError("remote-server", "Failed to create memory", error)
+      return reply.code(500).send({ error: error?.message || "Failed to create memory" })
+    }
+  })
+
+  // PATCH /v1/memories/:id - Update a memory
+  fastify.patch("/v1/memories/:id", async (req, reply) => {
+    try {
+      const params = req.params as { id: string }
+      const body = req.body as {
+        title?: string
+        content?: string
+        importance?: string
+        tags?: string[]
+        notes?: string
+      }
+
+      const existing = await memoryService.getMemory(params.id)
+      if (!existing) {
+        return reply.code(404).send({ error: "Memory not found" })
+      }
+
+      const updates: Record<string, unknown> = {}
+      if (body.title !== undefined) updates.title = body.title
+      if (body.content !== undefined) updates.content = body.content
+      if (body.tags !== undefined) updates.tags = body.tags
+      if (body.notes !== undefined) updates.userNotes = body.notes
+      if (body.importance !== undefined) {
+        const validImportance = ["low", "medium", "high", "critical"]
+        if (validImportance.includes(body.importance)) {
+          updates.importance = body.importance
+        }
+      }
+
+      const success = await memoryService.updateMemory(params.id, updates)
+      if (!success) {
+        return reply.code(500).send({ error: "Failed to update memory" })
+      }
+
+      const updated = await memoryService.getMemory(params.id)
+      return reply.send({
+        success: true,
+        memory: updated ? {
+          id: updated.id,
+          title: updated.title,
+          content: updated.content,
+          tags: updated.tags,
+          importance: updated.importance,
+          createdAt: updated.createdAt,
+          updatedAt: updated.updatedAt,
+        } : null,
+      })
+    } catch (error: any) {
+      diagnosticsService.logError("remote-server", "Failed to update memory", error)
+      return reply.code(500).send({ error: error?.message || "Failed to update memory" })
+    }
+  })
+
+  // POST /v1/loops - Create a new loop/repeat task
+  fastify.post("/v1/loops", async (req, reply) => {
+    try {
+      const body = req.body as {
+        name?: string
+        prompt?: string
+        intervalMinutes?: number
+        enabled?: boolean
+        profileId?: string
+      }
+
+      if (!body.name || !body.prompt) {
+        return reply.code(400).send({ error: "name and prompt are required" })
+      }
+
+      const intervalMinutes = typeof body.intervalMinutes === "number" && body.intervalMinutes >= 1
+        ? body.intervalMinutes
+        : 60
+
+      const id = `loop_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
+
+      const newLoop = {
+        id,
+        name: body.name,
+        prompt: body.prompt,
+        intervalMinutes,
+        enabled: body.enabled ?? true,
+        profileId: body.profileId || undefined,
+      }
+
+      const cfg = configStore.get()
+      const loops = [...(cfg.loops || []), newLoop]
+      configStore.save({ ...cfg, loops })
+
+      // Also save to loopService for runtime scheduling
+      try {
+        const { loopService } = await import("./loop-service")
+        loopService.saveLoop(newLoop)
+        if (newLoop.enabled) {
+          loopService.startLoop(newLoop.id)
+        }
+      } catch {
+        // Loop service might not be initialized
+      }
+
+      return reply.send({ loop: newLoop })
+    } catch (error: any) {
+      diagnosticsService.logError("remote-server", "Failed to create repeat task", error)
+      return reply.code(500).send({ error: error?.message || "Failed to create repeat task" })
+    }
+  })
+
+  // PATCH /v1/loops/:id - Update a loop/repeat task
+  fastify.patch("/v1/loops/:id", async (req, reply) => {
+    try {
+      const params = req.params as { id: string }
+      const body = req.body as {
+        name?: string
+        prompt?: string
+        intervalMinutes?: number
+        enabled?: boolean
+        profileId?: string
+      }
+
+      const cfg = configStore.get()
+      const loops = cfg.loops || []
+      const loopIndex = loops.findIndex(l => l.id === params.id)
+
+      if (loopIndex === -1) {
+        return reply.code(404).send({ error: "Repeat task not found" })
+      }
+
+      const existing = loops[loopIndex]
+      const updated = {
+        ...existing,
+        ...(body.name !== undefined && { name: body.name }),
+        ...(body.prompt !== undefined && { prompt: body.prompt }),
+        ...(body.intervalMinutes !== undefined && body.intervalMinutes >= 1 && { intervalMinutes: body.intervalMinutes }),
+        ...(body.enabled !== undefined && { enabled: body.enabled }),
+        ...(body.profileId !== undefined && { profileId: body.profileId || undefined }),
+      }
+
+      const updatedLoops = [...loops]
+      updatedLoops[loopIndex] = updated
+      configStore.save({ ...cfg, loops: updatedLoops })
+
+      // Update runtime scheduling
+      try {
+        const { loopService } = await import("./loop-service")
+        loopService.saveLoop(updated)
+        if (updated.enabled) {
+          loopService.stopLoop(params.id)
+          loopService.startLoop(params.id)
+        } else {
+          loopService.stopLoop(params.id)
+        }
+      } catch {
+        // Loop service might not be initialized
+      }
+
+      return reply.send({ success: true, loop: updated })
+    } catch (error: any) {
+      diagnosticsService.logError("remote-server", "Failed to update repeat task", error)
+      return reply.code(500).send({ error: error?.message || "Failed to update repeat task" })
+    }
+  })
+
+  // DELETE /v1/loops/:id - Delete a loop/repeat task
+  fastify.delete("/v1/loops/:id", async (req, reply) => {
+    try {
+      const params = req.params as { id: string }
+
+      const cfg = configStore.get()
+      const loops = cfg.loops || []
+      const loopIndex = loops.findIndex(l => l.id === params.id)
+
+      if (loopIndex === -1) {
+        return reply.code(404).send({ error: "Repeat task not found" })
+      }
+
+      const updatedLoops = loops.filter(l => l.id !== params.id)
+      configStore.save({ ...cfg, loops: updatedLoops })
+
+      // Remove from runtime
+      try {
+        const { loopService } = await import("./loop-service")
+        loopService.deleteLoop(params.id)
+      } catch {
+        // Loop service might not be initialized
+      }
+
+      return reply.send({ success: true, id: params.id })
+    } catch (error: any) {
+      diagnosticsService.logError("remote-server", "Failed to delete repeat task", error)
+      return reply.code(500).send({ error: error?.message || "Failed to delete repeat task" })
     }
   })
 
