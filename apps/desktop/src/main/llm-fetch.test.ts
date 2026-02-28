@@ -510,6 +510,46 @@ describe('LLM Fetch with AI SDK', () => {
     expect(schema.enum).toBeUndefined()
   })
 
+  it('should fall back to minimal object schema when tool parameters are non-object', async () => {
+    const { generateText } = await import('ai')
+    const generateTextMock = vi.mocked(generateText)
+
+    generateTextMock.mockResolvedValue({
+      text: 'ok',
+      finishReason: 'stop',
+      usage: { promptTokens: 10, completionTokens: 20 },
+    } as any)
+
+    const { makeLLMCallWithFetch } = await import('./llm-fetch')
+
+    await makeLLMCallWithFetch(
+      [{ role: 'user', content: 'test fallback schema normalization' }],
+      'openai',
+      undefined,
+      undefined,
+      [
+        {
+          name: 'array_only_tool',
+          description: 'Array schema tool',
+          inputSchema: {
+            type: 'array',
+            items: { type: 'string' },
+          },
+        },
+      ]
+    )
+
+    const callArgs = generateTextMock.mock.calls[0]?.[0] as any
+    const schema = callArgs?.tools?.array_only_tool?.inputSchema?.schema
+
+    expect(schema).toEqual({
+      type: 'object',
+      properties: {},
+      required: [],
+    })
+    expect(schema.items).toBeUndefined()
+  })
+
   it('should retry on AI SDK structured errors with isRetryable flag', async () => {
     const { generateText } = await import('ai')
     const generateTextMock = vi.mocked(generateText)

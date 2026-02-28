@@ -136,11 +136,13 @@ function normalizeToolInputSchema(inputSchema: unknown): Record<string, unknown>
   }
 
   const schema = { ...(inputSchema as Record<string, unknown>) }
+  const schemaType = schema.type
 
   // OpenAI function tools expect top-level object schemas.
-  if (schema.type !== "object") {
-    schema.type = "object"
+  if (schemaType !== undefined && schemaType !== "object") {
+    return fallback
   }
+  schema.type = "object"
 
   if (!schema.properties || typeof schema.properties !== "object" || Array.isArray(schema.properties)) {
     schema.properties = {}

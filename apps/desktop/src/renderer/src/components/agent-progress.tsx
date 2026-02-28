@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react"
+import React, { useEffect, useMemo, useRef, useState } from "react"
 import { cn } from "@renderer/lib/utils"
 import { AgentProgressUpdate, ACPDelegationProgress, ACPSubAgentMessage } from "../../../shared/types"
 import { INTERNAL_COMPLETION_NUDGE_TEXT, RESPOND_TO_USER_TOOL, MARK_WORK_COMPLETE_TOOL } from "../../../shared/builtin-tool-names"
@@ -156,6 +156,32 @@ function extractRespondToUserResponsesFromMessages(
   }
 
   return responses
+}
+
+const COLLAPSED_USER_RESPONSE_SCAN_LIMIT = 2048
+const COLLAPSED_USER_RESPONSE_PREVIEW_LIMIT = 160
+
+function buildCollapsedUserResponsePreview(userResponse: string): string {
+  const boundedResponse = userResponse.slice(0, COLLAPSED_USER_RESPONSE_SCAN_LIMIT)
+  const preview = boundedResponse
+    // Avoid showing huge inline data URL payloads in the collapsed preview.
+    .replace(/!\[[^\]]*\]\((?:data:image[^)]*|[^)]*)\)/gi, "[image]")
+    .replace(/data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=]+/g, "[embedded image]")
+    .replace(/[\t\r\n]+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim()
+
+  if (!preview) return "Image response"
+
+  if (preview.length > COLLAPSED_USER_RESPONSE_PREVIEW_LIMIT) {
+    return `${preview.slice(0, COLLAPSED_USER_RESPONSE_PREVIEW_LIMIT - 1).trimEnd()}…`
+  }
+
+  if (userResponse.length > COLLAPSED_USER_RESPONSE_SCAN_LIMIT) {
+    return `${preview}…`
+  }
+
+  return preview
 }
 
 
@@ -1862,15 +1888,14 @@ const MidTurnUserResponseBubble: React.FC<{
   if (!userResponse) return null
 
   const shouldShowTTSButton = configQuery.data?.ttsEnabled
-  const collapsedPreview = userResponse.replace(/[\t\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim()
+  const collapsedPreview = useMemo(
+    () => buildCollapsedUserResponsePreview(userResponse),
+    [userResponse],
+  )
 
-  // Keep AudioPlayer mounted (but hidden) when collapsed in overlay mode so auto-play
-  // behavior remains unchanged while the bubble stays compact.
-  const shouldMountHiddenAutoPlayPlayer =
-    !isExpanded &&
-    variant === "overlay" &&
+  const shouldKeepAudioPlayerMounted =
     shouldShowTTSButton &&
-    (configQuery.data?.ttsAutoPlay ?? true)
+    (isExpanded || (variant === "overlay" && (configQuery.data?.ttsAutoPlay ?? true)))
 
   return (
     <div className="rounded-lg border-2 border-green-400 bg-green-50/50 dark:bg-green-950/30 overflow-hidden">
@@ -1917,8 +1942,19 @@ const MidTurnUserResponseBubble: React.FC<{
         )}
       </div>
 
-      {shouldMountHiddenAutoPlayPlayer && (
-        <div className="hidden">
+      {isExpanded && (
+        <>
+          {/* Content */}
+          <div className="px-3 py-2">
+            <div className="text-sm text-green-900 dark:text-green-100 whitespace-pre-wrap break-words">
+              <MarkdownRenderer content={userResponse} />
+            </div>
+          </div>
+        </>
+      )}
+
+      {shouldKeepAudioPlayerMounted && (
+        <div className={cn("px-3", isExpanded ? "pb-2" : "hidden")}>
           <AudioPlayer
             audioData={audioData || undefined}
             text={ttsSource}
@@ -1929,39 +1965,16 @@ const MidTurnUserResponseBubble: React.FC<{
             autoPlay={configQuery.data?.ttsAutoPlay ?? true}
             onPlayStateChange={setIsTTSPlaying}
           />
+          {isExpanded && ttsError && (
+            <div className="mt-1 rounded-md bg-red-50 p-2 text-xs text-red-700 dark:bg-red-900/20 dark:text-red-300">
+              <span className="font-medium">Audio generation failed:</span> {ttsError}
+            </div>
+          )}
         </div>
       )}
 
       {isExpanded && (
         <>
-          {/* Content */}
-          <div className="px-3 py-2">
-            <div className="text-sm text-green-900 dark:text-green-100 whitespace-pre-wrap break-words">
-              <MarkdownRenderer content={userResponse} />
-            </div>
-
-            {/* TTS Audio Player */}
-            {shouldShowTTSButton && (
-              <div className="mt-2">
-                <AudioPlayer
-                  audioData={audioData || undefined}
-                  text={ttsSource}
-                  onGenerateAudio={generateAudio}
-                  isGenerating={isGeneratingAudio}
-                  error={ttsError}
-                  compact={true}
-                  autoPlay={configQuery.data?.ttsAutoPlay ?? true}
-                  onPlayStateChange={setIsTTSPlaying}
-                />
-                {ttsError && (
-                  <div className="mt-1 rounded-md bg-red-50 p-2 text-xs text-red-700 dark:bg-red-900/20 dark:text-red-300">
-                    <span className="font-medium">Audio generation failed:</span> {ttsError}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
           {/* Past Responses History */}
           {pastResponses && pastResponses.length > 0 && (
             <div className="px-3 py-2 border-t border-green-200/60 dark:border-green-800/40 bg-green-50/30 dark:bg-green-950/20">
