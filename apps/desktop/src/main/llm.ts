@@ -451,7 +451,6 @@ export async function processTranscriptWithAgentMode(
   const currentConversationId = conversationId
   const currentSessionId =
     sessionId || `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-  const effectiveRunId = runId ?? agentSessionStateManager.getSessionRunId(currentSessionId)
   // Clear any stale user response from prior runs that may have reused this session ID.
   clearSessionUserResponse(currentSessionId)
   // Number of messages in the conversation history that predate this agent session.
@@ -466,9 +465,16 @@ export async function processTranscriptWithAgentMode(
   const storedSnapshot = sessionId ? agentSessionStateManager.getSessionProfileSnapshot(sessionId) : undefined
   const effectiveProfileSnapshot = storedSnapshot ?? profileSnapshot
 
-  // Create session state for this agent run with profile snapshot for isolation
-  // Note: createSession is a no-op if the session already exists, so this is safe for resumed sessions
-  agentSessionStateManager.createSession(currentSessionId, effectiveProfileSnapshot)
+  // Ensure this run always has a concrete runId.
+  // - If caller already started the run (and passed runId), keep that ID.
+  // - Otherwise start a new run here for flows that call this function directly.
+  let effectiveRunId: number
+  if (typeof runId === "number") {
+    agentSessionStateManager.createSession(currentSessionId, effectiveProfileSnapshot)
+    effectiveRunId = runId
+  } else {
+    effectiveRunId = agentSessionStateManager.startSessionRun(currentSessionId, effectiveProfileSnapshot)
+  }
 
   // Track step summaries for dual-model mode
   const stepSummaries: import("../shared/types").AgentStepSummary[] = []
