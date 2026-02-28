@@ -232,35 +232,41 @@ async function processWithAgentMode(
 
     // Start tracking this agent session (or reuse existing one)
     const sessionId = existingSessionId || agentSessionTracker.startSession(conversationId, conversationTitle, startSnoozed)
+    const runId = agentSessionStateManager.startSessionRun(sessionId)
 
-    // Process with ACP agent
-    const result = await processTranscriptWithACPAgent(text, {
-      agentName: config.mainAgentName,
-      conversationId: conversationId || sessionId,
-      sessionId,
-    })
+    try {
+      // Process with ACP agent
+      const result = await processTranscriptWithACPAgent(text, {
+        agentName: config.mainAgentName,
+        conversationId: conversationId || sessionId,
+        sessionId,
+        runId,
+      })
 
-    // Save assistant response to conversation history if we have a conversation ID
-    // Note: User message is already added by createMcpTextInput or processQueuedMessages
-    if (conversationId && result.response) {
-      await conversationService.addMessageToConversation(
-        conversationId,
-        result.response,
-        "assistant"
-      )
+      // Save assistant response to conversation history if we have a conversation ID
+      // Note: User message is already added by createMcpTextInput or processQueuedMessages
+      if (conversationId && result.response) {
+        await conversationService.addMessageToConversation(
+          conversationId,
+          result.response,
+          "assistant"
+        )
+      }
+
+      // Mark session as completed
+      if (result.success) {
+        logLLM(`[processWithAgentMode] ACP mode completed successfully for session ${sessionId}, conversation ${conversationId}`)
+        agentSessionTracker.completeSession(sessionId, "ACP agent completed successfully")
+      } else {
+        logLLM(`[processWithAgentMode] ACP mode failed for session ${sessionId}: ${result.error}`)
+        agentSessionTracker.errorSession(sessionId, result.error || "Unknown error")
+      }
+
+      logLLM(`[processWithAgentMode] ACP mode returning, queue processing should trigger in .finally()`)
+      return result.response || result.error || "No response from agent"
+    } finally {
+      agentSessionStateManager.cleanupSession(sessionId)
     }
-
-    // Mark session as completed
-    if (result.success) {
-      logLLM(`[processWithAgentMode] ACP mode completed successfully for session ${sessionId}, conversation ${conversationId}`)
-      agentSessionTracker.completeSession(sessionId, "ACP agent completed successfully")
-    } else {
-      logLLM(`[processWithAgentMode] ACP mode failed for session ${sessionId}: ${result.error}`)
-      agentSessionTracker.errorSession(sessionId, result.error || "Unknown error")
-    }
-
-    logLLM(`[processWithAgentMode] ACP mode returning, queue processing should trigger in .finally()`)
-    return result.response || result.error || "No response from agent"
   }
 
   // NOTE: Don't clear all agent progress here - we support multiple concurrent sessions
@@ -589,15 +595,25 @@ async function processQueuedMessages(conversationId: string): Promise<void> {
         logLLM(`[processQueuedMessages] Panel visible: ${isPanelVisible}, startSnoozed: ${shouldStartSnoozed}`)
 
         // Prefer the exact session captured at enqueue time for strict same-session semantics.
-        // Fall back to conversation lookup for backward compatibility with older queued items.
+        // If revive fails, fall back to conversation lookup for backward compatibility and continuity.
         let existingSessionId: string | undefined
-        const foundSessionId = queuedMessage.sessionId || agentSessionTracker.findSessionByConversationId(conversationId)
-        if (foundSessionId) {
+        const fallbackSessionId = agentSessionTracker.findSessionByConversationId(conversationId)
+        const candidateSessionIds = [queuedMessage.sessionId, fallbackSessionId].filter(
+          (sessionId, index, list): sessionId is string =>
+            typeof sessionId === "string" && sessionId.length > 0 && list.indexOf(sessionId) === index,
+        )
+
+        for (const candidateSessionId of candidateSessionIds) {
           // Only start snoozed if panel is not visible
-          const revived = agentSessionTracker.reviveSession(foundSessionId, shouldStartSnoozed)
+          const revived = agentSessionTracker.reviveSession(candidateSessionId, shouldStartSnoozed)
           if (revived) {
-            existingSessionId = foundSessionId
+            existingSessionId = candidateSessionId
             logLLM(`[processQueuedMessages] Revived session ${existingSessionId} for conversation ${conversationId}, snoozed: ${shouldStartSnoozed}`)
+            break
+          }
+
+          if (candidateSessionId === queuedMessage.sessionId) {
+            logLLM(`[processQueuedMessages] Preferred queued session ${candidateSessionId} could not be revived, trying fallback lookup`)
           }
         }
 
