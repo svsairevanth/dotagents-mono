@@ -2535,9 +2535,13 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
       }
 
       const updated = await memoryService.getMemory(params.id)
+      if (!updated) {
+        return reply.code(500).send({ error: "Failed to load updated memory" })
+      }
+
       return reply.send({
         success: true,
-        memory: updated ? {
+        memory: {
           id: updated.id,
           title: updated.title,
           content: updated.content,
@@ -2545,7 +2549,7 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
           importance: updated.importance,
           createdAt: updated.createdAt,
           updatedAt: updated.updatedAt,
-        } : null,
+        },
       })
     } catch (error: any) {
       diagnosticsService.logError("remote-server", "Failed to update memory", error)
@@ -2580,6 +2584,7 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
         return reply.code(400).send({ error: "profileId must be a string when provided" })
       }
       const profileId = typeof body.profileId === "string" ? body.profileId.trim() : undefined
+      const enabled = typeof body.enabled === "boolean" ? body.enabled : true
 
       const id = `loop_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
 
@@ -2588,7 +2593,7 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
         name,
         prompt,
         intervalMinutes,
-        enabled: body.enabled ?? true,
+        enabled,
         profileId: profileId || undefined,
       }
 
@@ -2651,15 +2656,20 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
       }
 
       const existing = loops[loopIndex]
-      const shouldUpdateIntervalMinutes =
+      const name = typeof body.name === "string" ? body.name.trim() : undefined
+      const prompt = typeof body.prompt === "string" ? body.prompt.trim() : undefined
+      const intervalMinutes =
         typeof body.intervalMinutes === "number" && body.intervalMinutes >= 1
+          ? body.intervalMinutes
+          : undefined
+      const enabled = typeof body.enabled === "boolean" ? body.enabled : undefined
       const profileId = typeof body.profileId === "string" ? body.profileId.trim() : undefined
       const updated = {
         ...existing,
-        ...(body.name !== undefined && { name: body.name.trim() }),
-        ...(body.prompt !== undefined && { prompt: body.prompt.trim() }),
-        ...(shouldUpdateIntervalMinutes && { intervalMinutes: body.intervalMinutes }),
-        ...(body.enabled !== undefined && { enabled: body.enabled }),
+        ...(name !== undefined && { name }),
+        ...(prompt !== undefined && { prompt }),
+        ...(intervalMinutes !== undefined && { intervalMinutes }),
+        ...(enabled !== undefined && { enabled }),
         ...(body.profileId !== undefined && { profileId: profileId || undefined }),
       }
 
