@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/aj47/dotagents-mono/releases/latest"><strong>Download</strong></a> &middot;
   <a href="https://discord.gg/cK9WeQ7jPq"><strong>Discord</strong></a> &middot;
-  <a href="https://dotagents.ai"><strong>Website</strong></a>
+  <a href="https://dotagents.app"><strong>Website</strong></a>
 </p>
 
 <p align="center">
@@ -21,16 +21,16 @@
 
 ---
 
-DotAgents is the desktop app that gives you a team of AI specialists — each with memory, skills, and tools — controlled by your voice. Built on the `.agents` open standard, so your skills work across Claude Code, Cursor, Codex, and every tool adopting the protocol.
+DotAgents gives you a team of AI specialists — each with memory, skills, and tools — controlled by your voice. Built on the `.agents` open standard, so your skills work across Claude Code, Cursor, Codex, and every tool adopting the protocol.
 
 ## Preview
 
 v1.4
-<img width="1341" height="1174" alt="DotAgents Desktop v1.4" src="https://github.com/user-attachments/assets/4ea2fa66-9a22-4d56-b388-457dfc99fed6" />
+<img width="1341" height="1174" alt="DotAgents v1.4" src="https://github.com/user-attachments/assets/4ea2fa66-9a22-4d56-b388-457dfc99fed6" />
 
 [Watch the launch video on YouTube](https://www.youtube.com/watch?v=A4oKYCaeaaw)
 
-<img width="2050" height="1564" alt="DotAgents Desktop" src="https://github.com/user-attachments/assets/a1e55c53-838f-414f-92e7-d752f74e7107" />
+<img width="2050" height="1564" alt="DotAgents" src="https://github.com/user-attachments/assets/a1e55c53-838f-414f-92e7-d752f74e7107" />
 
 https://github.com/user-attachments/assets/0c181c70-d1f1-4c5d-a6f5-a73147e75182
 
@@ -38,7 +38,7 @@ https://github.com/user-attachments/assets/0c181c70-d1f1-4c5d-a6f5-a73147e75182
 
 DotAgents is three things:
 
-**1. A Desktop App** — A voice-first AI agent interface. Hold to speak, release to act. Your agents listen, think, and execute tools on your behalf.
+**1. An App** — A voice-first AI agent interface. Hold to speak, release to act. Your agents listen, think, and execute tools on your behalf.
 
 **2. The `.agents` Protocol** — An open standard for agent skills, memories, and commands. Define your skills once in `.agents/`, and they work across Claude Code, Cursor, OpenCode, and any tool that adopts the protocol.
 
@@ -67,7 +67,7 @@ The `.agents/` directory is an open standard for agent configuration that works 
 └── config.yaml      # Agent profiles and settings
 ```
 
-Skills you define for DotAgents Desktop work in Claude Code, Cursor, Codex, and any tool adopting the protocol. Protocol first, product second.
+Skills you define for DotAgents work in Claude Code, Cursor, Codex, and any tool adopting the protocol. Protocol first, product second.
 
 ## Quick Start
 
@@ -152,7 +152,7 @@ See **[DEVELOPMENT.md](DEVELOPMENT.md)** for full setup, build commands, trouble
 ```
 dotagents-mono/
 ├── apps/
-│   ├── desktop/     # Electron desktop app (voice, agents, MCP)
+│   ├── desktop/     # Electron app (voice, agents, MCP)
 │   └── mobile/      # React Native mobile app
 ├── packages/
 │   └── shared/      # Shared utilities, types, and constants
@@ -163,7 +163,7 @@ dotagents-mono/
 
 We welcome contributions. Fork the repo, create a feature branch, and open a Pull Request.
 
-**[Discord](https://discord.gg/cK9WeQ7jPq)** | **[Website](https://dotagents.ai)**
+**[Discord](https://discord.gg/cK9WeQ7jPq)** | **[Website](https://dotagents.app)**
 
 ## License
 
