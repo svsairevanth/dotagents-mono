@@ -448,15 +448,25 @@ app.whenReady().then(async () => {
   })
 
   app.on("activate", function () {
+    const mainWin = WINDOWS.get("main")
+    const cfg = configStore.get()
+
+    if (process.platform === "darwin" && !cfg.hideDockIcon) {
+      // Ensure Cmd+Tab presence and a visible dock icon when app is activated.
+      // This recovers from rare activation-policy drift to "accessory".
+      app.setActivationPolicy("regular")
+      if (!app.dock?.isVisible?.()) {
+        app.dock?.show()
+      }
+    }
+
     if (accessibilityGranted) {
-      const mainWin = WINDOWS.get("main")
       if (mainWin) {
         // Window exists (may be hidden on macOS close-to-hide) — just show it
         mainWin.show()
       } else {
         // Check if onboarding has been completed
         // Skip for existing users who have already configured models (pre-onboarding installs)
-        const cfg = configStore.get()
         const hasCustomPresets = cfg.modelPresets && cfg.modelPresets.length > 0
         const hasSelectedPreset = cfg.currentModelPresetId !== undefined
         const needsOnboarding = !cfg.onboardingCompleted && !hasCustomPresets && !hasSelectedPreset
