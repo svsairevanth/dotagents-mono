@@ -582,7 +582,10 @@ export default function SettingsScreen({ navigation }: any) {
     (title: string, message: string, onConfirm: () => Promise<void> | void) => {
       if (Platform.OS === 'web') {
         const confirmFn = (globalThis as { confirm?: (text?: string) => boolean }).confirm;
-        if (!confirmFn || confirmFn(`${title}\n\n${message}`)) {
+        if (!confirmFn) {
+          return;
+        }
+        if (confirmFn(`${title}\n\n${message}`)) {
           void onConfirm();
         }
         return;

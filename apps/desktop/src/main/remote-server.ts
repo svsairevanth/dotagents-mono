@@ -2454,7 +2454,22 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
         return reply.code(500).send({ error: "Failed to save memory" })
       }
 
-      return reply.send({ memory })
+      const savedMemory = await memoryService.getMemory(id)
+      if (!savedMemory) {
+        return reply.code(500).send({ error: "Failed to load saved memory" })
+      }
+
+      return reply.send({
+        memory: {
+          id: savedMemory.id,
+          title: savedMemory.title,
+          content: savedMemory.content,
+          tags: savedMemory.tags,
+          importance: savedMemory.importance,
+          createdAt: savedMemory.createdAt,
+          updatedAt: savedMemory.updatedAt,
+        },
+      })
     } catch (error: any) {
       diagnosticsService.logError("remote-server", "Failed to create memory", error)
       return reply.code(500).send({ error: error?.message || "Failed to create memory" })
@@ -2469,7 +2484,7 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
         title?: string
         content?: string
         importance?: string
-        tags?: string[]
+        tags?: unknown
         notes?: string
       }
 
@@ -2481,7 +2496,9 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
       const updates: Record<string, unknown> = {}
       if (body.title !== undefined) updates.title = body.title
       if (body.content !== undefined) updates.content = body.content
-      if (body.tags !== undefined) updates.tags = body.tags
+      if (Array.isArray(body.tags) && body.tags.every((tag): tag is string => typeof tag === "string")) {
+        updates.tags = body.tags
+      }
       if (body.notes !== undefined) updates.userNotes = body.notes
       if (body.importance !== undefined) {
         const validImportance = ["low", "medium", "high", "critical"]
@@ -2520,7 +2537,7 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
       const body = req.body as {
         name?: string
         prompt?: string
-        intervalMinutes?: number
+        intervalMinutes?: unknown
         enabled?: boolean
         profileId?: string
       }
@@ -2587,11 +2604,13 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
       }
 
       const existing = loops[loopIndex]
+      const shouldUpdateIntervalMinutes =
+        typeof body.intervalMinutes === "number" && body.intervalMinutes >= 1
       const updated = {
         ...existing,
         ...(body.name !== undefined && { name: body.name }),
         ...(body.prompt !== undefined && { prompt: body.prompt }),
-        ...(body.intervalMinutes !== undefined && body.intervalMinutes >= 1 && { intervalMinutes: body.intervalMinutes }),
+        ...(shouldUpdateIntervalMinutes && { intervalMinutes: body.intervalMinutes }),
         ...(body.enabled !== undefined && { enabled: body.enabled }),
         ...(body.profileId !== undefined && { profileId: body.profileId || undefined }),
       }
