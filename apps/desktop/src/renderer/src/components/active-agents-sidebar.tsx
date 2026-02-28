@@ -345,18 +345,9 @@ export function ActiveAgentsSidebar({
 
       // UI updates after successful API call - don't rollback if these fail
       try {
-        // Ensure the panel's own ConversationContext focuses the same session
+        // Keep panel context synced to the restored session, but do not force-open it.
         await tipcClient.focusAgentSession({ sessionId })
-
-        // Resize to agent mode BEFORE showing the panel to avoid flashing to small size
-        await tipcClient.setPanelMode({ mode: "agent" })
-
-        // Show the panel (it's already sized correctly)
-        await tipcClient.showPanelWindow({})
-
-        logUI(
-          "[ActiveAgentsSidebar] Session unsnoozed, focused, panel shown and resized",
-        )
+        logUI("[ActiveAgentsSidebar] Session unsnoozed and focused")
       } catch (error) {
         // Log UI errors but don't rollback - the backend state is already updated
         console.error("Failed to update UI after unsnooze:", error)
@@ -619,7 +610,7 @@ export function ActiveAgentsSidebar({
                   )}
                   title={
                     isSnoozed
-                      ? "Restore - show progress UI"
+                      ? "Restore"
                       : "Minimize - run in background"
                   }
                 >

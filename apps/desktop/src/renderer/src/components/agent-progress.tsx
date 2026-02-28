@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react"
 import { cn } from "@renderer/lib/utils"
 import { AgentProgressUpdate, ACPDelegationProgress, ACPSubAgentMessage } from "../../../shared/types"
 import { INTERNAL_COMPLETION_NUDGE_TEXT, RESPOND_TO_USER_TOOL, MARK_WORK_COMPLETE_TOOL } from "../../../shared/builtin-tool-names"
-import { ChevronDown, ChevronUp, ChevronRight, X, AlertTriangle, Minimize2, Shield, Check, XCircle, Loader2, Clock, Copy, CheckCheck, GripHorizontal, Activity, Moon, Maximize2, RefreshCw, ExternalLink, Bot, OctagonX, MessageSquare, Brain, Volume2 } from "lucide-react"
+import { ChevronDown, ChevronUp, ChevronRight, X, AlertTriangle, Minimize2, Shield, Check, XCircle, Loader2, Clock, Copy, CheckCheck, GripHorizontal, Activity, Moon, Maximize2, RefreshCw, Bot, OctagonX, MessageSquare, Brain, Volume2 } from "lucide-react"
 import { MarkdownRenderer } from "@renderer/components/markdown-renderer"
 import { Button } from "./ui/button"
 import { Badge } from "./ui/badge"
@@ -2772,11 +2772,6 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
   if (variant === "tile") {
     const hasPendingApproval = !!progress.pendingToolApproval
     const isSnoozed = progress.isSnoozed
-    // Check if this is a real session (not a synthetic pending tile)
-    // Synthetic pending tiles have sessionId like "pending-..." and calling focusAgentSession
-    // with these IDs would fail. Only show panel-related buttons for real sessions.
-    const isRealSession = progress?.sessionId && !progress.sessionId.startsWith("pending-")
-
     return (
       <div
         onClick={onFocus}
@@ -2826,22 +2821,6 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
                 <Minimize2 className="h-3 w-3" />
               </Button>
             )}
-            {/* Show in panel button - for active sessions that are not snoozed */}
-            {!isComplete && !isSnoozed && isRealSession && (
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={async (e) => {
-                e.stopPropagation()
-                if (!progress?.sessionId) return
-                try {
-                  await tipcClient.focusAgentSession({ sessionId: progress.sessionId })
-                  await tipcClient.setPanelMode({ mode: "agent" })
-                  await tipcClient.showPanelWindow({})
-                } catch (error) {
-                  console.error("Failed to show panel window:", error)
-                }
-              }} title="Show in floating panel">
-                <ExternalLink className="h-3 w-3" />
-              </Button>
-            )}
             {isSnoozed && (
               <Button variant="ghost" size="icon" className="h-6 w-6" onClick={async (e) => {
                 e.stopPropagation()
@@ -2865,32 +2844,14 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
 
                 // UI updates after successful API call - don't rollback if these fail
                 try {
+                  // Keep panel state in sync for the restored session without forcing panel open.
                   await tipcClient.focusAgentSession({ sessionId: progress.sessionId })
-                  // Show the floating panel with this session
-                  await tipcClient.setPanelMode({ mode: "agent" })
-                  await tipcClient.showPanelWindow({})
                 } catch (error) {
                   // Log UI errors but don't rollback - the backend state is already updated
                   console.error("Failed to update UI after unsnooze:", error)
                 }
-              }} title="Maximize - show in floating panel">
+              }} title="Restore session">
                 <Maximize2 className="h-3 w-3" />
-              </Button>
-            )}
-            {/* Show in panel button for completed sessions (not for synthetic pending tiles) */}
-            {isComplete && isRealSession && (
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={async (e) => {
-                e.stopPropagation()
-                if (!progress?.sessionId) return
-                try {
-                  await tipcClient.focusAgentSession({ sessionId: progress.sessionId })
-                  await tipcClient.setPanelMode({ mode: "agent" })
-                  await tipcClient.showPanelWindow({})
-                } catch (error) {
-                  console.error("Failed to show panel window:", error)
-                }
-              }} title="Show in floating panel">
-                <ExternalLink className="h-3 w-3" />
               </Button>
             )}
             {/* Combined close button: stops agent if running, dismisses if complete */}
