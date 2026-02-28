@@ -213,6 +213,8 @@ class ACPService extends EventEmitter {
   private sessionOutputs: Map<string, ACPSessionOutput> = new Map()
   // Counter for generating unique fallback session IDs when sessionId is not provided
   private fallbackSessionCounter = 0
+  // Counter for generating unique fallback tool call IDs when toolCallId is missing
+  private fallbackToolCallCounter = 0
 
   constructor() {
     super()
@@ -258,17 +260,40 @@ class ACPService extends EventEmitter {
     if (envWorkspaceDir) {
       const resolvedEnvWorkspaceDir = this.resolvePathInput(envWorkspaceDir, currentDir)
       if (existsSync(resolvedEnvWorkspaceDir)) {
-        return resolvedEnvWorkspaceDir
-      }
+        try {
+          const envWorkspaceStats = statSync(resolvedEnvWorkspaceDir)
+          if (envWorkspaceStats.isDirectory()) {
+            return resolvedEnvWorkspaceDir
+          }
 
-      logApp(
-        `[ACP Service] DOTAGENTS_WORKSPACE_DIR points to missing path: ${resolvedEnvWorkspaceDir}. ` +
-        "Falling back to git root/process cwd."
-      )
+          logApp(
+            `[ACP Service] DOTAGENTS_WORKSPACE_DIR must point to a directory, ` +
+            `but resolved to: ${resolvedEnvWorkspaceDir}. Falling back to git root/process cwd.`
+          )
+        } catch (error) {
+          logApp(
+            `[ACP Service] Failed to inspect DOTAGENTS_WORKSPACE_DIR (${resolvedEnvWorkspaceDir}): ` +
+            `${error instanceof Error ? error.message : String(error)}. Falling back to git root/process cwd.`
+          )
+        }
+      } else {
+        logApp(
+          `[ACP Service] DOTAGENTS_WORKSPACE_DIR points to missing path: ${resolvedEnvWorkspaceDir}. ` +
+          "Falling back to git root/process cwd."
+        )
+      }
     }
 
     const gitRoot = this.findGitRoot(currentDir)
     return gitRoot || currentDir
+  }
+
+  /**
+   * Generate a deterministic unique fallback ID for tool call updates when ACP payloads omit toolCallId.
+   */
+  private generateFallbackToolCallId(): string {
+    this.fallbackToolCallCounter += 1
+    return `tool-call-fallback-${this.fallbackToolCallCounter}`
   }
 
   /**
@@ -482,7 +507,7 @@ class ACPService extends EventEmitter {
 
       const toolCallId = typeof rawToolCallId === "string" && rawToolCallId.trim().length > 0
         ? rawToolCallId
-        : `tool-call-${Date.now()}`
+        : this.generateFallbackToolCallId()
 
       const title = typeof rawTitle === "string" && rawTitle.trim().length > 0
         ? rawTitle
@@ -880,23 +905,42 @@ class ACPService extends EventEmitter {
     }
     instance.pendingRequests.clear()
 
+    const proc = instance.process
+
     // Kill the process
     try {
-      instance.process.kill("SIGTERM")
-
-      // Wait for graceful shutdown
       await new Promise<void>((resolve) => {
-        const timeout = setTimeout(() => {
-          if (instance.process && !instance.process.killed) {
-            instance.process.kill("SIGKILL")
-          }
+        if (proc.exitCode !== null || proc.signalCode !== null) {
           resolve()
-        }, 5000)
+          return
+        }
 
-        instance.process?.on("exit", () => {
-          clearTimeout(timeout)
+        let settled = false
+        let timeout: ReturnType<typeof setTimeout> | undefined
+        const resolveOnce = () => {
+          if (settled) return
+          settled = true
+          if (timeout) clearTimeout(timeout)
           resolve()
+        }
+
+        proc.on("exit", () => {
+          resolveOnce()
         })
+
+        const didSendSigterm = proc.kill("SIGTERM")
+        if (!didSendSigterm && (proc.exitCode !== null || proc.signalCode !== null)) {
+          resolveOnce()
+          return
+        }
+
+        // Wait for graceful shutdown
+        timeout = setTimeout(() => {
+          if (proc.exitCode === null && proc.signalCode === null) {
+            proc.kill("SIGKILL")
+          }
+          resolveOnce()
+        }, 5000)
       })
     } catch {
       // Silently ignore errors during shutdown

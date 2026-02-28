@@ -317,6 +317,29 @@ describe("ACP Service", () => {
 
       rmSync(workspaceDir, { recursive: true, force: true })
     })
+
+    it("should ignore DOTAGENTS_WORKSPACE_DIR when it points to a file", async () => {
+      const workspaceDir = mkdtempSync(join(tmpdir(), "acp-workspace-"))
+      const invalidWorkspacePath = join(workspaceDir, "workspace-file.txt")
+      writeFileSync(invalidWorkspacePath, "not-a-directory")
+
+      process.env.DOTAGENTS_WORKSPACE_DIR = invalidWorkspacePath
+
+      const { acpService } = await import("./acp-service")
+      await acpService.spawnAgent("test-agent")
+
+      expect(mockSpawn).toHaveBeenCalledWith(
+        "test-command",
+        ["--test"],
+        expect.objectContaining({ cwd: expect.any(String) })
+      )
+
+      const spawnOptions = mockSpawn.mock.calls[0]?.[2] as { cwd?: string } | undefined
+      expect(spawnOptions?.cwd).toBeTruthy()
+      expect(spawnOptions?.cwd).not.toBe(invalidWorkspacePath)
+
+      rmSync(workspaceDir, { recursive: true, force: true })
+    })
   })
 
   describe("getAgentStatus", () => {
@@ -413,6 +436,55 @@ describe("ACP Service", () => {
         title: "sub-agent-augustus: Build a plan",
         status: "running",
       }))
+    })
+
+    it("generates unique fallback toolCallIds when ACP payload omits toolCallId", async () => {
+      const { acpService } = await import("./acp-service")
+
+      const firstUpdatePromise = new Promise<{
+        sessionId: string
+        toolCall?: { toolCallId: string; title: string; status?: string }
+      }>((resolve) => {
+        acpService.once("toolCallUpdate", (event) => resolve(event))
+      })
+
+      acpService.emit("notification", {
+        agentName: "test-agent",
+        method: "session/update",
+        params: {
+          sessionId: "session-tool-call-fallback",
+          update: {
+            sessionUpdate: "tool_call",
+            title: "Tool call one",
+          },
+        },
+      })
+
+      const secondUpdatePromise = new Promise<{
+        sessionId: string
+        toolCall?: { toolCallId: string; title: string; status?: string }
+      }>((resolve) => {
+        acpService.once("toolCallUpdate", (event) => resolve(event))
+      })
+
+      acpService.emit("notification", {
+        agentName: "test-agent",
+        method: "session/update",
+        params: {
+          sessionId: "session-tool-call-fallback",
+          update: {
+            sessionUpdate: "tool_call",
+            title: "Tool call two",
+          },
+        },
+      })
+
+      const firstEvent = await firstUpdatePromise
+      const secondEvent = await secondUpdatePromise
+
+      expect(firstEvent.toolCall?.toolCallId).toMatch(/^tool-call-fallback-\d+$/)
+      expect(secondEvent.toolCall?.toolCallId).toMatch(/^tool-call-fallback-\d+$/)
+      expect(firstEvent.toolCall?.toolCallId).not.toBe(secondEvent.toolCall?.toolCallId)
     })
   })
 

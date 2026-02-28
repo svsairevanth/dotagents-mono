@@ -649,9 +649,19 @@ export async function handleDelegateToAgent(
   },
   parentSessionId?: string
 ): Promise<object> {
+  const normalizedAgentName = typeof args.agentName === 'string'
+    ? args.agentName.trim()
+    : '';
   const normalizedWorkingDirectory = args.workingDirectory?.trim() || undefined;
   const prepareOnly = args.prepareOnly === true;
   const hasTask = typeof args.task === 'string' && args.task.trim().length > 0;
+
+  if (!normalizedAgentName) {
+    return {
+      success: false,
+      error: 'Missing required parameter: agentName',
+    };
+  }
 
   if (!prepareOnly && !hasTask) {
     return {
@@ -662,9 +672,10 @@ export async function handleDelegateToAgent(
 
   const normalizedArgs = {
     ...args,
+    agentName: normalizedAgentName,
     task: hasTask
       ? args.task!.trim()
-      : `Prepare agent "${args.agentName}" for future delegated work.`,
+      : `Prepare agent "${normalizedAgentName}" for future delegated work.`,
     workingDirectory: normalizedWorkingDirectory,
     prepareOnly,
   };
