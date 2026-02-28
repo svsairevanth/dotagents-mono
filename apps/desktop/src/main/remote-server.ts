@@ -2421,30 +2421,35 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
   fastify.post("/v1/memories", async (req, reply) => {
     try {
       const body = req.body as {
-        title?: string
-        content?: string
-        importance?: string
-        tags?: string[]
+        title?: unknown
+        content?: unknown
+        importance?: unknown
+        tags?: unknown
       }
 
-      if (!body.title || !body.content) {
-        return reply.code(400).send({ error: "title and content are required" })
+      const title = typeof body.title === "string" ? body.title.trim() : ""
+      const content = typeof body.content === "string" ? body.content.trim() : ""
+      if (!title || !content) {
+        return reply.code(400).send({ error: "title and content are required and must be non-empty strings" })
       }
 
       const validImportance = ["low", "medium", "high", "critical"]
-      const importance = validImportance.includes(body.importance ?? "")
+      const importance = typeof body.importance === "string" && validImportance.includes(body.importance)
         ? (body.importance as "low" | "medium" | "high" | "critical")
         : "medium"
+      const tags = Array.isArray(body.tags)
+        ? body.tags.filter((tag): tag is string => typeof tag === "string")
+        : []
 
       const now = Date.now()
       const id = `memory_${now}_${Math.random().toString(36).slice(2, 11)}`
 
       const memory = {
         id,
-        title: body.title,
-        content: body.content,
+        title,
+        content,
         importance,
-        tags: Array.isArray(body.tags) ? body.tags : [],
+        tags,
         createdAt: now,
         updatedAt: now,
       }
@@ -2481,11 +2486,11 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
     try {
       const params = req.params as { id: string }
       const body = req.body as {
-        title?: string
-        content?: string
-        importance?: string
+        title?: unknown
+        content?: unknown
+        importance?: unknown
         tags?: unknown
-        notes?: string
+        notes?: unknown
       }
 
       const existing = await memoryService.getMemory(params.id)
@@ -2494,16 +2499,33 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
       }
 
       const updates: Record<string, unknown> = {}
-      if (body.title !== undefined) updates.title = body.title
-      if (body.content !== undefined) updates.content = body.content
+      if (body.title !== undefined) {
+        if (typeof body.title !== "string" || body.title.trim() === "") {
+          return reply.code(400).send({ error: "title must be a non-empty string when provided" })
+        }
+        updates.title = body.title.trim()
+      }
+      if (body.content !== undefined) {
+        if (typeof body.content !== "string" || body.content.trim() === "") {
+          return reply.code(400).send({ error: "content must be a non-empty string when provided" })
+        }
+        updates.content = body.content.trim()
+      }
       if (Array.isArray(body.tags) && body.tags.every((tag): tag is string => typeof tag === "string")) {
         updates.tags = body.tags
       }
-      if (body.notes !== undefined) updates.userNotes = body.notes
+      if (body.notes !== undefined) {
+        if (typeof body.notes !== "string") {
+          return reply.code(400).send({ error: "notes must be a string when provided" })
+        }
+        updates.userNotes = body.notes
+      }
       if (body.importance !== undefined) {
         const validImportance = ["low", "medium", "high", "critical"]
-        if (validImportance.includes(body.importance)) {
+        if (typeof body.importance === "string" && validImportance.includes(body.importance)) {
           updates.importance = body.importance
+        } else {
+          return reply.code(400).send({ error: `importance must be one of: ${validImportance.join(", ")}` })
         }
       }
 
@@ -2535,30 +2557,39 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
   fastify.post("/v1/loops", async (req, reply) => {
     try {
       const body = req.body as {
-        name?: string
-        prompt?: string
+        name?: unknown
+        prompt?: unknown
         intervalMinutes?: unknown
-        enabled?: boolean
-        profileId?: string
+        enabled?: unknown
+        profileId?: unknown
       }
 
-      if (!body.name || !body.prompt) {
-        return reply.code(400).send({ error: "name and prompt are required" })
+      const name = typeof body.name === "string" ? body.name.trim() : ""
+      const prompt = typeof body.prompt === "string" ? body.prompt.trim() : ""
+      if (!name || !prompt) {
+        return reply.code(400).send({ error: "name and prompt are required and must be non-empty strings" })
       }
 
       const intervalMinutes = typeof body.intervalMinutes === "number" && body.intervalMinutes >= 1
         ? body.intervalMinutes
         : 60
+      if (body.enabled !== undefined && typeof body.enabled !== "boolean") {
+        return reply.code(400).send({ error: "enabled must be a boolean when provided" })
+      }
+      if (body.profileId !== undefined && body.profileId !== null && typeof body.profileId !== "string") {
+        return reply.code(400).send({ error: "profileId must be a string when provided" })
+      }
+      const profileId = typeof body.profileId === "string" ? body.profileId.trim() : undefined
 
       const id = `loop_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
 
       const newLoop = {
         id,
-        name: body.name,
-        prompt: body.prompt,
+        name,
+        prompt,
         intervalMinutes,
         enabled: body.enabled ?? true,
-        profileId: body.profileId || undefined,
+        profileId: profileId || undefined,
       }
 
       const cfg = configStore.get()
@@ -2588,11 +2619,11 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
     try {
       const params = req.params as { id: string }
       const body = req.body as {
-        name?: string
-        prompt?: string
-        intervalMinutes?: number
-        enabled?: boolean
-        profileId?: string
+        name?: unknown
+        prompt?: unknown
+        intervalMinutes?: unknown
+        enabled?: unknown
+        profileId?: unknown
       }
 
       const cfg = configStore.get()
@@ -2603,16 +2634,33 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
         return reply.code(404).send({ error: "Repeat task not found" })
       }
 
+      if (body.name !== undefined && (typeof body.name !== "string" || body.name.trim() === "")) {
+        return reply.code(400).send({ error: "name must be a non-empty string when provided" })
+      }
+      if (body.prompt !== undefined && (typeof body.prompt !== "string" || body.prompt.trim() === "")) {
+        return reply.code(400).send({ error: "prompt must be a non-empty string when provided" })
+      }
+      if (body.intervalMinutes !== undefined && (typeof body.intervalMinutes !== "number" || body.intervalMinutes < 1)) {
+        return reply.code(400).send({ error: "intervalMinutes must be a number >= 1 when provided" })
+      }
+      if (body.enabled !== undefined && typeof body.enabled !== "boolean") {
+        return reply.code(400).send({ error: "enabled must be a boolean when provided" })
+      }
+      if (body.profileId !== undefined && body.profileId !== null && typeof body.profileId !== "string") {
+        return reply.code(400).send({ error: "profileId must be a string when provided" })
+      }
+
       const existing = loops[loopIndex]
       const shouldUpdateIntervalMinutes =
         typeof body.intervalMinutes === "number" && body.intervalMinutes >= 1
+      const profileId = typeof body.profileId === "string" ? body.profileId.trim() : undefined
       const updated = {
         ...existing,
-        ...(body.name !== undefined && { name: body.name }),
-        ...(body.prompt !== undefined && { prompt: body.prompt }),
+        ...(body.name !== undefined && { name: body.name.trim() }),
+        ...(body.prompt !== undefined && { prompt: body.prompt.trim() }),
         ...(shouldUpdateIntervalMinutes && { intervalMinutes: body.intervalMinutes }),
         ...(body.enabled !== undefined && { enabled: body.enabled }),
-        ...(body.profileId !== undefined && { profileId: body.profileId || undefined }),
+        ...(body.profileId !== undefined && { profileId: profileId || undefined }),
       }
 
       const updatedLoops = [...loops]
