@@ -122,6 +122,47 @@ function restoreToolName(sanitizedName: string, toolNameMap?: Map<string, string
 }
 
 /**
+ * Normalize tool JSON schema for OpenAI-compatible function calling.
+ *
+ * Some providers reject top-level composition keywords (`anyOf`/`oneOf`/`allOf`/`not`/`enum`)
+ * even when the schema is otherwise valid JSON Schema. We keep runtime validation in the
+ * tool implementation and send a provider-safe shape here to avoid hard 400 failures.
+ */
+function normalizeToolInputSchema(inputSchema: unknown): Record<string, unknown> {
+  const fallback: Record<string, unknown> = { type: "object", properties: {}, required: [] }
+
+  if (!inputSchema || typeof inputSchema !== "object" || Array.isArray(inputSchema)) {
+    return fallback
+  }
+
+  const schema = { ...(inputSchema as Record<string, unknown>) }
+  const schemaType = schema.type
+
+  // OpenAI function tools expect top-level object schemas.
+  if (schemaType !== undefined && schemaType !== "object") {
+    return fallback
+  }
+  schema.type = "object"
+
+  if (!schema.properties || typeof schema.properties !== "object" || Array.isArray(schema.properties)) {
+    schema.properties = {}
+  }
+
+  if (!Array.isArray(schema.required)) {
+    schema.required = []
+  }
+
+  // Remove top-level combinators that OpenAI-compatible gateways may reject.
+  delete schema.anyOf
+  delete schema.oneOf
+  delete schema.allOf
+  delete schema.not
+  delete schema.enum
+
+  return schema
+}
+
+/**
  * Result of converting MCP tools to AI SDK format
  */
 interface ConvertedTools {
@@ -167,7 +208,7 @@ function convertMCPToolsToAISDKTools(mcpTools: MCPTool[]): ConvertedTools {
     // Create AI SDK tool with JSON schema (not Zod)
     tools[sanitizedName] = aiTool({
       description: mcpTool.description || `Tool: ${mcpTool.name}`,
-      inputSchema: jsonSchema(mcpTool.inputSchema || { type: "object", properties: {} }),
+      inputSchema: jsonSchema(normalizeToolInputSchema(mcpTool.inputSchema)),
       // No execute function - we handle execution separately via MCP
     })
   }
