@@ -99,6 +99,58 @@ type DisplayItem =
       pastResponses?: string[]
     } }
 
+function extractRespondToUserContentFromArgs(args: unknown): string | null {
+  if (!args || typeof args !== "object") return null
+
+  const parsedArgs = args as Record<string, unknown>
+  const text = typeof parsedArgs.text === "string" ? parsedArgs.text.trim() : ""
+  const images = Array.isArray(parsedArgs.images)
+    ? parsedArgs.images
+    : []
+
+  const imageMarkdown = images
+    .map(image => {
+      if (!image || typeof image !== "object") return ""
+      const parsedImage = image as Record<string, unknown>
+      const url = typeof parsedImage.url === "string" ? parsedImage.url.trim() : ""
+      if (!url) return ""
+      const alt = typeof parsedImage.alt === "string" ? parsedImage.alt.trim() : ""
+      const safeAlt = alt.replace(/[\[\]]/g, "")
+      return `![${safeAlt}](${url})`
+    })
+    .filter(Boolean)
+
+  const combined = [text, imageMarkdown.join("\n\n")]
+    .filter(Boolean)
+    .join("\n\n")
+    .trim()
+
+  return combined.length > 0 ? combined : null
+}
+
+function extractRespondToUserResponsesFromMessages(
+  messages: Array<{
+    role: "user" | "assistant" | "tool"
+    toolCalls?: Array<{ name: string; arguments: unknown }>
+  }>,
+): string[] {
+  const responses: string[] = []
+
+  for (const message of messages) {
+    if (message.role !== "assistant" || !message.toolCalls?.length) continue
+
+    for (const call of message.toolCalls) {
+      if (call.name !== RESPOND_TO_USER_TOOL) continue
+      const content = extractRespondToUserContentFromArgs(call.arguments)
+      if (!content) continue
+      if (responses[responses.length - 1] === content) continue
+      responses.push(content)
+    }
+  }
+
+  return responses
+}
+
 
 // Compact message component for space efficiency
 const CompactMessage: React.FC<{
@@ -1677,7 +1729,9 @@ const MidTurnUserResponseBubble: React.FC<{
   sessionId?: string
   variant?: "default" | "overlay" | "tile"
   isComplete: boolean
-}> = ({ userResponse, pastResponses, sessionId, variant = "default", isComplete }) => {
+  isExpanded: boolean
+  onToggleExpand: () => void
+}> = ({ userResponse, pastResponses, sessionId, variant = "default", isComplete, isExpanded, onToggleExpand }) => {
   const [audioData, setAudioData] = useState<ArrayBuffer | null>(null)
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false)
   const [ttsError, setTtsError] = useState<string | null>(null)
@@ -1801,15 +1855,40 @@ const MidTurnUserResponseBubble: React.FC<{
   if (!userResponse) return null
 
   const shouldShowTTSButton = configQuery.data?.ttsEnabled
+  const collapsedPreview = userResponse.replace(/[\t\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim()
+
+  // Keep AudioPlayer mounted (but hidden) when collapsed in overlay mode so auto-play
+  // behavior remains unchanged while the bubble stays compact.
+  const shouldMountHiddenAutoPlayPlayer =
+    !isExpanded &&
+    variant === "overlay" &&
+    shouldShowTTSButton &&
+    (configQuery.data?.ttsAutoPlay ?? true)
 
   return (
     <div className="rounded-lg border-2 border-green-400 bg-green-50/50 dark:bg-green-950/30 overflow-hidden">
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-green-100/50 dark:bg-green-900/30 border-b border-green-200 dark:border-green-800">
+      <div
+        className={cn(
+          "flex items-center gap-2 px-3 py-2 bg-green-100/50 dark:bg-green-900/30 cursor-pointer hover:bg-green-100/70 dark:hover:bg-green-900/40 transition-colors",
+          isExpanded && "border-b border-green-200 dark:border-green-800",
+        )}
+        onClick={onToggleExpand}
+      >
+        {isExpanded ? (
+          <ChevronDown className="h-3 w-3 text-green-600 dark:text-green-400 flex-shrink-0" />
+        ) : (
+          <ChevronRight className="h-3 w-3 text-green-600 dark:text-green-400 flex-shrink-0" />
+        )}
         <MessageSquare className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
-        <span className="text-xs font-medium text-green-800 dark:text-green-200">
+        <span className="text-xs font-medium text-green-800 dark:text-green-200 flex-shrink-0">
           Assistant Response
         </span>
+        {!isExpanded && (
+          <span className="text-xs text-green-700/80 dark:text-green-300/70 truncate min-w-0 flex-1">
+            {collapsedPreview}
+          </span>
+        )}
         {(isTTSPlaying || isGeneratingAudio) && (
           <button
             onClick={(e) => {
@@ -1831,51 +1910,70 @@ const MidTurnUserResponseBubble: React.FC<{
         )}
       </div>
 
-      {/* Content */}
-      <div className="px-3 py-2">
-        <div className="text-sm text-green-900 dark:text-green-100 whitespace-pre-wrap break-words">
-          <MarkdownRenderer content={userResponse} />
+      {shouldMountHiddenAutoPlayPlayer && (
+        <div className="hidden">
+          <AudioPlayer
+            audioData={audioData || undefined}
+            text={ttsSource}
+            onGenerateAudio={generateAudio}
+            isGenerating={isGeneratingAudio}
+            error={ttsError}
+            compact={true}
+            autoPlay={configQuery.data?.ttsAutoPlay ?? true}
+            onPlayStateChange={setIsTTSPlaying}
+          />
         </div>
+      )}
 
-        {/* TTS Audio Player */}
-        {shouldShowTTSButton && (
-          <div className="mt-2">
-            <AudioPlayer
-              audioData={audioData || undefined}
-              text={ttsSource}
-              onGenerateAudio={generateAudio}
-              isGenerating={isGeneratingAudio}
-              error={ttsError}
-              compact={true}
-              autoPlay={configQuery.data?.ttsAutoPlay ?? true}
-              onPlayStateChange={setIsTTSPlaying}
-            />
-            {ttsError && (
-              <div className="mt-1 rounded-md bg-red-50 p-2 text-xs text-red-700 dark:bg-red-900/20 dark:text-red-300">
-                <span className="font-medium">Audio generation failed:</span> {ttsError}
+      {isExpanded && (
+        <>
+          {/* Content */}
+          <div className="px-3 py-2">
+            <div className="text-sm text-green-900 dark:text-green-100 whitespace-pre-wrap break-words">
+              <MarkdownRenderer content={userResponse} />
+            </div>
+
+            {/* TTS Audio Player */}
+            {shouldShowTTSButton && (
+              <div className="mt-2">
+                <AudioPlayer
+                  audioData={audioData || undefined}
+                  text={ttsSource}
+                  onGenerateAudio={generateAudio}
+                  isGenerating={isGeneratingAudio}
+                  error={ttsError}
+                  compact={true}
+                  autoPlay={configQuery.data?.ttsAutoPlay ?? true}
+                  onPlayStateChange={setIsTTSPlaying}
+                />
+                {ttsError && (
+                  <div className="mt-1 rounded-md bg-red-50 p-2 text-xs text-red-700 dark:bg-red-900/20 dark:text-red-300">
+                    <span className="font-medium">Audio generation failed:</span> {ttsError}
+                  </div>
+                )}
               </div>
             )}
           </div>
-        )}
-      </div>
 
-      {/* Past Responses History */}
-      {pastResponses && pastResponses.length > 0 && (
-        <div className="px-3 py-2 border-t border-green-200/60 dark:border-green-800/40 bg-green-50/30 dark:bg-green-950/20">
-          <div className="text-[10px] font-medium text-green-600/70 dark:text-green-400/60 uppercase tracking-wider mb-1.5">
-            Past Responses ({pastResponses.length})
-          </div>
-          <div className="space-y-1">
-            {pastResponses.map((response, idx) => (
-              <PastResponseItem
-                key={`past-response-${idx}`}
-                response={response}
-                index={idx}
-                sessionId={sessionId}
-              />
-            ))}
-          </div>
-        </div>
+          {/* Past Responses History */}
+          {pastResponses && pastResponses.length > 0 && (
+            <div className="px-3 py-2 border-t border-green-200/60 dark:border-green-800/40 bg-green-50/30 dark:bg-green-950/20">
+              <div className="text-[10px] font-medium text-green-600/70 dark:text-green-400/60 uppercase tracking-wider mb-1.5">
+                Past Responses ({pastResponses.length})
+              </div>
+              <div className="space-y-1">
+                {pastResponses.map((response, idx) => (
+                  <PastResponseItem
+                    key={`past-response-${idx}`}
+                    response={response}
+                    index={idx}
+                    sessionId={sessionId}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   )
@@ -1902,6 +2000,7 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
   const lastContentLengthRef = useRef(0)
   const lastDisplayItemsCountRef = useRef(0)
   const lastSessionIdRef = useRef<string | undefined>(undefined)
+  const lastDerivedUserResponseLogKeyRef = useRef<string | null>(null)
   const [showKillConfirmation, setShowKillConfirmation] = useState(false)
   const [isKilling, setIsKilling] = useState(false)
   const { isDark } = useTheme()
@@ -2280,6 +2379,32 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
   // Sort by timestamp to ensure chronological order
   messages.sort((a, b) => a.timestamp - b.timestamp)
 
+  const fallbackRespondToUserResponses = progress.userResponse
+    ? []
+    : extractRespondToUserResponsesFromMessages(messages)
+  const effectiveUserResponse = progress.userResponse
+    ?? fallbackRespondToUserResponses[fallbackRespondToUserResponses.length - 1]
+  const effectiveUserResponseHistory = progress.userResponseHistory
+    ?? (fallbackRespondToUserResponses.length > 1
+      ? fallbackRespondToUserResponses.slice(0, -1)
+      : undefined)
+
+  if (!progress.userResponse && effectiveUserResponse) {
+    const logKey = `${progress.sessionId}:${effectiveUserResponse.length}:${effectiveUserResponseHistory?.length || 0}`
+    if (lastDerivedUserResponseLogKeyRef.current !== logKey) {
+      logUI("[AgentProgress] Derived userResponse from conversation tool calls", {
+        sessionId: progress.sessionId,
+        conversationId: progress.conversationId,
+        responseLength: effectiveUserResponse.length,
+        historyLength: effectiveUserResponseHistory?.length || 0,
+        fromPendingSession: progress.sessionId.startsWith("pending-"),
+      })
+      lastDerivedUserResponseLogKeyRef.current = logKey
+    }
+  } else {
+    lastDerivedUserResponseLogKeyRef.current = null
+  }
+
   // Helper function to generate a stable ID for tool executions based on content and timestamp
   const generateToolExecutionId = (calls: Array<{ name: string; arguments: any }>, timestamp: number) => {
     // Create a stable hash from tool call names, a subset of arguments, and timestamp for uniqueness
@@ -2342,7 +2467,7 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
       const hasCompletionTool = m.toolCalls.some(
         c => c.name === RESPOND_TO_USER_TOOL || c.name === MARK_WORK_COMPLETE_TOOL
       )
-      const suppressThought = hasCompletionTool && !!progress.userResponse
+      const suppressThought = hasCompletionTool && !!effectiveUserResponse
 
       displayItems.push({
         kind: "assistant_with_tools",
@@ -2402,13 +2527,13 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
 
   // Add mid-turn user response to display items if present
   // This shows the userResponse from respond_to_user tool prominently (both mid-turn and after completion)
-  if (progress.userResponse) {
+  if (effectiveUserResponse) {
     displayItems.push({
       kind: "mid_turn_response",
       id: "mid-turn-response",
       data: {
-        userResponse: progress.userResponse,
-        pastResponses: progress.userResponseHistory,
+        userResponse: effectiveUserResponse,
+        pastResponses: effectiveUserResponseHistory,
       },
     })
   }
@@ -2844,7 +2969,7 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
                           <CompactMessage
                             key={itemKey}
                             message={item.data}
-                            ttsText={isLastAssistant ? progress.userResponse : undefined}
+                            ttsText={isLastAssistant ? effectiveUserResponse : undefined}
                             isLast={isLastAssistant}
                             isComplete={isComplete}
                             hasErrors={hasErrors}
@@ -2887,6 +3012,8 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
                             sessionId={progress.sessionId}
                             variant="tile"
                             isComplete={isComplete}
+                            isExpanded={isExpanded}
+                            onToggleExpand={() => toggleItemExpansion(itemKey, false)}
                           />
                         )
                       } else if (item.kind === "delegation") {
@@ -3212,7 +3339,7 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
                     <CompactMessage
                       key={itemKey}
                       message={item.data}
-                      ttsText={isLastAssistant ? progress.userResponse : undefined}
+                      ttsText={isLastAssistant ? effectiveUserResponse : undefined}
                       isLast={isLastAssistant}
                       isComplete={isComplete}
                       hasErrors={hasErrors}
@@ -3265,6 +3392,8 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
                       sessionId={progress.sessionId}
                       variant={variant}
                       isComplete={isComplete}
+                      isExpanded={isExpanded}
+                      onToggleExpand={() => toggleItemExpansion(itemKey, false)}
                     />
                   )
                 } else if (item.kind === "delegation") {

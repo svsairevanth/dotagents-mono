@@ -103,7 +103,7 @@ export function ActiveAgentsSidebar({
   )
 
   const handleToggleGlobalTTS = useCallback(
-    (e: React.MouseEvent) => {
+    async (e: React.MouseEvent) => {
       e.stopPropagation()
 
       const currentEnabled = configQuery.data?.ttsEnabled ?? true
@@ -116,6 +116,11 @@ export function ActiveAgentsSidebar({
 
       if (!nextEnabled) {
         ttsManager.stopAll("sidebar-global-tts-disabled")
+        try {
+          await tipcClient.stopAllTts()
+        } catch (error) {
+          console.error("Failed to stop TTS in all windows:", error)
+        }
       }
 
       saveConfig({ ttsEnabled: nextEnabled })
@@ -133,6 +138,11 @@ export function ActiveAgentsSidebar({
 
       // Emergency stop should always silence active TTS immediately.
       ttsManager.stopAll("sidebar-emergency-stop")
+      try {
+        await tipcClient.stopAllTts()
+      } catch (error) {
+        console.error("Failed to stop TTS in all windows:", error)
+      }
 
       try {
         await tipcClient.emergencyStopAgent()

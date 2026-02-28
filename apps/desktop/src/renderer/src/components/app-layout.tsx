@@ -100,12 +100,17 @@ export const Component = () => {
   )
 
   const handleToggleGlobalTTS = useCallback(
-    (e: React.MouseEvent) => {
+    async (e: React.MouseEvent) => {
       e.stopPropagation()
 
       const nextEnabled = !(configQuery.data?.ttsEnabled ?? true)
       if (!nextEnabled) {
         ttsManager.stopAll("collapsed-sidebar-global-tts-disabled")
+        try {
+          await tipcClient.stopAllTts()
+        } catch (error) {
+          console.error("Failed to stop TTS in all windows:", error)
+        }
       }
       saveConfig({ ttsEnabled: nextEnabled })
     },
@@ -119,6 +124,11 @@ export const Component = () => {
 
       setIsEmergencyStopping(true)
       ttsManager.stopAll("collapsed-sidebar-emergency-stop")
+      try {
+        await tipcClient.stopAllTts()
+      } catch (error) {
+        console.error("Failed to stop TTS in all windows:", error)
+      }
 
       try {
         await tipcClient.emergencyStopAgent()

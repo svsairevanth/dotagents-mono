@@ -31,7 +31,7 @@ import {
   type SummarizationInput,
 } from "./summarization-service"
 import { memoryService } from "./memory-service"
-import { clearSessionUserResponse, getSessionUserResponse, getSessionUserResponseHistory } from "./session-user-response-store"
+import { getSessionUserResponse, getSessionUserResponseHistory } from "./session-user-response-store"
 import {
   MARK_WORK_COMPLETE_TOOL,
   RESPOND_TO_USER_TOOL,
@@ -446,8 +446,6 @@ export async function processTranscriptWithAgentMode(
   const currentConversationId = conversationId
   const currentSessionId =
     sessionId || `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-  // Clear any stale user response from prior runs that may have reused this session ID.
-  clearSessionUserResponse(currentSessionId)
   // Number of messages in the conversation history that predate this agent session.
   // Used by the UI to show only this session's messages while still saving full history.
   // When continuing a conversation, we set this to 0 so the UI shows the full history.
@@ -537,6 +535,14 @@ export async function processTranscriptWithAgentMode(
       (update.isComplete && !isKillSwitchCompletion
         ? update.finalContent
         : undefined)
+    const userResponseSource =
+      update.userResponse !== undefined
+        ? "update"
+        : normalizedStoredUserResponse !== undefined
+        ? "store"
+        : update.isComplete && !isKillSwitchCompletion
+        ? "finalContent"
+        : "none"
     const shouldEmitUserResponse =
       userResponseForUpdate !== undefined &&
       userResponseForUpdate !== lastEmittedUserResponse
@@ -568,6 +574,14 @@ export async function processTranscriptWithAgentMode(
     }
 
     if (shouldEmitUserResponse) {
+      logLLM("[emit] Including userResponse in progress update", {
+        sessionId: currentSessionId,
+        conversationId: currentConversationId,
+        source: userResponseSource,
+        responseLength: userResponseForUpdate?.length || 0,
+        historyLength: responseHistory.length,
+        isComplete: !!update.isComplete,
+      })
       lastEmittedUserResponse = userResponseForUpdate
     }
 
@@ -3058,8 +3072,9 @@ Return ONLY JSON per schema.`,
       flushLangfuse().catch(() => {})
     }
 
-    // Clean up session state at the end of agent processing
-    clearSessionUserResponse(currentSessionId)
+    // Clean up runtime session state at the end of agent processing.
+    // Keep session userResponse/history so revived sessions can reinstate
+    // prior respond_to_user blocks in the UI.
     agentSessionStateManager.cleanupSession(currentSessionId)
   }
 }

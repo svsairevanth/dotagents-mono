@@ -463,6 +463,53 @@ describe('LLM Fetch with AI SDK', () => {
     )
   })
 
+  it('should strip unsupported top-level JSON schema combinators from tool parameters', async () => {
+    const { generateText } = await import('ai')
+    const generateTextMock = vi.mocked(generateText)
+
+    generateTextMock.mockResolvedValue({
+      text: 'ok',
+      finishReason: 'stop',
+      usage: { promptTokens: 10, completionTokens: 20 },
+    } as any)
+
+    const { makeLLMCallWithFetch } = await import('./llm-fetch')
+
+    await makeLLMCallWithFetch(
+      [{ role: 'user', content: 'test schema normalization' }],
+      'openai',
+      undefined,
+      undefined,
+      [
+        {
+          name: 'respond_to_user',
+          description: 'Send response',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              text: { type: 'string' },
+              images: { type: 'array', items: { type: 'string' } },
+            },
+            required: [],
+            anyOf: [{ required: ['text'] }, { required: ['images'] }],
+          },
+        },
+      ]
+    )
+
+    const callArgs = generateTextMock.mock.calls[0]?.[0] as any
+    const tool = callArgs?.tools?.respond_to_user
+    const schema = tool?.inputSchema?.schema
+
+    expect(schema).toBeDefined()
+    expect(schema.type).toBe('object')
+    expect(schema.anyOf).toBeUndefined()
+    expect(schema.oneOf).toBeUndefined()
+    expect(schema.allOf).toBeUndefined()
+    expect(schema.not).toBeUndefined()
+    expect(schema.enum).toBeUndefined()
+  })
+
   it('should retry on AI SDK structured errors with isRetryable flag', async () => {
     const { generateText } = await import('ai')
     const generateTextMock = vi.mocked(generateText)

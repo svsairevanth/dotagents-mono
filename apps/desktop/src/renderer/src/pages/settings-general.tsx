@@ -30,6 +30,7 @@ import {
   useConfigQuery,
   useSaveConfigMutation,
 } from "@renderer/lib/query-client"
+import { ttsManager } from "@renderer/lib/tts-manager"
 import { tipcClient } from "@renderer/lib/tipc-client"
 import { ExternalLink, AlertCircle, FolderOpen, FolderUp, FileText } from "lucide-react"
 import { toast } from "sonner"
@@ -911,7 +912,16 @@ export function Component() {
           <Control label="Enabled" className="px-3">
             <Switch
               defaultChecked={configQuery.data.ttsEnabled ?? false}
-              onCheckedChange={(value) => {
+              onCheckedChange={async (value) => {
+                if (!value) {
+                  ttsManager.stopAll("settings-global-tts-disabled")
+                  try {
+                    await tipcClient.stopAllTts()
+                  } catch (error) {
+                    console.error("Failed to stop TTS in all windows:", error)
+                  }
+                }
+
                 saveConfig({
                   ttsEnabled: value,
                 })
