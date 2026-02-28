@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import { mkdtempSync, mkdirSync, rmSync } from "fs"
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "fs"
 import { homedir, tmpdir } from "os"
 import { join } from "path"
 
@@ -303,6 +303,20 @@ describe("ACP Service", () => {
       await expect(acpService.spawnAgent("test-agent")).rejects.toThrow("does not exist")
       expect(mockSpawn).not.toHaveBeenCalled()
     })
+
+    it("should throw a clear error when configured cwd is a file", async () => {
+      const workspaceDir = mkdtempSync(join(tmpdir(), "acp-workspace-"))
+      const filePath = join(workspaceDir, "not-a-directory.txt")
+      writeFileSync(filePath, "test")
+      ;(mockConfig.acpAgents[0].connection as { cwd?: string }).cwd = filePath
+
+      const { acpService } = await import("./acp-service")
+
+      await expect(acpService.spawnAgent("test-agent")).rejects.toThrow("must be a directory")
+      expect(mockSpawn).not.toHaveBeenCalled()
+
+      rmSync(workspaceDir, { recursive: true, force: true })
+    })
   })
 
   describe("getAgentStatus", () => {
@@ -339,6 +353,34 @@ describe("ACP Service", () => {
       const event = await sessionUpdatePromise
       expect(event.sessionId).toBe("session-text-chunk")
       expect(event.content).toEqual([{ type: "text", text: "streamed hello" }])
+    })
+
+    it("does not surface thought fields as user-visible text", async () => {
+      const { acpService } = await import("./acp-service")
+
+      const sessionUpdatePromise = new Promise<{
+        sessionId: string
+        content?: { type: string; text?: string }[]
+      }>((resolve) => {
+        acpService.once("sessionUpdate", (event) => resolve(event))
+      })
+
+      acpService.emit("notification", {
+        agentName: "test-agent",
+        method: "session/update",
+        params: {
+          sessionId: "session-thought-hidden",
+          update: {
+            sessionUpdate: "agent_message_chunk",
+            text: "public output",
+            thought: "internal-only reasoning",
+          },
+        },
+      })
+
+      const event = await sessionUpdatePromise
+      expect(event.sessionId).toBe("session-thought-hidden")
+      expect(event.content).toEqual([{ type: "text", text: "public output" }])
     })
 
     it("normalizes tool_call update payloads into ACPToolCallUpdate", async () => {
@@ -427,4 +469,3 @@ describe("ACP Service", () => {
     })
   })
 })
-

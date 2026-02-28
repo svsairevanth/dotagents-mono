@@ -10,7 +10,7 @@
 
 import { spawn, ChildProcess } from "child_process"
 import { EventEmitter } from "events"
-import { existsSync } from "fs"
+import { existsSync, statSync } from "fs"
 import { readFile, writeFile, mkdir, realpath } from "fs/promises"
 import { homedir } from "os"
 import { dirname, isAbsolute, join, resolve } from "path"
@@ -235,6 +235,13 @@ class ACPService extends EventEmitter {
           `(resolved to: ${resolvedConfiguredCwd})`
         )
       }
+      const configuredCwdStats = statSync(resolvedConfiguredCwd)
+      if (!configuredCwdStats.isDirectory()) {
+        throw new Error(
+          `Working directory \"${configuredCwd}\" for agent ${config.name} must be a directory ` +
+          `(resolved to: ${resolvedConfiguredCwd})`
+        )
+      }
       return resolvedConfiguredCwd
     }
 
@@ -431,7 +438,6 @@ class ACPService extends EventEmitter {
       // Some agents stream text as update.text / update.delta / update.message
       if (typeof record.text === "string") appendTextBlock(record.text)
       if (typeof record.delta === "string") appendTextBlock(record.delta)
-      if (typeof record.thought === "string") appendTextBlock(record.thought)
       if (typeof record.message === "string") appendTextBlock(record.message)
 
       // Some agents wrap text blocks in message.content
