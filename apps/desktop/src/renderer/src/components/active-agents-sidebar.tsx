@@ -355,7 +355,7 @@ export function ActiveAgentsSidebar({
           "text-muted-foreground",
         )}
       >
-        <div className="hover:bg-accent/50 hover:text-foreground flex items-center gap-2 rounded-md px-1 py-1 transition-all duration-200">
+        <div className="hover:bg-accent/50 hover:text-foreground flex items-center gap-2 rounded-md px-0 py-1 transition-all duration-200">
           {hasAnySessions ? (
             <button
               onClick={handleToggleExpand}
