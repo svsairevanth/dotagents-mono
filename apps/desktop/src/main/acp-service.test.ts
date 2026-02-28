@@ -406,6 +406,35 @@ describe("ACP Service", () => {
       expect(event.content).toEqual([{ type: "text", text: "public output" }])
     })
 
+    it("normalizes update.message objects with direct content fields", async () => {
+      const { acpService } = await import("./acp-service")
+
+      const sessionUpdatePromise = new Promise<{
+        sessionId: string
+        content?: { type: string; text?: string }[]
+      }>((resolve) => {
+        acpService.once("sessionUpdate", (event) => resolve(event))
+      })
+
+      acpService.emit("notification", {
+        agentName: "test-agent",
+        method: "session/update",
+        params: {
+          sessionId: "session-message-content",
+          update: {
+            sessionUpdate: "agent_message_chunk",
+            message: {
+              content: [{ type: "text", text: "nested content" }],
+            },
+          },
+        },
+      })
+
+      const event = await sessionUpdatePromise
+      expect(event.sessionId).toBe("session-message-content")
+      expect(event.content).toEqual([{ type: "text", text: "nested content" }])
+    })
+
     it("normalizes tool_call update payloads into ACPToolCallUpdate", async () => {
       const { acpService } = await import("./acp-service")
 
@@ -485,6 +514,66 @@ describe("ACP Service", () => {
       expect(firstEvent.toolCall?.toolCallId).toMatch(/^tool-call-fallback-\d+$/)
       expect(secondEvent.toolCall?.toolCallId).toMatch(/^tool-call-fallback-\d+$/)
       expect(firstEvent.toolCall?.toolCallId).not.toBe(secondEvent.toolCall?.toolCallId)
+    })
+
+    it("derives completed tool status when sessionUpdate is tool_call_completed and status is omitted", async () => {
+      const { acpService } = await import("./acp-service")
+
+      const toolUpdatePromise = new Promise<{
+        sessionId: string
+        toolCall?: { toolCallId: string; title: string; status?: string }
+      }>((resolve) => {
+        acpService.once("toolCallUpdate", (event) => resolve(event))
+      })
+
+      acpService.emit("notification", {
+        agentName: "test-agent",
+        method: "session/update",
+        params: {
+          sessionId: "session-tool-call-completed",
+          update: {
+            sessionUpdate: "tool_call_completed",
+            toolCallId: "tool-456",
+            title: "Tool call done",
+          },
+        },
+      })
+
+      const event = await toolUpdatePromise
+      expect(event.toolCall).toEqual(expect.objectContaining({
+        toolCallId: "tool-456",
+        status: "completed",
+      }))
+    })
+
+    it("derives failed tool status when sessionUpdate is tool_call_failed and status is omitted", async () => {
+      const { acpService } = await import("./acp-service")
+
+      const toolUpdatePromise = new Promise<{
+        sessionId: string
+        toolCall?: { toolCallId: string; title: string; status?: string }
+      }>((resolve) => {
+        acpService.once("toolCallUpdate", (event) => resolve(event))
+      })
+
+      acpService.emit("notification", {
+        agentName: "test-agent",
+        method: "session/update",
+        params: {
+          sessionId: "session-tool-call-failed",
+          update: {
+            sessionUpdate: "tool_call_failed",
+            toolCallId: "tool-789",
+            title: "Tool call failed",
+          },
+        },
+      })
+
+      const event = await toolUpdatePromise
+      expect(event.toolCall).toEqual(expect.objectContaining({
+        toolCallId: "tool-789",
+        status: "failed",
+      }))
     })
   })
 

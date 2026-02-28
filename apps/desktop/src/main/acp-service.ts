@@ -237,7 +237,15 @@ class ACPService extends EventEmitter {
           `(resolved to: ${resolvedConfiguredCwd})`
         )
       }
-      const configuredCwdStats = statSync(resolvedConfiguredCwd)
+      let configuredCwdStats: ReturnType<typeof statSync>
+      try {
+        configuredCwdStats = statSync(resolvedConfiguredCwd)
+      } catch (error) {
+        throw new Error(
+          `Unable to inspect working directory \"${configuredCwd}\" for agent ${config.name} ` +
+          `(resolved to: ${resolvedConfiguredCwd}): ${error instanceof Error ? error.message : String(error)}`
+        )
+      }
       if (!configuredCwdStats.isDirectory()) {
         throw new Error(
           `Working directory \"${configuredCwd}\" for agent ${config.name} must be a directory ` +
@@ -460,6 +468,11 @@ class ACPService extends EventEmitter {
         }
       }
 
+      // Some agents send full message objects directly ({ role, content }).
+      if (record.content !== undefined) {
+        appendContentFromUnknown(record.content)
+      }
+
       // Some agents stream text as update.text / update.delta / update.message
       if (typeof record.text === "string") appendTextBlock(record.text)
       if (typeof record.delta === "string") appendTextBlock(record.delta)
@@ -500,6 +513,26 @@ class ACPService extends EventEmitter {
     // Handle tool call updates from the notification
     let toolCallUpdate = params.toolCall || params.update?.toolCall
     if (!toolCallUpdate && typeof params.update?.sessionUpdate === "string" && params.update.sessionUpdate.startsWith("tool_call")) {
+      const deriveToolCallStatus = (sessionUpdate: string): ACPToolCallStatus | undefined => {
+        switch (sessionUpdate) {
+          case "tool_call_pending":
+            return "pending"
+          case "tool_call":
+          case "tool_call_started":
+          case "tool_call_running":
+            return "running"
+          case "tool_call_completed":
+          case "tool_call_complete":
+            return "completed"
+          case "tool_call_failed":
+          case "tool_call_error":
+            return "failed"
+          default:
+            return undefined
+        }
+      }
+
+      const sessionUpdateType = params.update.sessionUpdate
       const rawToolCallId = rawUpdate.toolCallId
       const rawTitle = rawUpdate.title
       const rawName = rawUpdate.name
@@ -517,7 +550,7 @@ class ACPService extends EventEmitter {
 
       const status = typeof rawStatus === "string"
         ? rawStatus as ACPToolCallStatus
-        : (params.update.sessionUpdate === "tool_call" ? "running" : undefined)
+        : deriveToolCallStatus(sessionUpdateType)
 
       toolCallUpdate = {
         toolCallId,

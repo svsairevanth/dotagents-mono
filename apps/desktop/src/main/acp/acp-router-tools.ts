@@ -974,6 +974,14 @@ async function executeACPAgent(
       };
     }
 
+    if (waitForResult && resolvedAgent.connectionType === 'remote') {
+      return {
+        success: false,
+        error: `Remote agent "${args.agentName}" does not support synchronous delegation in this path. ` +
+          'Use waitForResult=false to run asynchronously.',
+      };
+    }
+
     // Create unified sub-agent state (conversation initialized automatically)
     const subAgentState = createSubAgentState({
       agentName: args.agentName,
