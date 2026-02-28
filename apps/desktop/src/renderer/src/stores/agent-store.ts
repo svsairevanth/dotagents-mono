@@ -4,6 +4,7 @@ import { clearSessionTTSTracking } from '@renderer/lib/tts-tracking'
 import {
   sanitizeAgentProgressUpdateForDisplay,
 } from '@shared/message-display-utils'
+import { logUI } from '@renderer/lib/debug'
 
 export type SessionViewMode = 'grid' | 'list' | 'kanban'
 export type SessionFilter = 'all' | 'active' | 'completed' | 'error'
@@ -65,6 +66,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       const newMap = new Map(state.agentProgressById)
       const isNewSession = !newMap.has(sessionId)
       const existingProgress = newMap.get(sessionId)
+      const isReactivation = !!existingProgress && existingProgress.isComplete && !update.isComplete
 
       if (
         existingProgress &&
@@ -81,7 +83,6 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           typeof existingProgress.runId === 'number' &&
           typeof update.runId === 'number' &&
           update.runId > existingProgress.runId
-
         if (isNewRun) {
           // New run on a reused session: reset run-scoped UI fields and keep only stable metadata.
           mergedUpdate = {
@@ -178,6 +179,23 @@ export const useAgentStore = create<AgentState>((set, get) => ({
               steps: mergedSteps,
             }
           }
+        }
+      }
+
+      if (isReactivation) {
+        logUI('[AgentStore] Session reactivated', {
+          sessionId,
+          existingHadUserResponse: !!existingProgress?.userResponse,
+          updateHasUserResponse: !!update.userResponse,
+          mergedHasUserResponse: !!mergedUpdate.userResponse,
+          existingHistoryLength: existingProgress?.userResponseHistory?.length || 0,
+          mergedHistoryLength: mergedUpdate.userResponseHistory?.length || 0,
+        })
+        if (existingProgress?.userResponse && !mergedUpdate.userResponse) {
+          logUI('[AgentStore] Reactivation dropped userResponse after merge', {
+            sessionId,
+            existingUserResponseLength: existingProgress.userResponse.length,
+          })
         }
       }
 

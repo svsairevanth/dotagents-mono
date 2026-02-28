@@ -135,7 +135,7 @@ export const builtinToolDefinitions: BuiltinToolDefinition[] = [
   {
     name: "respond_to_user",
     description:
-      "Send a response directly to the user. On voice interfaces this will be spoken aloud via TTS; on messaging channels (mobile, WhatsApp, etc.) it will be sent as a message. Regular assistant text is internal and not guaranteed to reach the user; use this tool to explicitly communicate with them.",
+      "Send a response directly to the user. On voice interfaces this will be spoken aloud via TTS; on messaging channels (mobile, WhatsApp, etc.) it will be sent as a message. Regular assistant text is internal and not guaranteed to reach the user; use this tool to explicitly communicate with them. Provide at least one of: non-empty text or one/more images.",
     inputSchema: {
       type: "object",
       properties: {
@@ -169,25 +169,6 @@ export const builtinToolDefinitions: BuiltinToolDefinition[] = [
         },
       },
       required: [],
-      anyOf: [
-        {
-          required: ["text"],
-          properties: {
-            text: {
-              minLength: 1,
-              pattern: "\\S",
-            },
-          },
-        },
-        {
-          required: ["images"],
-          properties: {
-            images: {
-              minItems: 1,
-            },
-          },
-        },
-      ],
     },
   },
   {

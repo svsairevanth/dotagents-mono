@@ -8,6 +8,8 @@
  * Also tracks a history of all respond_to_user calls for a session so the UI
  * can show past responses in a collapsed list with TTS playback.
  */
+import { logApp } from "./debug"
+
 const sessionUserResponse = new Map<string, string>()
 const sessionUserResponseHistory = new Map<string, string[]>()
 
@@ -20,6 +22,13 @@ export function setSessionUserResponse(sessionId: string, text: string): void {
     sessionUserResponseHistory.set(sessionId, history)
   }
   sessionUserResponse.set(sessionId, text)
+
+  logApp("[session-user-response-store] set", {
+    sessionId,
+    replacedExisting: !!currentResponse,
+    responseLength: text.length,
+    historyLength: history.length,
+  })
 }
 
 export function getSessionUserResponse(sessionId: string): string | undefined {
@@ -34,7 +43,15 @@ export function getSessionUserResponseHistory(sessionId: string): string[] {
 }
 
 export function clearSessionUserResponse(sessionId: string): void {
+  const hadResponse = sessionUserResponse.has(sessionId)
+  const historyLength = sessionUserResponseHistory.get(sessionId)?.length || 0
   sessionUserResponse.delete(sessionId)
   sessionUserResponseHistory.delete(sessionId)
+
+  logApp("[session-user-response-store] clear", {
+    sessionId,
+    hadResponse,
+    historyLength,
+  })
 }
 

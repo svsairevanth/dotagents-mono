@@ -74,6 +74,7 @@ import { processTranscriptWithACPAgent } from "./acp-main-agent"
 import { fetchModelsDevData, getModelFromModelsDevByProviderId, findBestModelMatch, refreshModelsDevCache } from "./models-dev-service"
 import * as parakeetStt from "./parakeet-stt"
 import { loopService } from "./loop-service"
+import { clearSessionUserResponse } from "./session-user-response-store"
 
 /**
  * Convert Float32Array audio samples to WAV format buffer
@@ -798,6 +799,26 @@ export const router = {
     return { success: true, message: "Agent mode emergency stopped" }
   }),
 
+  stopAllTts: t.procedure.action(async () => {
+    let windowsNotified = 0
+    for (const [id, win] of WINDOWS.entries()) {
+      try {
+        const stopAllTtsHandler = getRendererHandlers<RendererHandlers>(win.webContents).stopAllTts
+        if (!stopAllTtsHandler) continue
+        stopAllTtsHandler.send()
+        windowsNotified += 1
+      } catch (e) {
+        logApp(`[tipc] stopAllTts send to ${id} failed:`, e)
+      }
+    }
+
+    logApp("[tipc] stopAllTts broadcast complete", {
+      windowsNotified,
+      totalWindows: WINDOWS.size,
+    })
+    return { success: true, windowsNotified }
+  }),
+
   clearAgentProgress: t.procedure.action(async () => {
     // Send to all windows so both main and panel can update their state
     for (const [id, win] of WINDOWS.entries()) {
@@ -811,10 +832,13 @@ export const router = {
     return { success: true }
   }),
 
-
   clearAgentSessionProgress: t.procedure
     .input<{ sessionId: string }>()
     .action(async ({ input }) => {
+      // Session is being explicitly dismissed from UI; clear persisted
+      // respond_to_user state for this session.
+      clearSessionUserResponse(input.sessionId)
+
       // Send to all windows (panel and main) so both can update their state
       for (const [id, win] of WINDOWS.entries()) {
         try {
@@ -827,7 +851,6 @@ export const router = {
     }),
 
   clearInactiveSessions: t.procedure.action(async () => {
-  
     // Clear completed sessions from the tracker
     agentSessionTracker.clearCompletedSessions()
 
@@ -1506,7 +1529,23 @@ export const router = {
           const revived = agentSessionTracker.reviveSession(foundSessionId, input.fromTile ?? false)
           if (revived) {
             existingSessionId = foundSessionId
+            logApp("[createMcpTextInput] Revived existing session", {
+              conversationId: input.conversationId,
+              sessionId: foundSessionId,
+              fromTile: input.fromTile ?? false,
+            })
+          } else {
+            logApp("[createMcpTextInput] Found session but failed to revive", {
+              conversationId: input.conversationId,
+              sessionId: foundSessionId,
+              fromTile: input.fromTile ?? false,
+            })
           }
+        } else {
+          logApp("[createMcpTextInput] No runtime session found for conversation; starting new session", {
+            conversationId: input.conversationId,
+            fromTile: input.fromTile ?? false,
+          })
         }
       }
 

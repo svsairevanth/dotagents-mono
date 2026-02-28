@@ -1,6 +1,5 @@
 import { ChildProcess } from "child_process"
 import type { SessionProfileSnapshot } from "../shared/types"
-import { clearSessionUserResponse } from "./session-user-response-store"
 
 /**
  * Headless mode flag.
@@ -324,9 +323,6 @@ export const agentSessionStateManager = {
         }
       }
       session.processes.clear()
-
-	      // Clean up user-facing response for this session
-	      clearSessionUserResponse(sessionId)
 
       // Remove session
       state.agentSessions.delete(sessionId)

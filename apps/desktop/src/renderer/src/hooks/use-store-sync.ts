@@ -3,6 +3,8 @@ import { rendererHandlers, tipcClient } from '@renderer/lib/tipc-client'
 import { useAgentStore, useConversationStore } from '@renderer/stores'
 import { AgentProgressUpdate, QueuedMessage } from '@shared/types'
 import { queryClient } from '@renderer/lib/queries'
+import { ttsManager } from '@renderer/lib/tts-manager'
+import { logUI } from '@renderer/lib/debug'
 
 export function useStoreSync() {
   const updateSessionProgress = useAgentStore((s) => s.updateSessionProgress)
@@ -58,6 +60,19 @@ export function useStoreSync() {
     )
     return unlisten
   }, [clearInactiveSessions])
+
+  useEffect(() => {
+    const unlisten = rendererHandlers.stopAllTts.listen(() => {
+      logUI("[StoreSync] stopAllTts event received", {
+        trackedAudioCount: ttsManager.getAudioCount(),
+      })
+      ttsManager.stopAll('renderer-stopAllTts-event')
+      logUI("[StoreSync] stopAllTts event handled", {
+        trackedAudioCount: ttsManager.getAudioCount(),
+      })
+    })
+    return unlisten
+  }, [])
 
   useEffect(() => {
     const unlisten = rendererHandlers.focusAgentSession.listen(

@@ -8,6 +8,7 @@ import { logApp } from "./debug"
 import { WINDOWS } from "./window"
 import { getRendererHandlers } from "@egoist/tipc/main"
 import type { SessionProfileSnapshot } from "../shared/types"
+import { clearSessionUserResponse } from "./session-user-response-store"
 
 export interface AgentSession {
   id: string
@@ -148,7 +149,10 @@ class AgentSessionTracker {
     // Move to recent list (newest first), cap length
     this.completedSessions.unshift({ ...session })
     if (this.completedSessions.length > 20) {
-      this.completedSessions.length = 20
+      const evictedSessions = this.completedSessions.splice(20)
+      for (const evicted of evictedSessions) {
+        clearSessionUserResponse(evicted.id)
+      }
     }
     this.sessions.delete(sessionId)
     logApp(`[AgentSessionTracker] Completing session: ${sessionId}, remaining sessions: ${this.sessions.size}`)
@@ -170,7 +174,10 @@ class AgentSessionTracker {
     session.endTime = Date.now()
     this.completedSessions.unshift({ ...session })
     if (this.completedSessions.length > 20) {
-      this.completedSessions.length = 20
+      const evictedSessions = this.completedSessions.splice(20)
+      for (const evicted of evictedSessions) {
+        clearSessionUserResponse(evicted.id)
+      }
     }
     this.sessions.delete(sessionId)
     logApp(`[AgentSessionTracker] Stopping session: ${sessionId}, remaining sessions: ${this.sessions.size}`)
@@ -193,7 +200,10 @@ class AgentSessionTracker {
     session.endTime = Date.now()
     this.completedSessions.unshift({ ...session })
     if (this.completedSessions.length > 20) {
-      this.completedSessions.length = 20
+      const evictedSessions = this.completedSessions.splice(20)
+      for (const evicted of evictedSessions) {
+        clearSessionUserResponse(evicted.id)
+      }
     }
     this.sessions.delete(sessionId)
     logApp(`[AgentSessionTracker] Error in session: ${sessionId}, remaining sessions: ${this.sessions.size}`)
@@ -348,6 +358,9 @@ class AgentSessionTracker {
    */
   clearCompletedSessions(): void {
     logApp(`[AgentSessionTracker] Clearing ${this.completedSessions.length} completed sessions`)
+    for (const session of this.completedSessions) {
+      clearSessionUserResponse(session.id)
+    }
     this.completedSessions = []
     emitSessionUpdate()
   }

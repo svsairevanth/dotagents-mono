@@ -23,6 +23,9 @@ export type RendererHandlers = {
   clearAgentSessionProgress: (sessionId: string) => void
   clearInactiveSessions: () => void
 
+  // Stop all in-progress TTS playback in this renderer window
+  stopAllTts: () => void
+
   agentSessionsUpdated: (data: { activeSessions: AgentSession[], recentSessions: AgentSession[] }) => void
 
   focusAgentSession: (sessionId: string) => void
