@@ -10,14 +10,16 @@
 
 import { spawn, ChildProcess } from "child_process"
 import { EventEmitter } from "events"
+import { existsSync } from "fs"
 import { readFile, writeFile, mkdir, realpath } from "fs/promises"
-import { dirname } from "path"
+import { homedir } from "os"
+import { dirname, isAbsolute, join, resolve } from "path"
 import { configStore } from "./config"
 import { ACPAgentConfig } from "../shared/types"
 import { toolApprovalManager, agentSessionStateManager } from "./state"
 import { agentProfileService } from "./agent-profile-service"
 import { emitAgentProgress } from "./emit-agent-progress"
-import { logACP } from "./debug"
+import { logACP, logApp } from "./debug"
 import { getAppRunIdForAcpSession, getAppSessionForAcpSession } from "./acp-session-state"
 
 // JSON-RPC types
@@ -54,6 +56,8 @@ export interface ACPAgentInstance {
   status: ACPAgentStatus
   process?: ChildProcess
   error?: string
+  // Resolved working directory used when spawning this process and creating sessions.
+  workingDirectory?: string
   // For stdio communication
   pendingRequests: Map<number | string, {
     resolve: (result: unknown) => void
@@ -90,7 +94,21 @@ export interface ACPRunRequest {
   agentName: string
   input: string | { messages: Array<{ role: string; content: string }> }
   context?: string
+  // Optional per-request cwd override (relative to workspace root or absolute path)
+  workingDirectory?: string
+  // Force session/new even if a session already exists
+  forceNewSession?: boolean
   mode?: "sync" | "async" | "stream"
+}
+
+export interface ACPSpawnOptions {
+  workingDirectory?: string
+}
+
+export interface ACPSpawnResult {
+  effectiveWorkingDirectory: string
+  reusedExistingProcess: boolean
+  restartedProcess: boolean
 }
 
 // ACP Run response
@@ -203,6 +221,85 @@ class ACPService extends EventEmitter {
   }
 
   /**
+   * Resolve a stable working directory for ACP agent sessions.
+   * Priority: explicit per-call cwd > agent config cwd > workspace defaults.
+   */
+  private resolveAgentWorkingDirectory(config: ACPAgentConfig, overrideWorkingDirectory?: string): string {
+    const workspaceRoot = this.resolveWorkspaceRoot()
+    const configuredCwd = overrideWorkingDirectory?.trim() || config.connection.cwd?.trim()
+    if (configuredCwd) {
+      const resolvedConfiguredCwd = this.resolvePathInput(configuredCwd, workspaceRoot)
+      if (!existsSync(resolvedConfiguredCwd)) {
+        throw new Error(
+          `Working directory \"${configuredCwd}\" for agent ${config.name} does not exist ` +
+          `(resolved to: ${resolvedConfiguredCwd})`
+        )
+      }
+      return resolvedConfiguredCwd
+    }
+
+    return workspaceRoot
+  }
+
+  /**
+   * Resolve the workspace root used for ACP session cwd defaults.
+   */
+  private resolveWorkspaceRoot(): string {
+    const currentDir = process.cwd()
+
+    const envWorkspaceDir = process.env.DOTAGENTS_WORKSPACE_DIR?.trim()
+    if (envWorkspaceDir) {
+      const resolvedEnvWorkspaceDir = this.resolvePathInput(envWorkspaceDir, currentDir)
+      if (existsSync(resolvedEnvWorkspaceDir)) {
+        return resolvedEnvWorkspaceDir
+      }
+
+      logApp(
+        `[ACP Service] DOTAGENTS_WORKSPACE_DIR points to missing path: ${resolvedEnvWorkspaceDir}. ` +
+        "Falling back to git root/process cwd."
+      )
+    }
+
+    const gitRoot = this.findGitRoot(currentDir)
+    return gitRoot || currentDir
+  }
+
+  /**
+   * Resolve user-provided or environment path input into an absolute path.
+   * Supports ~ expansion and relative paths from a provided base directory.
+   */
+  private resolvePathInput(pathInput: string, baseDir: string): string {
+    if (pathInput === "~") {
+      return homedir()
+    }
+
+    const withHomeExpanded = pathInput.startsWith("~/")
+      ? resolve(homedir(), pathInput.slice(2))
+      : pathInput
+
+    return isAbsolute(withHomeExpanded)
+      ? withHomeExpanded
+      : resolve(baseDir, withHomeExpanded)
+  }
+
+  /**
+   * Find the nearest directory containing a .git marker.
+   */
+  private findGitRoot(startDir: string): string | null {
+    let current = startDir
+    while (true) {
+      if (existsSync(join(current, ".git"))) {
+        return current
+      }
+      const parent = dirname(current)
+      if (parent === current) {
+        return null
+      }
+      current = parent
+    }
+  }
+
+  /**
    * Handle notifications from ACP agents (session/update, etc.)
    */
   private handleAgentNotification(event: { agentName: string; method: string; params: unknown }): void {
@@ -280,29 +377,77 @@ class ACPService extends EventEmitter {
       this.sessionOutputs.set(sessionId, output)
     }
 
-    // Extract content from various possible locations in the params
-    // ACP agents may structure content differently:
-    // 1. params.content (array or single block)
-    // 2. params.update.content (nested inside update object)
-    let contentBlocks: ACPContentBlock[] = []
+    // Extract content from various possible payload shapes.
+    // Different ACP implementations stream chunks as:
+    // - content blocks
+    // - plain text in update.text/update.delta
+    // - nested message.content arrays
+    const contentBlocks: ACPContentBlock[] = []
+    const appendTextBlock = (text: string) => {
+      if (!text) return
+      const last = contentBlocks[contentBlocks.length - 1]
+      if (last?.type === "text" && last.text === text) return
+      contentBlocks.push({ type: "text", text })
+    }
 
-    // Check for content at top level
-    if (params.content) {
-      if (Array.isArray(params.content)) {
-        contentBlocks = params.content
-      } else if (typeof params.content === "object") {
-        contentBlocks = [params.content]
+    const appendContentFromUnknown = (value: unknown): void => {
+      if (!value) return
+
+      if (typeof value === "string") {
+        appendTextBlock(value)
+        return
+      }
+
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          appendContentFromUnknown(item)
+        }
+        return
+      }
+
+      if (typeof value !== "object") return
+
+      const record = value as Record<string, unknown>
+
+      // Canonical ACP content block shape
+      if (typeof record.type === "string") {
+        const blockType = record.type
+        if (blockType === "text" && typeof record.text === "string") {
+          appendTextBlock(record.text)
+          return
+        }
+
+        if (
+          blockType === "tool_use"
+          || blockType === "tool_result"
+          || blockType === "image"
+          || blockType === "resource"
+        ) {
+          contentBlocks.push(record as unknown as ACPContentBlock)
+          return
+        }
+      }
+
+      // Some agents stream text as update.text / update.delta / update.message
+      if (typeof record.text === "string") appendTextBlock(record.text)
+      if (typeof record.delta === "string") appendTextBlock(record.delta)
+      if (typeof record.thought === "string") appendTextBlock(record.thought)
+      if (typeof record.message === "string") appendTextBlock(record.message)
+
+      // Some agents wrap text blocks in message.content
+      if (record.message && typeof record.message === "object") {
+        const nestedMessage = record.message as Record<string, unknown>
+        appendContentFromUnknown(nestedMessage.content)
       }
     }
 
-    // Check for content nested in update object (Augment ACP format)
-    if (params.update?.content) {
-      if (Array.isArray(params.update.content)) {
-        contentBlocks = [...contentBlocks, ...params.update.content]
-      } else if (typeof params.update.content === "object") {
-        contentBlocks = [...contentBlocks, params.update.content]
-      }
-    }
+    appendContentFromUnknown(params.content)
+    appendContentFromUnknown(params.update?.content)
+
+    const rawUpdate = (params.update ?? {}) as Record<string, unknown>
+    appendContentFromUnknown(rawUpdate.text)
+    appendContentFromUnknown(rawUpdate.delta)
+    appendContentFromUnknown(rawUpdate.message)
 
     // Append new content blocks
     if (contentBlocks.length > 0) {
@@ -322,7 +467,35 @@ class ACPService extends EventEmitter {
     }
 
     // Handle tool call updates from the notification
-    const toolCallUpdate = params.toolCall || params.update?.toolCall
+    let toolCallUpdate = params.toolCall || params.update?.toolCall
+    if (!toolCallUpdate && typeof params.update?.sessionUpdate === "string" && params.update.sessionUpdate.startsWith("tool_call")) {
+      const rawToolCallId = rawUpdate.toolCallId
+      const rawTitle = rawUpdate.title
+      const rawName = rawUpdate.name
+      const rawStatus = rawUpdate.status
+
+      const toolCallId = typeof rawToolCallId === "string" && rawToolCallId.trim().length > 0
+        ? rawToolCallId
+        : `tool-call-${Date.now()}`
+
+      const title = typeof rawTitle === "string" && rawTitle.trim().length > 0
+        ? rawTitle
+        : (typeof rawName === "string" && rawName.trim().length > 0
+          ? `Tool: ${rawName}`
+          : "Tool call")
+
+      const status = typeof rawStatus === "string"
+        ? rawStatus as ACPToolCallStatus
+        : (params.update.sessionUpdate === "tool_call" ? "running" : undefined)
+
+      toolCallUpdate = {
+        toolCallId,
+        title,
+        status,
+        rawInput: rawUpdate.rawInput ?? rawUpdate.input,
+        rawOutput: rawUpdate.rawOutput ?? rawUpdate.output,
+      }
+    }
     if (toolCallUpdate) {
       this.emit("toolCallUpdate", {
         agentName,
@@ -414,12 +587,18 @@ class ACPService extends EventEmitter {
   /**
    * Get a specific agent's status
    */
-  getAgentStatus(agentName: string): { status: ACPAgentStatus; error?: string } | null {
+  getAgentStatus(
+    agentName: string
+  ): { status: ACPAgentStatus; error?: string; workingDirectory?: string } | null {
     const instance = this.agents.get(agentName)
     if (!instance) {
       return { status: "stopped" }
     }
-    return { status: instance.status, error: instance.error }
+    return {
+      status: instance.status,
+      error: instance.error,
+      workingDirectory: instance.workingDirectory,
+    }
   }
 
   /**
@@ -441,8 +620,9 @@ class ACPService extends EventEmitter {
   /**
    * Spawn an ACP agent process
    */
-  async spawnAgent(agentName: string): Promise<void> {
+  async spawnAgent(agentName: string, options: ACPSpawnOptions = {}): Promise<ACPSpawnResult> {
     const config = configStore.get()
+    const requestedWorkingDirectory = options.workingDirectory?.trim() || undefined
 
     // First try to find it in the unified AgentProfile system
     const profile = agentProfileService.getByName(agentName)
@@ -478,25 +658,42 @@ class ACPService extends EventEmitter {
       throw new Error(`Agent ${agentName} is disabled`)
     }
 
+    const targetWorkingDirectory = this.resolveAgentWorkingDirectory(agentConfig, requestedWorkingDirectory)
+    let restartedProcess = false
+
     // Check if already running or starting - treat both 'ready' and 'starting' as "already spawning"
     // This prevents spawning duplicate processes when a second call arrives while a spawn is in progress
     const existing = this.agents.get(agentName)
     if (existing) {
-      if (existing.status === "ready") {
-        return
-      }
       if (existing.status === "starting") {
         // Wait for the existing spawn to complete (poll until ready or error)
         await this.waitForAgentReady(agentName)
-        // Check final status after waiting - throw if agent failed or stopped
-        const finalInstance = this.agents.get(agentName)
-        if (finalInstance?.status === "error") {
-          throw new Error(finalInstance.error || `Agent ${agentName} failed to start`)
+      }
+
+      const finalInstance = this.agents.get(agentName)
+      if (finalInstance?.status === "error") {
+        throw new Error(finalInstance.error || `Agent ${agentName} failed to start`)
+      }
+      if (finalInstance?.status === "stopped") {
+        throw new Error(`Agent ${agentName} stopped unexpectedly during startup`)
+      }
+
+      if (finalInstance?.status === "ready") {
+        const activeWorkingDirectory = finalInstance.workingDirectory
+          || this.resolveAgentWorkingDirectory(finalInstance.config)
+
+        if (activeWorkingDirectory === targetWorkingDirectory) {
+          return {
+            effectiveWorkingDirectory: activeWorkingDirectory,
+            reusedExistingProcess: true,
+            restartedProcess: false,
+          }
         }
-        if (finalInstance?.status === "stopped" || !finalInstance) {
-          throw new Error(`Agent ${agentName} stopped unexpectedly during startup`)
-        }
-        return
+
+        // The process is ready but in a different working directory than requested.
+        // Restart to guarantee both process cwd and session/new cwd use the override.
+        await this.stopAgent(agentName)
+        restartedProcess = true
       }
     }
 
@@ -504,7 +701,7 @@ class ACPService extends EventEmitter {
       throw new Error(`Connection type ${agentConfig.connection.type} not yet supported`)
     }
 
-    const { command, args = [], env = {}, cwd } = agentConfig.connection
+    const { command, args = [], env = {} } = agentConfig.connection
 
     if (!command) {
       throw new Error(`No command specified for agent ${agentName}`)
@@ -514,6 +711,7 @@ class ACPService extends EventEmitter {
     const instance: ACPAgentInstance = {
       config: agentConfig,
       status: "starting",
+      workingDirectory: targetWorkingDirectory,
       pendingRequests: new Map(),
       nextRequestId: 1,
       buffer: "",
@@ -525,13 +723,14 @@ class ACPService extends EventEmitter {
     try {
       // Merge environment variables
       const processEnv = { ...process.env, ...env }
+      const agentCwd = targetWorkingDirectory
 
       // Spawn the process with optional working directory
       const proc = spawn(command, args, {
         env: processEnv,
         stdio: ["pipe", "pipe", "pipe"],
         shell: process.platform === "win32",
-        ...(cwd && { cwd }),
+        cwd: agentCwd,
       })
 
       instance.process = proc
@@ -549,6 +748,16 @@ class ACPService extends EventEmitter {
 
       // Handle process exit
       proc.on("exit", (code, signal) => {
+        const previousSessionId = instance.sessionId
+        if (previousSessionId) {
+          this.clearSessionOutput(previousSessionId)
+        }
+
+        instance.sessionId = undefined
+        instance.initialized = false
+        instance.sessionInfo = undefined
+        instance.workingDirectory = undefined
+
         // Distinguish between clean shutdown and abnormal exit
         // Exit code 0 or SIGTERM signal indicates clean shutdown
         const isCleanShutdown = code === 0 || signal === "SIGTERM"
@@ -589,6 +798,12 @@ class ACPService extends EventEmitter {
       if (instance.status === "starting") {
         instance.status = "ready"
         this.emit("agentStatusChanged", { agentName, status: "ready" })
+      }
+
+      return {
+        effectiveWorkingDirectory: targetWorkingDirectory,
+        reusedExistingProcess: false,
+        restartedProcess,
       }
 
     } catch (error) {
@@ -633,7 +848,23 @@ class ACPService extends EventEmitter {
    */
   async stopAgent(agentName: string): Promise<void> {
     const instance = this.agents.get(agentName)
-    if (!instance || !instance.process) {
+    if (!instance) {
+      return
+    }
+
+    const previousSessionId = instance.sessionId
+    if (previousSessionId) {
+      this.clearSessionOutput(previousSessionId)
+    }
+
+    instance.sessionId = undefined
+    instance.initialized = false
+    instance.sessionInfo = undefined
+    instance.workingDirectory = undefined
+
+    if (!instance.process) {
+      instance.status = "stopped"
+      this.emit("agentStatusChanged", { agentName, status: "stopped" })
       return
     }
 
@@ -1407,8 +1638,9 @@ class ACPService extends EventEmitter {
       }
 
       // Use session/new per ACP spec (not session/create)
+      const sessionCwd = instance.workingDirectory || this.resolveAgentWorkingDirectory(instance.config)
       const result = await this.sendRequest(agentName, "session/new", {
-        cwd: process.cwd(),
+        cwd: sessionCwd,
         mcpServers,
       }) as {
         sessionId?: string
@@ -1458,14 +1690,14 @@ class ACPService extends EventEmitter {
    * 4. Receive session/update notifications for results
    */
   async runTask(request: ACPRunRequest): Promise<ACPRunResponse> {
-    const { agentName, input, context } = request
+    const { agentName, input, context, workingDirectory, forceNewSession } = request
 
     // Ensure agent is running
     let instance = this.agents.get(agentName)
-    if (!instance || instance.status !== "ready") {
+    if (!instance || instance.status !== "ready" || !!workingDirectory) {
       // Try to spawn it
       try {
-        await this.spawnAgent(agentName)
+        await this.spawnAgent(agentName, { workingDirectory })
         instance = this.agents.get(agentName)
       } catch (error) {
         return {
@@ -1486,6 +1718,11 @@ class ACPService extends EventEmitter {
       // Step 1: Initialize if not already done
       if (!instance.initialized) {
         await this.initializeAgent(agentName)
+      }
+
+      if (forceNewSession && instance.sessionId) {
+        this.clearSessionOutput(instance.sessionId)
+        instance.sessionId = undefined
       }
 
       // Step 2: Create session if needed
@@ -1614,21 +1851,24 @@ class ACPService extends EventEmitter {
   /**
    * Get or create a session for main agent use.
    * Unlike runTask(), this gives fine-grained control over session lifecycle.
+   *
+   * Throws with a descriptive error if the agent cannot be started or no session can be created.
    */
-  async getOrCreateSession(agentName: string, forceNew?: boolean): Promise<string | undefined> {
+  async getOrCreateSession(agentName: string, forceNew?: boolean, workingDirectory?: string): Promise<string> {
     // Ensure agent is spawned and ready
     let instance = this.agents.get(agentName)
-    if (!instance || instance.status !== "ready") {
+    if (!instance || instance.status !== "ready" || !!workingDirectory) {
       try {
-        await this.spawnAgent(agentName)
+        await this.spawnAgent(agentName, { workingDirectory })
         instance = this.agents.get(agentName)
-      } catch {
-        return undefined
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        throw new Error(`Failed to start ACP agent ${agentName}: ${message}`)
       }
     }
 
     if (!instance || instance.status !== "ready") {
-      return undefined
+      throw new Error(`ACP agent ${agentName} is not ready`)
     }
 
     // Initialize if not already done
@@ -1643,7 +1883,14 @@ class ACPService extends EventEmitter {
     }
 
     // Create or reuse session
-    return await this.createSession(agentName)
+    const sessionId = await this.createSession(agentName)
+    if (!sessionId) {
+      throw new Error(
+        `Failed to create ACP session for agent ${agentName}. ` +
+        "Verify the agent command is valid and supports ACP methods like session/new."
+      )
+    }
+    return sessionId
   }
 
   /**

@@ -3,6 +3,9 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+import { mkdtempSync, mkdirSync, rmSync } from "fs"
+import { homedir, tmpdir } from "os"
+import { join } from "path"
 
 // Mock electron (agent-profile-service reads app.getPath("userData") at import time)
 vi.mock("electron", () => ({
@@ -97,7 +100,16 @@ vi.mock("./debug", () => ({
   logApp: vi.fn(),
 }))
 
+// Keep ACP service tests deterministic: use legacy acpAgents config path directly.
+vi.mock("./agent-profile-service", () => ({
+  agentProfileService: {
+    getByName: vi.fn(() => null),
+    getExternalAgents: vi.fn(() => []),
+  },
+}))
+
 describe("ACP Service", () => {
+  let originalWorkspaceEnv: string | undefined
   let mockProcess: {
     stdout: { on: ReturnType<typeof vi.fn> }
     stderr: { on: ReturnType<typeof vi.fn> }
@@ -109,6 +121,9 @@ describe("ACP Service", () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    originalWorkspaceEnv = process.env.DOTAGENTS_WORKSPACE_DIR
+    delete process.env.DOTAGENTS_WORKSPACE_DIR
+    ;(mockConfig.acpAgents[0].connection as { cwd?: string }).cwd = undefined
 
     // Create mock process
     mockProcess = {
@@ -124,6 +139,11 @@ describe("ACP Service", () => {
   })
 
   afterEach(() => {
+    if (originalWorkspaceEnv === undefined) {
+      delete process.env.DOTAGENTS_WORKSPACE_DIR
+    } else {
+      process.env.DOTAGENTS_WORKSPACE_DIR = originalWorkspaceEnv
+    }
     vi.resetModules()
   })
 
@@ -166,6 +186,65 @@ describe("ACP Service", () => {
       expect(status?.status).toBe("ready")
     })
 
+    it("should honor per-call workingDirectory override", async () => {
+      const workspaceDir = mkdtempSync(join(tmpdir(), "acp-workspace-"))
+      const overrideDir = "repo/feature-a"
+      const expectedCwd = join(workspaceDir, overrideDir)
+      mkdirSync(expectedCwd, { recursive: true })
+
+      process.env.DOTAGENTS_WORKSPACE_DIR = workspaceDir
+
+      const { acpService } = await import("./acp-service")
+      const spawnResult = await acpService.spawnAgent("test-agent", { workingDirectory: overrideDir })
+
+      expect(spawnResult).toEqual(expect.objectContaining({
+        effectiveWorkingDirectory: expectedCwd,
+        reusedExistingProcess: false,
+        restartedProcess: false,
+      }))
+      expect(mockSpawn).toHaveBeenCalledWith(
+        "test-command",
+        ["--test"],
+        expect.objectContaining({ cwd: expectedCwd })
+      )
+
+      rmSync(workspaceDir, { recursive: true, force: true })
+    })
+
+    it("should restart a ready agent when workingDirectory changes", async () => {
+      const workspaceDir = mkdtempSync(join(tmpdir(), "acp-workspace-"))
+      const firstDir = "repo/feature-a"
+      const secondDir = "repo/feature-b"
+      const expectedFirstCwd = join(workspaceDir, firstDir)
+      const expectedSecondCwd = join(workspaceDir, secondDir)
+      mkdirSync(expectedFirstCwd, { recursive: true })
+      mkdirSync(expectedSecondCwd, { recursive: true })
+
+      process.env.DOTAGENTS_WORKSPACE_DIR = workspaceDir
+
+      const { acpService } = await import("./acp-service")
+
+      await acpService.spawnAgent("test-agent", { workingDirectory: firstDir })
+
+      const stopSpy = vi.spyOn(acpService, "stopAgent").mockResolvedValue()
+      const secondSpawnResult = await acpService.spawnAgent("test-agent", { workingDirectory: secondDir })
+
+      expect(stopSpy).toHaveBeenCalledWith("test-agent")
+      expect(mockSpawn).toHaveBeenNthCalledWith(
+        2,
+        "test-command",
+        ["--test"],
+        expect.objectContaining({ cwd: expectedSecondCwd })
+      )
+      expect(secondSpawnResult).toEqual(expect.objectContaining({
+        effectiveWorkingDirectory: expectedSecondCwd,
+        reusedExistingProcess: false,
+        restartedProcess: true,
+      }))
+
+      rmSync(workspaceDir, { recursive: true, force: true })
+    })
+
     it("should throw error for non-existent agent", async () => {
       const { acpService } = await import("./acp-service")
 
@@ -181,6 +260,49 @@ describe("ACP Service", () => {
         "Agent disabled-agent is disabled"
       )
     })
+
+    it("should resolve relative configured cwd from DOTAGENTS_WORKSPACE_DIR", async () => {
+      const workspaceDir = mkdtempSync(join(tmpdir(), "acp-workspace-"))
+      const agentCwd = "repo/subdir"
+      const expectedCwd = join(workspaceDir, agentCwd)
+      mkdirSync(expectedCwd, { recursive: true })
+
+      process.env.DOTAGENTS_WORKSPACE_DIR = workspaceDir
+      ;(mockConfig.acpAgents[0].connection as { cwd?: string }).cwd = agentCwd
+
+      const { acpService } = await import("./acp-service")
+      await acpService.spawnAgent("test-agent")
+
+      expect(mockSpawn).toHaveBeenCalledWith(
+        "test-command",
+        ["--test"],
+        expect.objectContaining({ cwd: expectedCwd })
+      )
+
+      rmSync(workspaceDir, { recursive: true, force: true })
+    })
+
+    it("should expand ~ configured cwd to the user home directory", async () => {
+      ;(mockConfig.acpAgents[0].connection as { cwd?: string }).cwd = "~"
+
+      const { acpService } = await import("./acp-service")
+      await acpService.spawnAgent("test-agent")
+
+      expect(mockSpawn).toHaveBeenCalledWith(
+        "test-command",
+        ["--test"],
+        expect.objectContaining({ cwd: homedir() })
+      )
+    })
+
+    it("should throw a clear error when configured cwd does not exist", async () => {
+      ;(mockConfig.acpAgents[0].connection as { cwd?: string }).cwd = `/path/that/does/not/exist-${Date.now()}`
+
+      const { acpService } = await import("./acp-service")
+
+      await expect(acpService.spawnAgent("test-agent")).rejects.toThrow("does not exist")
+      expect(mockSpawn).not.toHaveBeenCalled()
+    })
   })
 
   describe("getAgentStatus", () => {
@@ -188,6 +310,67 @@ describe("ACP Service", () => {
       const { acpService } = await import("./acp-service")
       const status = acpService.getAgentStatus("test-agent")
       expect(status).toEqual({ status: "stopped" })
+    })
+  })
+
+  describe("session/update normalization", () => {
+    it("normalizes plain text chunk payloads into text content blocks", async () => {
+      const { acpService } = await import("./acp-service")
+
+      const sessionUpdatePromise = new Promise<{
+        sessionId: string
+        content?: { type: string; text?: string }[]
+      }>((resolve) => {
+        acpService.once("sessionUpdate", (event) => resolve(event))
+      })
+
+      acpService.emit("notification", {
+        agentName: "test-agent",
+        method: "session/update",
+        params: {
+          sessionId: "session-text-chunk",
+          update: {
+            sessionUpdate: "agent_message_chunk",
+            text: "streamed hello",
+          },
+        },
+      })
+
+      const event = await sessionUpdatePromise
+      expect(event.sessionId).toBe("session-text-chunk")
+      expect(event.content).toEqual([{ type: "text", text: "streamed hello" }])
+    })
+
+    it("normalizes tool_call update payloads into ACPToolCallUpdate", async () => {
+      const { acpService } = await import("./acp-service")
+
+      const toolUpdatePromise = new Promise<{
+        sessionId: string
+        toolCall?: { toolCallId: string; title: string; status?: string }
+      }>((resolve) => {
+        acpService.once("toolCallUpdate", (event) => resolve(event))
+      })
+
+      acpService.emit("notification", {
+        agentName: "test-agent",
+        method: "session/update",
+        params: {
+          sessionId: "session-tool-call",
+          update: {
+            sessionUpdate: "tool_call",
+            toolCallId: "tool-123",
+            title: "sub-agent-augustus: Build a plan",
+          },
+        },
+      })
+
+      const event = await toolUpdatePromise
+      expect(event.sessionId).toBe("session-tool-call")
+      expect(event.toolCall).toEqual(expect.objectContaining({
+        toolCallId: "tool-123",
+        title: "sub-agent-augustus: Build a plan",
+        status: "running",
+      }))
     })
   })
 
