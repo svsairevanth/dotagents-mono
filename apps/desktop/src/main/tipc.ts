@@ -795,7 +795,9 @@ export const router = {
     let windowsNotified = 0
     for (const [id, win] of WINDOWS.entries()) {
       try {
-        getRendererHandlers<RendererHandlers>(win.webContents).stopAllTts?.send()
+        const stopAllTtsHandler = getRendererHandlers<RendererHandlers>(win.webContents).stopAllTts
+        if (!stopAllTtsHandler) continue
+        stopAllTtsHandler.send()
         windowsNotified += 1
       } catch (e) {
         logApp(`[tipc] stopAllTts send to ${id} failed:`, e)

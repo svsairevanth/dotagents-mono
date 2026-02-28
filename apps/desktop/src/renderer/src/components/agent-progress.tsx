@@ -109,14 +109,21 @@ function extractRespondToUserContentFromArgs(args: unknown): string | null {
     : []
 
   const imageMarkdown = images
-    .map(image => {
+    .map((image, index) => {
       if (!image || typeof image !== "object") return ""
       const parsedImage = image as Record<string, unknown>
       const url = typeof parsedImage.url === "string" ? parsedImage.url.trim() : ""
-      if (!url) return ""
       const alt = typeof parsedImage.alt === "string" ? parsedImage.alt.trim() : ""
-      const safeAlt = alt.replace(/[\[\]]/g, "")
-      return `![${safeAlt}](${url})`
+      const safeAlt = alt.replace(/[\[\]]/g, "") || `Image ${index + 1}`
+      if (url) return `![${safeAlt}](${url})`
+
+      const imagePath = typeof parsedImage.path === "string" ? parsedImage.path.trim() : ""
+      if (!imagePath) return ""
+
+      // Local file paths are not valid markdown image URLs in renderer sanitization.
+      // Keep a textual placeholder so path-only responses are still visible in revived sessions.
+      const escapedPath = imagePath.replace(/`/g, "\\`")
+      return `Local image (${safeAlt}): \`${escapedPath}\``
     })
     .filter(Boolean)
 
