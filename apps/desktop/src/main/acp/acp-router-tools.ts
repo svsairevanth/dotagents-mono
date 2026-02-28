@@ -239,6 +239,15 @@ function truncateContent(content: string, maxSize: number): string {
 }
 
 /**
+ * Hard-cap content without appending ellipsis.
+ * Keeps prefix checks stable for stream merge (delta vs cumulative snapshot detection).
+ */
+function capContent(content: string, maxSize: number): string {
+  if (content.length <= maxSize) return content;
+  return content.substring(0, maxSize);
+}
+
+/**
  * Safely stringify a value to JSON, catching errors from circular structures or BigInt.
  * Returns a fallback string if serialization fails.
  */
@@ -264,7 +273,7 @@ function mergeAssistantStreamText(
 ): void {
   if (!text) return;
 
-  const normalizedText = truncateContent(text, MAX_CONVERSATION_SIZE_FOR_UI);
+  const normalizedText = capContent(text, MAX_MESSAGE_CONTENT_SIZE);
   const lastMessage = conversation[conversation.length - 1];
 
   if (lastMessage?.role === 'assistant' && !lastMessage.toolName) {
@@ -287,7 +296,11 @@ function mergeAssistantStreamText(
     }
 
     // Delta chunk: append.
-    lastMessage.content = truncateContent(previous + normalizedText, MAX_CONVERSATION_SIZE_FOR_UI);
+    const merged = capContent(previous + normalizedText, MAX_MESSAGE_CONTENT_SIZE);
+    if (merged === previous) {
+      return;
+    }
+    lastMessage.content = merged;
     lastMessage.timestamp = timestamp;
     return;
   }
@@ -313,7 +326,8 @@ function prepareConversationForUI(conversation: ACPSubAgentMessage[]): ACPSubAge
   // Process from end to start to keep most recent messages
   for (let i = recentMessages.length - 1; i >= 0; i--) {
     const msg = recentMessages[i];
-    const msgSize = msg.content.length;
+    const truncatedContent = truncateContent(msg.content, MAX_MESSAGE_CONTENT_SIZE);
+    const msgSize = truncatedContent.length;
 
     if (totalSize + msgSize > MAX_CONVERSATION_SIZE_FOR_UI) {
       // Add a truncation notice at the start
@@ -328,7 +342,7 @@ function prepareConversationForUI(conversation: ACPSubAgentMessage[]): ACPSubAge
     totalSize += msgSize;
     result.unshift({
       ...msg,
-      content: truncateContent(msg.content, MAX_MESSAGE_CONTENT_SIZE),
+      content: truncatedContent,
     });
   }
 
