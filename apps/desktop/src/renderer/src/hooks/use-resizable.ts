@@ -148,16 +148,25 @@ export function useResizable(options: UseResizableOptions = {}): UseResizableRet
     if (!activeElement) return
 
     if (size.width !== undefined) {
+      widthRef.current = size.width
       activeElement.style.width = `${size.width}px`
     }
     if (size.height !== undefined) {
+      heightRef.current = size.height
       activeElement.style.height = `${size.height}px`
+    }
+  }, [])
+
+  const cleanupPreviousResizeListeners = useCallback(() => {
+    if (removeListenersRef.current) {
+      removeListenersRef.current()
     }
   }, [])
 
   const handleWidthResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
+    cleanupPreviousResizeListeners()
     setIsResizing(true)
     resizeTypeRef.current = "width"
     onResizeStart?.()
@@ -209,11 +218,12 @@ export function useResizable(options: UseResizableOptions = {}): UseResizableRet
     document.addEventListener("mousemove", handleMouseMove)
     document.addEventListener("mouseup", handleMouseUp)
     window.addEventListener("blur", handleBlur)
-  }, [clampWidth, onResizeStart, onResizeEnd, storageKey, applyPreviewSize])
+  }, [clampWidth, onResizeStart, onResizeEnd, storageKey, applyPreviewSize, cleanupPreviousResizeListeners])
 
   const handleHeightResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
+    cleanupPreviousResizeListeners()
     setIsResizing(true)
     resizeTypeRef.current = "height"
     onResizeStart?.()
@@ -265,11 +275,12 @@ export function useResizable(options: UseResizableOptions = {}): UseResizableRet
     document.addEventListener("mousemove", handleMouseMove)
     document.addEventListener("mouseup", handleMouseUp)
     window.addEventListener("blur", handleBlur)
-  }, [clampHeight, onResizeStart, onResizeEnd, storageKey, applyPreviewSize])
+  }, [clampHeight, onResizeStart, onResizeEnd, storageKey, applyPreviewSize, cleanupPreviousResizeListeners])
 
   const handleCornerResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
+    cleanupPreviousResizeListeners()
     setIsResizing(true)
     resizeTypeRef.current = "corner"
     onResizeStart?.()
@@ -328,7 +339,7 @@ export function useResizable(options: UseResizableOptions = {}): UseResizableRet
     document.addEventListener("mousemove", handleMouseMove)
     document.addEventListener("mouseup", handleMouseUp)
     window.addEventListener("blur", handleBlur)
-  }, [clampWidth, clampHeight, onResizeStart, onResizeEnd, storageKey, applyPreviewSize])
+  }, [clampWidth, clampHeight, onResizeStart, onResizeEnd, storageKey, applyPreviewSize, cleanupPreviousResizeListeners])
 
   const reset = useCallback(() => {
     widthRef.current = initialWidth
@@ -370,9 +381,12 @@ export function useResizable(options: UseResizableOptions = {}): UseResizableRet
     }
   }, [])
 
+  const renderedWidth = isResizing ? widthRef.current : width
+  const renderedHeight = isResizing ? heightRef.current : height
+
   return {
-    width,
-    height,
+    width: renderedWidth,
+    height: renderedHeight,
     isResizing,
     handleWidthResizeStart,
     handleHeightResizeStart,
@@ -381,4 +395,3 @@ export function useResizable(options: UseResizableOptions = {}): UseResizableRet
     setSize,
   }
 }
-
