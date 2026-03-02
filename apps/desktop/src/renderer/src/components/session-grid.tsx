@@ -236,6 +236,23 @@ export function SessionTileWrapper({
     }
   }, [containerWidth, containerHeight, gap, layoutMode, setSize])
 
+  // Responsive reflow: when the container width changes significantly (e.g. sidebar toggle),
+  // recalculate tile sizes to fill available space. Only fires after initial sizing and when
+  // not actively resizing via drag handles.
+  const lastContainerWidthRef = useRef(containerWidth)
+  useEffect(() => {
+    if (!hasInitializedRef.current || containerWidth <= 0 || isResizing) return
+    const prevWidth = lastContainerWidthRef.current
+    lastContainerWidthRef.current = containerWidth
+    // Only reflow if width changed by more than 20px (avoids sub-pixel jitter)
+    if (prevWidth > 0 && Math.abs(containerWidth - prevWidth) > 20) {
+      setSize({
+        width: calculateTileWidth(containerWidth, gap, layoutMode),
+        height: calculateTileHeight(containerHeight, gap, layoutMode),
+      })
+    }
+  }, [containerWidth, containerHeight, gap, layoutMode, setSize, isResizing])
+
   const handleDragStart = (e: React.DragEvent) => {
     e.dataTransfer.effectAllowed = "move"
     e.dataTransfer.setData("text/plain", sessionId)

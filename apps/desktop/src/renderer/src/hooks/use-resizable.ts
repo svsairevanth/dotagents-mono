@@ -136,15 +136,24 @@ export function useResizable(options: UseResizableOptions = {}): UseResizableRet
     const startX = e.clientX
     const startWidth = width
     let lastWidth = startWidth
+    let rafId: number | null = null
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const delta = moveEvent.clientX - startX
       lastWidth = clampWidth(startWidth + delta)
-      setWidth(lastWidth)
+      // Throttle state updates to one per animation frame to avoid jank
+      if (rafId === null) {
+        rafId = requestAnimationFrame(() => {
+          setWidth(lastWidth)
+          rafId = null
+        })
+      }
     }
 
     const handleMouseUp = () => {
+      if (rafId !== null) cancelAnimationFrame(rafId)
       setIsResizing(false)
+      setWidth(lastWidth)
       resizeTypeRef.current = null
       document.removeEventListener("mousemove", handleMouseMove)
       document.removeEventListener("mouseup", handleMouseUp)
@@ -169,15 +178,24 @@ export function useResizable(options: UseResizableOptions = {}): UseResizableRet
     const startY = e.clientY
     const startHeight = height
     let lastHeight = startHeight
+    let rafId: number | null = null
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const delta = moveEvent.clientY - startY
       lastHeight = clampHeight(startHeight + delta)
-      setHeight(lastHeight)
+      // Throttle state updates to one per animation frame to avoid jank
+      if (rafId === null) {
+        rafId = requestAnimationFrame(() => {
+          setHeight(lastHeight)
+          rafId = null
+        })
+      }
     }
 
     const handleMouseUp = () => {
+      if (rafId !== null) cancelAnimationFrame(rafId)
       setIsResizing(false)
+      setHeight(lastHeight)
       resizeTypeRef.current = null
       document.removeEventListener("mousemove", handleMouseMove)
       document.removeEventListener("mouseup", handleMouseUp)
@@ -205,18 +223,28 @@ export function useResizable(options: UseResizableOptions = {}): UseResizableRet
     const startHeight = height
     let lastWidth = startWidth
     let lastHeight = startHeight
+    let rafId: number | null = null
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const deltaX = moveEvent.clientX - startX
       const deltaY = moveEvent.clientY - startY
       lastWidth = clampWidth(startWidth + deltaX)
       lastHeight = clampHeight(startHeight + deltaY)
-      setWidth(lastWidth)
-      setHeight(lastHeight)
+      // Throttle state updates to one per animation frame to avoid jank
+      if (rafId === null) {
+        rafId = requestAnimationFrame(() => {
+          setWidth(lastWidth)
+          setHeight(lastHeight)
+          rafId = null
+        })
+      }
     }
 
     const handleMouseUp = () => {
+      if (rafId !== null) cancelAnimationFrame(rafId)
       setIsResizing(false)
+      setWidth(lastWidth)
+      setHeight(lastHeight)
       resizeTypeRef.current = null
       document.removeEventListener("mousemove", handleMouseMove)
       document.removeEventListener("mouseup", handleMouseUp)

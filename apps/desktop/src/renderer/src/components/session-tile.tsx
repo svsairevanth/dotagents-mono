@@ -258,15 +258,25 @@ export function SessionTile({
     setIsResizing(true)
     const startY = e.clientY
     const startHeight = tileHeight
+    let rafId: number | null = null
+    let lastHeight = startHeight
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const delta = moveEvent.clientY - startY
-      const newHeight = Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, startHeight + delta))
-      setTileHeight(newHeight)
+      lastHeight = Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, startHeight + delta))
+      // Throttle state updates to one per animation frame to avoid jank
+      if (rafId === null) {
+        rafId = requestAnimationFrame(() => {
+          setTileHeight(lastHeight)
+          rafId = null
+        })
+      }
     }
 
     const handleMouseUp = () => {
+      if (rafId !== null) cancelAnimationFrame(rafId)
       setIsResizing(false)
+      setTileHeight(lastHeight)
       document.removeEventListener("mousemove", handleMouseMove)
       document.removeEventListener("mouseup", handleMouseUp)
     }

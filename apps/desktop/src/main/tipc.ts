@@ -4249,6 +4249,24 @@ export const router = {
       return skillsService.getEnabledSkillsInstructionsForProfile(enabledSkillIds)
     }),
 
+  // ============================================================================
+  // Bundle Export/Import (Issue #25: .dotagents bundles)
+  // ============================================================================
+
+  exportBundle: t.procedure.action(async () => {
+    const { globalAgentsFolder } = await import("./config")
+    const { exportBundleToFile } = await import("./bundle-service")
+    const filePath = await exportBundleToFile(globalAgentsFolder)
+    return { success: !!filePath, filePath }
+  }),
+
+  previewBundle: t.procedure
+    .input<{ filePath: string }>()
+    .action(async ({ input }) => {
+      const { previewBundle } = await import("./bundle-service")
+      return previewBundle(input.filePath)
+    }),
+
   // Memory service handlers
   getAllMemories: t.procedure
     .action(async () => {

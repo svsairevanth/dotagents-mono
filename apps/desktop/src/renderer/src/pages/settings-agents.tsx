@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@renderer/components/ui/card"
 import { Badge } from "@renderer/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@renderer/components/ui/tabs"
-import { Trash2, Plus, Edit2, Save, X, Server, Sparkles, Brain, Settings2, ChevronDown, ChevronRight, Wrench, RefreshCw, ExternalLink } from "lucide-react"
+import { Trash2, Plus, Edit2, Save, X, Server, Sparkles, Brain, Settings2, ChevronDown, ChevronRight, Wrench, RefreshCw, ExternalLink, Download } from "lucide-react"
 import { Facehash } from "facehash"
 
 // Curated palette of vivid colors to pick from deterministically
@@ -376,6 +376,14 @@ export function SettingsAgents() {
     <div className="modern-panel h-full overflow-y-auto overflow-x-hidden px-6 py-4">
       {!editing && (
         <div className="flex items-center justify-end gap-2 mb-4">
+          <Button variant="outline" className="gap-2" onClick={async () => {
+            const result = await tipcClient.exportBundle()
+            if (result.success) {
+              // Show success toast if available
+            }
+          }}>
+            <Download className="h-4 w-4" />Export Bundle
+          </Button>
           <Button variant="outline" className="gap-2" onClick={async () => { await tipcClient.reloadAgentProfiles(); loadAgents(); queryClient.invalidateQueries({ queryKey: ["agentProfilesSidebar"] }) }}>
             <RefreshCw className="h-4 w-4" />Rescan Files
           </Button>

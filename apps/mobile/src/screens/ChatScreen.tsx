@@ -27,6 +27,7 @@ import { useConfigContext, saveConfig } from '../store/config';
 import { useSessionContext } from '../store/sessions';
 import { useMessageQueueContext } from '../store/message-queue';
 import { MessageQueuePanel } from '../ui/MessageQueuePanel';
+import { ResponseHistoryPanel } from '../ui/ResponseHistoryPanel';
 import { useConnectionManager } from '../store/connectionManager';
 import { useTunnelConnection } from '../store/tunnelConnection';
 import { useProfile } from '../store/profile';
@@ -475,6 +476,10 @@ export default function ChatScreen({ route, navigation }: any) {
   // Track progress messages so we can merge them with final conversationHistory
   // instead of replacing, preventing intermediate messages from disappearing (#1083)
   const progressMessagesRef = useRef<ChatMessage[]>([]);
+  // Track respond_to_user history for the current session (Issue #26)
+  const [respondToUserHistory, setRespondToUserHistory] = useState<
+    Array<{ text: string; timestamp: number }>
+  >([]);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
 	// Stable ref to the latest send() to avoid stale closures in speech callbacks
 	const sendRef = useRef<(text: string) => Promise<void>>(async () => {});
@@ -716,6 +721,8 @@ export default function ChatScreen({ route, navigation }: any) {
       // "final response expanded" behavior per chat and prevent stale UI state from leaking.
       setExpandedMessages({});
       setExpandedToolCalls({});
+      // Clear respond_to_user history for the new session
+      setRespondToUserHistory([]);
       // Clear stale in-flight marker when switching sessions.
       pendingLazyLoadSessionIdRef.current = null;
       // Clear skipNextPersistRef to prevent the first real message in the new session
@@ -1404,8 +1411,16 @@ export default function ChatScreen({ route, navigation }: any) {
           console.log('[ChatScreen] Request superseded within same session, skipping onProgress update');
           return;
         }
-        // Capture userResponse from progress updates for TTS
+        // Capture userResponse from progress updates for TTS and history panel
         if (update.userResponse || update.spokenContent) {
+          const responseText = update.userResponse || update.spokenContent;
+          if (responseText && responseText !== lastUserResponse) {
+            // Add to respond_to_user history (deduplicate by text)
+            setRespondToUserHistory((prev) => {
+              if (prev.length > 0 && prev[prev.length - 1].text === responseText) return prev;
+              return [...prev, { text: responseText, timestamp: Date.now() }];
+            });
+          }
           lastUserResponse = update.userResponse || update.spokenContent;
         }
         // Mid-turn TTS: play immediately when userResponse is first set
@@ -1828,8 +1843,15 @@ export default function ChatScreen({ route, navigation }: any) {
       const onProgress = (update: AgentProgressUpdate) => {
         if (sessionStore.currentSessionId !== requestSessionId) return;
         if (activeRequestIdRef.current !== thisRequestId) return;
-        // Capture userResponse from progress updates for TTS
+        // Capture userResponse from progress updates for TTS and history panel
         if (update.userResponse || update.spokenContent) {
+          const responseText = update.userResponse || update.spokenContent;
+          if (responseText && responseText !== lastUserResponse) {
+            setRespondToUserHistory((prev) => {
+              if (prev.length > 0 && prev[prev.length - 1].text === responseText) return prev;
+              return [...prev, { text: responseText, timestamp: Date.now() }];
+            });
+          }
           lastUserResponse = update.userResponse || update.spokenContent;
         }
         // Mid-turn TTS: play immediately when userResponse is first set
@@ -2894,6 +2916,15 @@ export default function ChatScreen({ route, navigation }: any) {
               </Text>
             )}
           </View>
+        )}
+        {/* Respond-to-user history panel (Issue #26) */}
+        {respondToUserHistory.length > 0 && (
+          <ResponseHistoryPanel
+            responses={respondToUserHistory}
+            ttsRate={config.ttsRate ?? 1.0}
+            ttsPitch={config.ttsPitch ?? 1.0}
+            ttsVoiceId={config.ttsVoiceId}
+          />
         )}
         {/* Message Queue Panel */}
         {messageQueueEnabled && queuedMessages.length > 0 && (

@@ -13,6 +13,7 @@ import { toast } from "sonner"
 
 import { logUI } from "@renderer/lib/debug"
 import { PredefinedPromptsMenu } from "@renderer/components/predefined-prompts-menu"
+import { AgentSelector, useSelectedAgentId } from "@renderer/components/agent-selector"
 import { useConfigQuery } from "@renderer/lib/query-client"
 import { useConversationHistoryQuery } from "@renderer/lib/queries"
 import { getMcpToolsShortcutDisplay, getTextInputShortcutDisplay, getDictationShortcutDisplay } from "@shared/key-utils"
@@ -40,7 +41,7 @@ function formatTimestamp(timestamp: number): string {
 
 const RECENT_SESSIONS_LIMIT = 8
 
-function EmptyState({ onTextClick, onVoiceClick, onSelectPrompt, onPastSessionClick, onOpenPastSessionsDialog, textInputShortcut, voiceInputShortcut, dictationShortcut }: {
+function EmptyState({ onTextClick, onVoiceClick, onSelectPrompt, onPastSessionClick, onOpenPastSessionsDialog, textInputShortcut, voiceInputShortcut, dictationShortcut, selectedAgentId, onSelectAgent }: {
   onTextClick: () => void
   onVoiceClick: () => void
   onSelectPrompt: (content: string) => void
@@ -49,6 +50,8 @@ function EmptyState({ onTextClick, onVoiceClick, onSelectPrompt, onPastSessionCl
   textInputShortcut: string
   voiceInputShortcut: string
   dictationShortcut: string
+  selectedAgentId: string | null
+  onSelectAgent: (id: string | null) => void
 }) {
   const conversationHistoryQuery = useConversationHistoryQuery()
   const recentSessions = useMemo(
@@ -67,6 +70,10 @@ function EmptyState({ onTextClick, onVoiceClick, onSelectPrompt, onPastSessionCl
         Start a new agent session using text or voice input. Your sessions will appear here as tiles.
       </p>
       <div className="flex flex-col items-center gap-4">
+        <AgentSelector
+          selectedAgentId={selectedAgentId}
+          onSelectAgent={onSelectAgent}
+        />
         <div className="flex gap-3 items-center">
           <Button onClick={onTextClick} className="gap-2">
             <Plus className="h-4 w-4" />
@@ -149,6 +156,7 @@ export function Component() {
   const agentProgressById = useAgentStore((s) => s.agentProgressById)
   const focusedSessionId = useAgentStore((s) => s.focusedSessionId)
   const setFocusedSessionId = useAgentStore((s) => s.setFocusedSessionId)
+  const [selectedAgentId, setSelectedAgentId] = useSelectedAgentId()
   const scrollToSessionId = useAgentStore((s) => s.scrollToSessionId)
   const setScrollToSessionId = useAgentStore((s) => s.setScrollToSessionId)
   // Get config for shortcut displays
@@ -193,14 +201,37 @@ export function Component() {
   // Declared before allProgressEntries so it can be used in the filter below.
   const [pendingConversationId, setPendingConversationId] = useState<string | null>(null)
 
+  // Check if any real (non-pending) active session exists for the pending conversation.
+  // Used both to suppress duplicate tiles in the memo AND to auto-dismiss the pending tile.
+  const hasRealActiveSessionForPending = pendingConversationId
+    ? Array.from(agentProgressById.entries()).some(
+        ([sessionId, progress]) =>
+          !sessionId.startsWith("pending-") &&
+          progress?.conversationId === pendingConversationId &&
+          !progress?.isComplete
+      )
+    : false
+
+  // Auto-dismiss the pending tile synchronously via derived state:
+  // When a real session starts for the pending conversation, clear the pending state
+  // so we don't briefly show two tiles (the old pending + the new "Initializing..." session).
+  useEffect(() => {
+    if (hasRealActiveSessionForPending) {
+      setPendingConversationId(null)
+    }
+  }, [hasRealActiveSessionForPending])
+
   const allProgressEntries = React.useMemo(() => {
     const entries = Array.from(agentProgressById.entries())
       .filter(([_, progress]) => progress !== null)
       // When a pending continuation tile exists for a conversation, hide the
       // completed progress entry for the same conversation to avoid showing
       // duplicate tiles (one pending, one completed) for the same conversation.
+      // Also hide new active sessions for the same conversation while pending tile
+      // is still visible, to prevent a phantom "Initializing..." tile alongside
+      // the pending tile that already shows conversation history.
       .filter(([_, progress]) => {
-        if (pendingConversationId && progress?.isComplete && progress?.conversationId === pendingConversationId) {
+        if (pendingConversationId && progress?.conversationId === pendingConversationId) {
           return false
         }
         return true
@@ -361,24 +392,11 @@ export function Component() {
   }
 
   // Auto-dismiss pending tile when a real session starts for the same conversationId
-  // This ensures smooth transition from "pending" state to "active" session
+  // (Handled above via hasRealActiveSessionForPending — this effect is kept as a
+  // safety net but the primary dismissal now happens synchronously in the memo filter
+  // to prevent the phantom "Initializing..." tile from ever rendering.)
   useEffect(() => {
-    if (!pendingConversationId) return
-
-    // Check if any active (non-complete) real session exists for this conversationId.
-    // Completed sessions should not dismiss the pending tile because we want to
-    // reload completed history from disk for freshness and remote-sync correctness.
-    const hasRealSession = Array.from(agentProgressById.entries()).some(
-      ([sessionId, progress]) =>
-        !sessionId.startsWith("pending-") &&
-        progress?.conversationId === pendingConversationId &&
-        !progress?.isComplete
-    )
-
-    if (hasRealSession) {
-      // A real session has started for this conversation, dismiss the pending tile
-      setPendingConversationId(null)
-    }
+    // Already handled by the effect near allProgressEntries
   }, [pendingConversationId, agentProgressById])
 
   // Handle text click - open panel with text input
@@ -486,12 +504,27 @@ export function Component() {
     return LAYOUT_MODES[(idx + 1) % LAYOUT_MODES.length]
   }, [tileLayoutMode])
 
-  const handleMaximizeSingleTile = useCallback(() => {
-    if (tileLayoutMode === "1x1") return
-    clearPersistedSize("session-tile")
-    setTileLayoutMode("1x1")
-    setTileResetKey(prev => prev + 1)
-  }, [tileLayoutMode])
+  // Track previous layout mode so we can restore when exiting maximize
+  const previousLayoutModeRef = useRef<TileLayoutMode>("1x2")
+
+  const handleMaximizeTile = useCallback((sessionId?: string) => {
+    if (tileLayoutMode === "1x1") {
+      // Restore previous layout mode
+      clearPersistedSize("session-tile")
+      setTileLayoutMode(previousLayoutModeRef.current)
+      setTileResetKey(prev => prev + 1)
+    } else {
+      // Maximize: remember current layout and switch to 1x1
+      previousLayoutModeRef.current = tileLayoutMode
+      clearPersistedSize("session-tile")
+      setTileLayoutMode("1x1")
+      setTileResetKey(prev => prev + 1)
+      // Focus the specific tile being maximized
+      if (sessionId) {
+        setFocusedSessionId(sessionId)
+      }
+    }
+  }, [tileLayoutMode, setFocusedSessionId])
 
   // Count inactive (completed) sessions
   const inactiveSessionCount = useMemo(() => {
@@ -499,7 +532,6 @@ export function Component() {
   }, [allProgressEntries])
 
   const visibleTileCount = allProgressEntries.length + (pendingProgress ? 1 : 0)
-  const showSingleTileMaximize = visibleTileCount === 1 && tileLayoutMode !== "1x1"
 
   const hasSessions = allProgressEntries.length > 0 || !!pendingProgress
 
@@ -510,6 +542,11 @@ export function Component() {
       {hasSessions && (
         <div className="flex-shrink-0 px-4 py-2 flex items-center justify-between bg-muted/20 border-b">
           <div className="flex gap-2 items-center">
+            <AgentSelector
+              selectedAgentId={selectedAgentId}
+              onSelectAgent={setSelectedAgentId}
+              compact
+            />
             <Button size="sm" onClick={handleTextClick} className="gap-2">
               <Plus className="h-4 w-4" />
               Start with Text
@@ -582,6 +619,8 @@ export function Component() {
             textInputShortcut={textInputShortcut}
             voiceInputShortcut={voiceInputShortcut}
             dictationShortcut={dictationShortcut}
+            selectedAgentId={selectedAgentId}
+            onSelectAgent={setSelectedAgentId}
           />
         ) : (
           /* Active sessions - grid view */
@@ -607,9 +646,8 @@ export function Component() {
                     onDismiss={handleDismissPendingContinuation}
                     isCollapsed={collapsedSessions[pendingSessionId] ?? false}
                     onCollapsedChange={(collapsed) => handleCollapsedChange(pendingSessionId, collapsed)}
-                    onExpand={showSingleTileMaximize ? handleMaximizeSingleTile : undefined}
+                    onExpand={() => handleMaximizeTile(pendingSessionId)}
                     isExpanded={tileLayoutMode === "1x1"}
-
                   />
                 </SessionTileWrapper>
               )}
@@ -640,9 +678,8 @@ export function Component() {
                         onDismiss={() => handleDismissSession(sessionId)}
                         isCollapsed={isCollapsed}
                         onCollapsedChange={(collapsed) => handleCollapsedChange(sessionId, collapsed)}
-                        onExpand={showSingleTileMaximize ? handleMaximizeSingleTile : undefined}
+                        onExpand={() => handleMaximizeTile(sessionId)}
                         isExpanded={tileLayoutMode === "1x1"}
-
                       />
                     </SessionTileWrapper>
                   </div>
