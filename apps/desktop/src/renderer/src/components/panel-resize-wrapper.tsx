@@ -7,6 +7,13 @@ const WAVEFORM_MIN_HEIGHT = 150
 type PanelMode = "normal" | "agent" | "textInput"
 const isPanelMode = (value: unknown): value is PanelMode =>
   value === "normal" || value === "agent" || value === "textInput"
+const isPanelSize = (value: unknown): value is { width: number; height: number } =>
+  !!value &&
+  typeof value === "object" &&
+  "width" in value &&
+  "height" in value &&
+  typeof (value as { width: unknown }).width === "number" &&
+  typeof (value as { height: unknown }).height === "number"
 
 interface PanelResizeWrapperProps {
   children: React.ReactNode
@@ -33,8 +40,8 @@ export function PanelResizeWrapper({
     const init = async () => {
       try {
         const size = await tipcClient.getPanelSize()
-        if (size && typeof size === "object" && "width" in size && "height" in size) {
-          setCurrentSize(size as { width: number; height: number })
+        if (isPanelSize(size)) {
+          setCurrentSize(size)
         }
       } catch (error) {
         console.error("Failed to get panel size on mount:", error)
@@ -46,8 +53,8 @@ export function PanelResizeWrapper({
   // Listen for size changes from main process (when main programmatically resizes panel)
   useEffect(() => {
     const unlisten = rendererHandlers.onPanelSizeChanged.listen((size) => {
-      if (size && typeof size === 'object' && 'width' in size && 'height' in size) {
-        setCurrentSize(size as { width: number; height: number })
+      if (isPanelSize(size)) {
+        setCurrentSize(size)
       }
     })
     return unlisten
@@ -82,25 +89,30 @@ export function PanelResizeWrapper({
   const handleResizeEnd = useCallback(async (size: { width: number; height: number }) => {
     if (!enableResize) return
 
-    // Save the final size by mode so waveform and progress views don't override each other.
+    const requestedFinalSize = {
+      width: Math.max(minWidth, size.width),
+      height: Math.max(minHeight, size.height),
+    }
+
+    // Force one final size sync in case the last throttled mousemove was skipped.
     try {
-      const finalWidth = Math.max(minWidth, size.width)
-      const finalHeight = Math.max(minHeight, size.height)
+      const updatedSize = await tipcClient.updatePanelSize(requestedFinalSize)
+      const finalSize = isPanelSize(updatedSize) ? updatedSize : requestedFinalSize
+      setCurrentSize(finalSize)
+
+      // Save the final size by mode so waveform and progress views don't override each other.
       const rawMode = await tipcClient.getPanelMode()
       const mode: PanelMode = isPanelMode(rawMode) ? rawMode : "normal"
       await tipcClient.savePanelModeSize({
         mode,
-        width: finalWidth,
-        height: finalHeight,
+        width: finalSize.width,
+        height: finalSize.height,
       })
-      setCurrentSize({ width: finalWidth, height: finalHeight })
     } catch (error) {
       try {
         // Fallback for older router builds that may not have mode-aware persistence.
-        const finalWidth = Math.max(minWidth, size.width)
-        const finalHeight = Math.max(minHeight, size.height)
-        await tipcClient.savePanelCustomSize({ width: finalWidth, height: finalHeight })
-        setCurrentSize({ width: finalWidth, height: finalHeight })
+        await tipcClient.savePanelCustomSize(requestedFinalSize)
+        setCurrentSize(requestedFinalSize)
       } catch (fallbackError) {
         console.error("Failed to save panel size:", error, fallbackError)
       }
