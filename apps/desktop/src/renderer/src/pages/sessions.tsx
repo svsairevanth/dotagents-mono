@@ -40,6 +40,7 @@ function formatTimestamp(timestamp: number): string {
 }
 
 const RECENT_SESSIONS_LIMIT = 8
+const PENDING_CONTINUATION_TIMEOUT_MS = 20_000
 
 function EmptyState({ onTextClick, onVoiceClick, onSelectPrompt, onPastSessionClick, onOpenPastSessionsDialog, textInputShortcut, voiceInputShortcut, dictationShortcut }: {
   onTextClick: () => void
@@ -193,6 +194,21 @@ export function Component() {
   // State for pending conversation continuation (user selected a conversation to continue)
   // Declared before allProgressEntries so it can be used in the filter below.
   const [pendingConversationId, setPendingConversationId] = useState<string | null>(null)
+  const [pendingContinuationStartedAt, setPendingContinuationStartedAt] = useState<number | null>(null)
+  const pendingConversationIdRef = useRef<string | null>(pendingConversationId)
+  const pendingContinuationStartedAtRef = useRef<number | null>(pendingContinuationStartedAt)
+
+  useEffect(() => {
+    pendingConversationIdRef.current = pendingConversationId
+  }, [pendingConversationId])
+
+  useEffect(() => {
+    pendingContinuationStartedAtRef.current = pendingContinuationStartedAt
+  }, [pendingContinuationStartedAt])
+
+  useEffect(() => {
+    setPendingContinuationStartedAt(null)
+  }, [pendingConversationId])
 
   const allProgressEntries = React.useMemo(() => {
     const entries = Array.from(agentProgressById.entries())
@@ -327,6 +343,7 @@ export function Component() {
       console.error("Pending conversation not found:", pendingConversationId)
     }
     toast.error("Unable to load that past session")
+    setPendingContinuationStartedAt(null)
     setPendingConversationId(null)
   }, [pendingConversationId, pendingConversationQuery.isError, pendingConversationQuery.error, isPendingConversationMissing])
 
@@ -336,14 +353,25 @@ export function Component() {
   const pendingProgress: AgentProgressUpdate | null = useMemo(() => {
     if (!pendingConversationId || !pendingConversationQuery.data) return null
     const conv = pendingConversationQuery.data
+    const isInitializing = pendingContinuationStartedAt !== null
+
     return {
       sessionId: `pending-${pendingConversationId}`,
       conversationId: pendingConversationId,
       conversationTitle: conv.title || "Continue Conversation",
-      currentIteration: 0,
-      maxIterations: 10,
-      steps: [],
-      isComplete: true, // Mark as complete so it shows the follow-up input
+      currentIteration: isInitializing ? 1 : 0,
+      maxIterations: isInitializing ? Infinity : 10,
+      steps: isInitializing
+        ? [{
+            id: `pending-start-${pendingConversationId}`,
+            type: "thinking",
+            title: "Initializing session",
+            description: "Starting agent session...",
+            status: "in_progress",
+            timestamp: pendingContinuationStartedAt,
+          }]
+        : [],
+      isComplete: !isInitializing,
       conversationHistory: conv.messages.map(m => ({
         role: m.role,
         content: m.content,
@@ -352,7 +380,7 @@ export function Component() {
         timestamp: m.timestamp,
       })),
     }
-  }, [pendingConversationId, pendingConversationQuery.data])
+  }, [pendingConversationId, pendingConversationQuery.data, pendingContinuationStartedAt])
 
   // Handle continuing a conversation - check for existing active session first
   // If found, focus it; otherwise create a pending tile
@@ -371,6 +399,7 @@ export function Component() {
       }, 100)
     } else {
       // No active session exists, create a pending tile
+      setPendingContinuationStartedAt(null)
       setPendingConversationId(conversationId)
     }
   }
@@ -378,29 +407,68 @@ export function Component() {
   // Handle dismissing the pending continuation
   const handleDismissPendingContinuation = () => {
     logUI('[Sessions] Dismissing pending continuation:', { pendingConversationId })
+    setPendingContinuationStartedAt(null)
     setPendingConversationId(null)
   }
 
-  // Auto-dismiss pending tile when a real session starts for the same conversationId
-  // This ensures smooth transition from "pending" state to "active" session
+  const handlePendingContinuationStarted = useCallback(() => {
+    setPendingContinuationStartedAt((existing) => existing ?? Date.now())
+  }, [])
+
+  // Auto-dismiss pending tile when a real session starts for the same conversationId.
+  // During initialization, also dismiss when a completed session appears with
+  // activity at/after the follow-up start timestamp.
   useEffect(() => {
     if (!pendingConversationId) return
 
-    // Check if any active (non-complete) real session exists for this conversationId.
-    // Completed sessions should not dismiss the pending tile because we want to
-    // reload completed history from disk for freshness and remote-sync correctness.
     const hasRealSession = Array.from(agentProgressById.entries()).some(
       ([sessionId, progress]) =>
         !sessionId.startsWith("pending-") &&
         progress?.conversationId === pendingConversationId &&
-        !progress?.isComplete
+        (
+          !progress?.isComplete ||
+          (
+            pendingContinuationStartedAt !== null &&
+            getLastActivityTimestamp(progress) >= pendingContinuationStartedAt
+          )
+        )
     )
 
     if (hasRealSession) {
       // A real session has started for this conversation, dismiss the pending tile
+      setPendingContinuationStartedAt(null)
       setPendingConversationId(null)
     }
-  }, [pendingConversationId, agentProgressById])
+  }, [pendingConversationId, pendingContinuationStartedAt, agentProgressById, getLastActivityTimestamp])
+
+  // Safety fallback: if initialization does not produce a real session in time,
+  // dismiss the pending tile instead of leaving it stuck indefinitely.
+  useEffect(() => {
+    if (!pendingConversationId || pendingContinuationStartedAt === null) return undefined
+
+    const timeoutConversationId = pendingConversationId
+    const timeoutStartedAt = pendingContinuationStartedAt
+    const timeoutId = window.setTimeout(() => {
+      if (
+        pendingConversationIdRef.current !== timeoutConversationId ||
+        pendingContinuationStartedAtRef.current !== timeoutStartedAt
+      ) {
+        return
+      }
+
+      logUI("[Sessions] Pending continuation timed out waiting for real session", {
+        pendingConversationId: timeoutConversationId,
+        pendingContinuationStartedAt: timeoutStartedAt,
+      })
+      toast.error("Session startup timed out. Please try again.")
+      setPendingContinuationStartedAt(null)
+      setPendingConversationId(null)
+    }, PENDING_CONTINUATION_TIMEOUT_MS)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [pendingConversationId, pendingContinuationStartedAt])
 
   // Handle text click - open panel with text input
   const handleTextClick = async () => {
@@ -637,10 +705,12 @@ export function Component() {
                     isFocused={true}
                     onFocus={() => {}}
                     onDismiss={handleDismissPendingContinuation}
+                    onFollowUpSent={handlePendingContinuationStarted}
                     isCollapsed={collapsedSessions[pendingSessionId] ?? false}
                     onCollapsedChange={(collapsed) => handleCollapsedChange(pendingSessionId, collapsed)}
                     onExpand={showTileMaximize ? handleMaximizeSingleTile : undefined}
                     isExpanded={tileLayoutMode === "1x1"}
+                    isFollowUpInputInitializing={pendingContinuationStartedAt !== null}
 
                   />
                 </SessionTileWrapper>
