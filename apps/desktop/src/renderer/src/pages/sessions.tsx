@@ -310,15 +310,25 @@ export function Component() {
     enabled: !!pendingConversationId,
   })
 
+  const isPendingConversationMissing =
+    !!pendingConversationId &&
+    pendingConversationQuery.isSuccess &&
+    pendingConversationQuery.data === null
+
   // If loading a pending conversation fails (deleted/missing), clear the pending
   // state so we do not keep showing a stuck loading tile.
   useEffect(() => {
-    if (!pendingConversationId || !pendingConversationQuery.isError) return
+    if (!pendingConversationId) return
+    if (!pendingConversationQuery.isError && !isPendingConversationMissing) return
 
-    console.error("Failed to load pending conversation:", pendingConversationQuery.error)
+    if (pendingConversationQuery.isError) {
+      console.error("Failed to load pending conversation:", pendingConversationQuery.error)
+    } else {
+      console.error("Pending conversation not found:", pendingConversationId)
+    }
     toast.error("Unable to load that past session")
     setPendingConversationId(null)
-  }, [pendingConversationId, pendingConversationQuery.isError, pendingConversationQuery.error])
+  }, [pendingConversationId, pendingConversationQuery.isError, pendingConversationQuery.error, isPendingConversationMissing])
 
   // Create a synthetic AgentProgressUpdate for the pending conversation
   // This allows us to reuse the AgentProgress component with the same UI
@@ -512,7 +522,8 @@ export function Component() {
   const showPendingLoadingTile =
     !!pendingConversationId &&
     !pendingProgress &&
-    !pendingConversationQuery.isError
+    !pendingConversationQuery.isError &&
+    !isPendingConversationMissing
   const hasPendingTile = !!pendingProgress || showPendingLoadingTile
   const showTileMaximize = tileLayoutMode !== "1x1"
 
