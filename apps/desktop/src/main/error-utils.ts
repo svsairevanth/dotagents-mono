@@ -1,4 +1,8 @@
 export function getErrorMessage(error: unknown, fallback = "Unknown error"): string {
+  if (error === null || error === undefined) {
+    return fallback
+  }
+
   if (error instanceof Error) {
     return error.message || fallback
   }
@@ -38,4 +42,3 @@ export function getErrorMessage(error: unknown, fallback = "Unknown error"): str
 export function normalizeError(error: unknown, fallback = "Unknown error"): Error {
   return error instanceof Error ? error : new Error(getErrorMessage(error, fallback))
 }
-

@@ -195,6 +195,16 @@ export function Component() {
   // Declared before allProgressEntries so it can be used in the filter below.
   const [pendingConversationId, setPendingConversationId] = useState<string | null>(null)
   const [pendingContinuationStartedAt, setPendingContinuationStartedAt] = useState<number | null>(null)
+  const pendingConversationIdRef = useRef<string | null>(pendingConversationId)
+  const pendingContinuationStartedAtRef = useRef<number | null>(pendingContinuationStartedAt)
+
+  useEffect(() => {
+    pendingConversationIdRef.current = pendingConversationId
+  }, [pendingConversationId])
+
+  useEffect(() => {
+    pendingContinuationStartedAtRef.current = pendingContinuationStartedAt
+  }, [pendingContinuationStartedAt])
 
   useEffect(() => {
     setPendingContinuationStartedAt(null)
@@ -436,19 +446,23 @@ export function Component() {
   useEffect(() => {
     if (!pendingConversationId || pendingContinuationStartedAt === null) return undefined
 
+    const timeoutConversationId = pendingConversationId
+    const timeoutStartedAt = pendingContinuationStartedAt
     const timeoutId = window.setTimeout(() => {
-      setPendingConversationId((currentConversationId) => {
-        if (currentConversationId !== pendingConversationId) return currentConversationId
-        logUI("[Sessions] Pending continuation timed out waiting for real session", {
-          pendingConversationId,
-          pendingContinuationStartedAt,
-        })
-        toast.error("Session startup timed out. Please try again.")
-        return null
+      if (
+        pendingConversationIdRef.current !== timeoutConversationId ||
+        pendingContinuationStartedAtRef.current !== timeoutStartedAt
+      ) {
+        return
+      }
+
+      logUI("[Sessions] Pending continuation timed out waiting for real session", {
+        pendingConversationId: timeoutConversationId,
+        pendingContinuationStartedAt: timeoutStartedAt,
       })
-      setPendingContinuationStartedAt((currentStartedAt) =>
-        currentStartedAt === pendingContinuationStartedAt ? null : currentStartedAt
-      )
+      toast.error("Session startup timed out. Please try again.")
+      setPendingContinuationStartedAt(null)
+      setPendingConversationId(null)
     }, PENDING_CONTINUATION_TIMEOUT_MS)
 
     return () => {

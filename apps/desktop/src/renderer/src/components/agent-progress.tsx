@@ -1492,8 +1492,7 @@ const SubAgentConversationPanel: React.FC<{
     }))
   }
 
-  const handleCopyAll = async (e: React.MouseEvent) => {
-    e.stopPropagation()
+  const handleCopyAll = async () => {
     const fullConversation = conversation.map(msg => {
       const role = msg.role === 'user' ? 'Task' : msg.role === 'assistant' ? agentName : (msg.toolName || 'Tool')
       return `[${role}]\n${msg.content}`
@@ -1560,7 +1559,10 @@ const SubAgentConversationPanel: React.FC<{
         </div>
         <div className="ml-auto flex items-center gap-1 flex-shrink-0 self-start">
           <button
-            onClick={handleCopyAll}
+            onClick={(e) => {
+              e.stopPropagation()
+              void handleCopyAll()
+            }}
             className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
             title="Copy entire conversation"
           >
