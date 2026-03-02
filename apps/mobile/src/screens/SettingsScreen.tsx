@@ -402,10 +402,12 @@ export default function SettingsScreen({ navigation }: any) {
       fetchRemoteSettings();
       if (isDotAgentsServer) {
         fetchAgentProfiles();
+        fetchMemories();
+        fetchLoops();
       }
     });
     return unsubscribe;
-  }, [navigation, settingsClient, isDotAgentsServer, fetchRemoteSettings, fetchAgentProfiles]);
+  }, [navigation, settingsClient, isDotAgentsServer, fetchRemoteSettings, fetchAgentProfiles, fetchMemories, fetchLoops]);
 
   // Handle pull-to-refresh
   const onRefresh = useCallback(async () => {
@@ -576,30 +578,54 @@ export default function SettingsScreen({ navigation }: any) {
     }
   };
 
-  // Handle memory delete
-  const handleMemoryDelete = async (memoryId: string) => {
-    if (!settingsClient) return;
-    Alert.alert(
-      'Delete Memory',
-      'Are you sure you want to delete this memory?',
-      [
+  const confirmDestructiveAction = useCallback(
+    (title: string, message: string, onConfirm: () => Promise<void> | void) => {
+      if (Platform.OS === 'web') {
+        const confirmFn = (globalThis as { confirm?: (text?: string) => boolean }).confirm;
+        if (!confirmFn) {
+          return;
+        }
+        if (confirmFn(`${title}\n\n${message}`)) {
+          void onConfirm();
+        }
+        return;
+      }
+
+      Alert.alert(title, message, [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: async () => {
-            try {
-              await settingsClient.deleteMemory(memoryId);
-              setMemories(prev => prev.filter(m => m.id !== memoryId));
-            } catch (error: any) {
-              console.error('[Settings] Failed to delete memory:', error);
-              Alert.alert('Error', 'Failed to delete memory');
-            }
+          onPress: () => {
+            void onConfirm();
           },
         },
-      ]
-    );
+      ]);
+    },
+    []
+  );
+
+  // Handle memory delete
+  const handleMemoryDelete = async (memoryId: string) => {
+    if (!settingsClient) return;
+    confirmDestructiveAction('Delete Memory', 'Are you sure you want to delete this memory?', async () => {
+      try {
+        await settingsClient.deleteMemory(memoryId);
+        setMemories(prev => prev.filter(m => m.id !== memoryId));
+      } catch (error: any) {
+        console.error('[Settings] Failed to delete memory:', error);
+        Alert.alert('Error', 'Failed to delete memory');
+      }
+    });
   };
+
+  // Navigate to memory edit screen
+  const handleMemoryEdit = useCallback((memory?: Memory) => {
+    navigation.navigate('MemoryEdit', {
+      memoryId: memory?.id,
+      memory,
+    });
+  }, [navigation]);
 
   // Handle agent profile toggle
   const handleAgentProfileToggle = async (profileId: string) => {
@@ -623,32 +649,42 @@ export default function SettingsScreen({ navigation }: any) {
       return;
     }
 
-    Alert.alert(
-      'Delete Agent',
-      `Are you sure you want to delete "${profile.displayName}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await settingsClient.deleteAgentProfile(profile.id);
-              setAgentProfiles(prev => prev.filter(p => p.id !== profile.id));
-            } catch (error: any) {
-              console.error('[Settings] Failed to delete agent profile:', error);
-              Alert.alert('Error', error.message || 'Failed to delete agent profile');
-            }
-          },
-        },
-      ]
-    );
-  }, [settingsClient]);
+    confirmDestructiveAction('Delete Agent', `Are you sure you want to delete "${profile.displayName}"?`, async () => {
+      try {
+        await settingsClient.deleteAgentProfile(profile.id);
+        setAgentProfiles(prev => prev.filter(p => p.id !== profile.id));
+      } catch (error: any) {
+        console.error('[Settings] Failed to delete agent profile:', error);
+        Alert.alert('Error', error.message || 'Failed to delete agent profile');
+      }
+    });
+  }, [settingsClient, confirmDestructiveAction]);
 
   // Navigate to agent edit screen
   const handleAgentProfileEdit = useCallback((agentId?: string) => {
     navigation.navigate('AgentEdit', { agentId });
   }, [navigation]);
+
+  // Navigate to loop edit screen
+  const handleLoopEdit = useCallback((loop?: Loop) => {
+    navigation.navigate('LoopEdit', {
+      loopId: loop?.id,
+      loop,
+    });
+  }, [navigation]);
+
+  const handleLoopDelete = useCallback((loop: Loop) => {
+    if (!settingsClient) return;
+    confirmDestructiveAction('Delete Loop', `Are you sure you want to delete "${loop.name}"?`, async () => {
+      try {
+        await settingsClient.deleteLoop(loop.id);
+        setLoops(prev => prev.filter(item => item.id !== loop.id));
+      } catch (error: any) {
+        console.error('[Settings] Failed to delete loop:', error);
+        Alert.alert('Error', error.message || 'Failed to delete loop');
+      }
+    });
+  }, [settingsClient, confirmDestructiveAction]);
 
   // Handle loop toggle
   const handleLoopToggle = async (loopId: string) => {
@@ -2031,25 +2067,31 @@ export default function SettingsScreen({ navigation }: any) {
                 ) : (
                   memories.map((memory) => (
                     <View key={memory.id} style={[styles.serverRow, { alignItems: 'flex-start' }]}>
-                      <View style={[styles.serverInfo, { flex: 1 }]}>
-                        <Text style={styles.serverName}>{memory.title}</Text>
-                        <Text style={styles.serverMeta} numberOfLines={2}>{memory.content}</Text>
-                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 4 }}>
-                          {memory.tags.map((tag, idx) => (
-                            <View key={idx} style={[styles.providerOption, { paddingHorizontal: 6, paddingVertical: 2, marginRight: 4, marginTop: 2 }]}>
-                              <Text style={[styles.providerOptionText, { fontSize: 10 }]}>{tag}</Text>
+                      <TouchableOpacity
+                        style={styles.agentInfoPressable}
+                        onPress={() => handleMemoryEdit(memory)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[styles.serverInfo, { flex: 1 }]}> 
+                          <Text style={styles.serverName}>{memory.title}</Text>
+                          <Text style={styles.serverMeta} numberOfLines={2}>{memory.content}</Text>
+                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 4 }}>
+                            {memory.tags.map((tag, idx) => (
+                              <View key={idx} style={[styles.providerOption, { paddingHorizontal: 6, paddingVertical: 2, marginRight: 4, marginTop: 2 }]}>
+                                <Text style={[styles.providerOptionText, { fontSize: 10 }]}>{tag}</Text>
+                              </View>
+                            ))}
+                            <View style={[
+                              styles.providerOption,
+                              { paddingHorizontal: 6, paddingVertical: 2, marginRight: 4, marginTop: 2 },
+                              memory.importance === 'critical' && { backgroundColor: theme.colors.destructive },
+                              memory.importance === 'high' && { backgroundColor: theme.colors.primary },
+                            ]}>
+                              <Text style={[styles.providerOptionText, { fontSize: 10 }]}>{memory.importance}</Text>
                             </View>
-                          ))}
-                          <View style={[
-                            styles.providerOption,
-                            { paddingHorizontal: 6, paddingVertical: 2, marginRight: 4, marginTop: 2 },
-                            memory.importance === 'critical' && { backgroundColor: theme.colors.destructive },
-                            memory.importance === 'high' && { backgroundColor: theme.colors.primary },
-                          ]}>
-                            <Text style={[styles.providerOptionText, { fontSize: 10 }]}>{memory.importance}</Text>
                           </View>
                         </View>
-                      </View>
+                      </TouchableOpacity>
                       <TouchableOpacity
                         style={{ padding: 8 }}
                         onPress={() => handleMemoryDelete(memory.id)}
@@ -2059,8 +2101,14 @@ export default function SettingsScreen({ navigation }: any) {
                     </View>
                   ))
                 )}
+                <TouchableOpacity
+                  style={styles.createAgentButton}
+                  onPress={() => handleMemoryEdit()}
+                >
+                  <Text style={styles.createAgentButtonText}>+ Create Memory</Text>
+                </TouchableOpacity>
                 <Text style={styles.helperText}>
-                  Manage saved agent memories
+                  Tap a memory to edit or create a new one
                 </Text>
               </CollapsibleSection>
             )}
@@ -2142,21 +2190,27 @@ export default function SettingsScreen({ navigation }: any) {
                 ) : (
                   loops.map((loop) => (
                     <View key={loop.id} style={[styles.serverRow, { alignItems: 'flex-start' }]}>
-                      <View style={[styles.serverInfo, { flex: 1 }]}>
-                        <View style={styles.serverNameRow}>
-                          <View style={[
-                            styles.statusDot,
-                            loop.isRunning ? styles.statusConnected : styles.statusDisconnected,
-                          ]} />
-                          <Text style={styles.serverName}>{loop.name}</Text>
+                      <TouchableOpacity
+                        style={styles.agentInfoPressable}
+                        onPress={() => handleLoopEdit(loop)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[styles.serverInfo, { flex: 1 }]}> 
+                          <View style={styles.serverNameRow}>
+                            <View style={[
+                              styles.statusDot,
+                              loop.isRunning ? styles.statusConnected : styles.statusDisconnected,
+                            ]} />
+                            <Text style={styles.serverName}>{loop.name}</Text>
+                          </View>
+                          <Text style={styles.serverMeta} numberOfLines={2}>{loop.prompt}</Text>
+                          <Text style={styles.serverMeta}>
+                            Every {loop.intervalMinutes}min
+                            {loop.profileName && ` • ${loop.profileName}`}
+                            {loop.lastRunAt && ` • Last: ${new Date(loop.lastRunAt).toLocaleTimeString()}`}
+                          </Text>
                         </View>
-                        <Text style={styles.serverMeta} numberOfLines={2}>{loop.prompt}</Text>
-                        <Text style={styles.serverMeta}>
-                          Every {loop.intervalMinutes}min
-                          {loop.profileName && ` • ${loop.profileName}`}
-                          {loop.lastRunAt && ` • Last: ${new Date(loop.lastRunAt).toLocaleTimeString()}`}
-                        </Text>
-                      </View>
+                      </TouchableOpacity>
                       <View style={{ alignItems: 'center' }}>
                         <Switch
                           value={loop.enabled}
@@ -2170,12 +2224,24 @@ export default function SettingsScreen({ navigation }: any) {
                         >
                           <Text style={{ color: theme.colors.primary, fontSize: 12 }}>▶ Run</Text>
                         </TouchableOpacity>
+                        <TouchableOpacity
+                          style={{ marginTop: 8, padding: 4 }}
+                          onPress={() => handleLoopDelete(loop)}
+                        >
+                          <Text style={{ color: theme.colors.destructive, fontSize: 12 }}>🗑 Delete</Text>
+                        </TouchableOpacity>
                       </View>
                     </View>
                   ))
                 )}
+                <TouchableOpacity
+                  style={styles.createAgentButton}
+                  onPress={() => handleLoopEdit()}
+                >
+                  <Text style={styles.createAgentButtonText}>+ Create New Loop</Text>
+                </TouchableOpacity>
                 <Text style={styles.helperText}>
-                  Scheduled agent tasks that run at intervals
+                  Tap a loop to edit, or run/toggle/delete from the actions
                 </Text>
               </CollapsibleSection>
             )}

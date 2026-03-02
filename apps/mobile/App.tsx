@@ -6,6 +6,8 @@ import ChatScreen from './src/screens/ChatScreen';
 import SessionListScreen from './src/screens/SessionListScreen';
 import ConnectionSettingsScreen from './src/screens/ConnectionSettingsScreen';
 import AgentEditScreen from './src/screens/AgentEditScreen';
+import MemoryEditScreen from './src/screens/MemoryEditScreen';
+import LoopEditScreen from './src/screens/LoopEditScreen';
 import { ConfigContext, useConfig, saveConfig } from './src/store/config';
 import { SessionContext, useSessions } from './src/store/sessions';
 import { MessageQueueContext, useMessageQueue } from './src/store/message-queue';
@@ -340,6 +342,16 @@ function Navigation() {
                       name="AgentEdit"
                       component={AgentEditScreen}
                       options={{ title: 'Agent' }}
+                    />
+                    <Stack.Screen
+                      name="MemoryEdit"
+                      component={MemoryEditScreen}
+                      options={{ title: 'Memory' }}
+                    />
+                    <Stack.Screen
+                      name="LoopEdit"
+                      component={LoopEditScreen}
+                      options={{ title: 'Loop' }}
                     />
                   </Stack.Navigator>
                 </NavigationContainer>

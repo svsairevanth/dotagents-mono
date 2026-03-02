@@ -79,6 +79,39 @@ export interface ModelPreset {
   isBuiltIn: boolean;
 }
 
+export type MemoryImportance = 'low' | 'medium' | 'high' | 'critical';
+
+export interface MemoryCreateRequest {
+  title: string;
+  content: string;
+  importance: MemoryImportance;
+  tags: string[];
+}
+
+export interface MemoryUpdateRequest {
+  title?: string;
+  content?: string;
+  importance?: MemoryImportance;
+  tags?: string[];
+  notes?: string;
+}
+
+export interface LoopCreateRequest {
+  name: string;
+  prompt: string;
+  intervalMinutes: number;
+  enabled: boolean;
+  profileId?: string;
+}
+
+export interface LoopUpdateRequest {
+  name?: string;
+  prompt?: string;
+  intervalMinutes?: number;
+  enabled?: boolean;
+  profileId?: string;
+}
+
 export class SettingsApiClient {
   private baseUrl: string;
   private apiKey: string;
@@ -221,11 +254,11 @@ export class ExtendedSettingsApiClient extends SettingsApiClient {
   // ============================================
 
   async getSkills(): Promise<SkillsResponse> {
-    return this.request<SkillsResponse>('/v1/skills');
+    return this.request<SkillsResponse>('/skills');
   }
 
   async toggleSkillForProfile(skillId: string): Promise<{ success: boolean; skillId: string; enabledForProfile: boolean }> {
-    return this.request(`/v1/skills/${encodeURIComponent(skillId)}/toggle-profile`, {
+    return this.request(`/skills/${encodeURIComponent(skillId)}/toggle-profile`, {
       method: 'POST',
     });
   }
@@ -236,11 +269,25 @@ export class ExtendedSettingsApiClient extends SettingsApiClient {
 
   async getMemories(profileId?: string): Promise<MemoriesResponse> {
     const query = profileId ? `?profileId=${encodeURIComponent(profileId)}` : '';
-    return this.request<MemoriesResponse>(`/v1/memories${query}`);
+    return this.request<MemoriesResponse>(`/memories${query}`);
+  }
+
+  async createMemory(data: MemoryCreateRequest): Promise<{ memory: Memory }> {
+    return this.request<{ memory: Memory }>('/memories', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateMemory(id: string, data: MemoryUpdateRequest): Promise<{ success: boolean; memory: Memory }> {
+    return this.request<{ success: boolean; memory: Memory }>(`/memories/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
   }
 
   async deleteMemory(id: string): Promise<{ success: boolean; id: string }> {
-    return this.request(`/v1/memories/${encodeURIComponent(id)}`, {
+    return this.request(`/memories/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     });
   }
@@ -250,35 +297,35 @@ export class ExtendedSettingsApiClient extends SettingsApiClient {
   // ============================================
 
   async getAgentProfiles(): Promise<ApiAgentProfilesResponse> {
-    return this.request<ApiAgentProfilesResponse>('/v1/agent-profiles');
+    return this.request<ApiAgentProfilesResponse>('/agent-profiles');
   }
 
   async getAgentProfile(id: string): Promise<{ profile: ApiAgentProfileFull }> {
-    return this.request<{ profile: ApiAgentProfileFull }>(`/v1/agent-profiles/${encodeURIComponent(id)}`);
+    return this.request<{ profile: ApiAgentProfileFull }>(`/agent-profiles/${encodeURIComponent(id)}`);
   }
 
   async createAgentProfile(data: AgentProfileCreateRequest): Promise<{ profile: ApiAgentProfileFull }> {
-    return this.request<{ profile: ApiAgentProfileFull }>('/v1/agent-profiles', {
+    return this.request<{ profile: ApiAgentProfileFull }>('/agent-profiles', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
   async updateAgentProfile(id: string, data: AgentProfileUpdateRequest): Promise<{ success: boolean; profile: ApiAgentProfileFull }> {
-    return this.request<{ success: boolean; profile: ApiAgentProfileFull }>(`/v1/agent-profiles/${encodeURIComponent(id)}`, {
+    return this.request<{ success: boolean; profile: ApiAgentProfileFull }>(`/agent-profiles/${encodeURIComponent(id)}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
     });
   }
 
   async deleteAgentProfile(id: string): Promise<{ success: boolean }> {
-    return this.request<{ success: boolean }>(`/v1/agent-profiles/${encodeURIComponent(id)}`, {
+    return this.request<{ success: boolean }>(`/agent-profiles/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     });
   }
 
   async toggleAgentProfile(id: string): Promise<{ success: boolean; id: string; enabled: boolean }> {
-    return this.request(`/v1/agent-profiles/${encodeURIComponent(id)}/toggle`, {
+    return this.request(`/agent-profiles/${encodeURIComponent(id)}/toggle`, {
       method: 'POST',
     });
   }
@@ -288,17 +335,37 @@ export class ExtendedSettingsApiClient extends SettingsApiClient {
   // ============================================
 
   async getLoops(): Promise<LoopsResponse> {
-    return this.request<LoopsResponse>('/v1/loops');
+    return this.request<LoopsResponse>('/loops');
+  }
+
+  async createLoop(data: LoopCreateRequest): Promise<{ loop: Loop }> {
+    return this.request<{ loop: Loop }>('/loops', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateLoop(id: string, data: LoopUpdateRequest): Promise<{ success: boolean; loop: Loop }> {
+    return this.request<{ success: boolean; loop: Loop }>(`/loops/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteLoop(id: string): Promise<{ success: boolean; id?: string }> {
+    return this.request<{ success: boolean; id?: string }>(`/loops/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
   }
 
   async toggleLoop(id: string): Promise<{ success: boolean; id: string; enabled: boolean }> {
-    return this.request(`/v1/loops/${encodeURIComponent(id)}/toggle`, {
+    return this.request(`/loops/${encodeURIComponent(id)}/toggle`, {
       method: 'POST',
     });
   }
 
   async runLoop(id: string): Promise<{ success: boolean; id: string }> {
-    return this.request(`/v1/loops/${encodeURIComponent(id)}/run`, {
+    return this.request(`/loops/${encodeURIComponent(id)}/run`, {
       method: 'POST',
     });
   }

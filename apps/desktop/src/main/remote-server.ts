@@ -11,7 +11,7 @@ import { mcpService, MCPToolResult, handleWhatsAppToggle } from "./mcp-service"
 import { processTranscriptWithAgentMode } from "./llm"
 import { state, agentProcessManager, agentSessionStateManager } from "./state"
 import { conversationService } from "./conversation-service"
-import { AgentProgressUpdate, SessionProfileSnapshot } from "../shared/types"
+import { AgentProgressUpdate, SessionProfileSnapshot, LoopConfig } from "../shared/types"
 import { agentSessionTracker } from "./agent-session-tracker"
 import { emergencyStopAll } from "./emergency-stop"
 import { sendMessageNotification, isPushEnabled, clearBadgeCount } from "./push-notification-service"
@@ -638,7 +638,7 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
     // When origin is ["*"] or includes "*", use true to reflect the request origin
     // This is needed because credentials: true doesn't work with literal "*"
     origin: corsOrigins.includes("*") ? true : corsOrigins,
-    methods: ["GET", "POST", "PUT", "PATCH", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
     maxAge: 86400, // Cache preflight for 24 hours
@@ -2303,28 +2303,48 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
   // Repeat Tasks Management Endpoints (for mobile app)
   // ============================================
 
+  const getLoopProfileName = (profileId?: string) =>
+    profileId ? agentProfileService.getById(profileId)?.displayName : undefined
+
+  const loadLoopService = async () => {
+    try {
+      const { loopService } = await import("./loop-service")
+      return loopService
+    } catch {
+      return null
+    }
+  }
+
+  const formatLoopResponse = async (loop: LoopConfig) => {
+    const status = (await loadLoopService())?.getLoopStatus(loop.id)
+
+    return {
+      id: loop.id,
+      name: loop.name,
+      prompt: loop.prompt,
+      intervalMinutes: loop.intervalMinutes,
+      enabled: loop.enabled,
+      profileId: loop.profileId,
+      profileName: getLoopProfileName(loop.profileId),
+      runOnStartup: loop.runOnStartup,
+      lastRunAt: status?.lastRunAt ?? loop.lastRunAt,
+      isRunning: status?.isRunning ?? false,
+      nextRunAt: status?.nextRunAt,
+    }
+  }
+
   // GET /v1/loops - List all repeat tasks
   fastify.get("/v1/loops", async (_req, reply) => {
     try {
-      const cfg = configStore.get()
-      const loops = cfg.loops || []
-      const profiles = agentProfileService.getUserProfiles()
-
-      // Get repeat task runtime statuses if available
-      let statuses: Array<{ id: string; isRunning: boolean; nextRunAt?: number; lastRunAt?: number }> = []
-      try {
-        const { loopService } = await import("./loop-service")
-        statuses = loopService.getLoopStatuses()
-      } catch {
-        // Repeat task service might not be initialized
-      }
+      const loopService = await loadLoopService()
+      const loops = loopService?.getLoops() ?? (configStore.get().loops || [])
+      const statuses = loopService?.getLoopStatuses() ?? []
 
       const statusById = new Map(statuses.map(s => [s.id, s]))
 
       return reply.send({
         loops: loops.map(l => {
           const status = statusById.get(l.id)
-          const profile = l.profileId ? profiles.find(p => p.id === l.profileId) : undefined
           return {
             id: l.id,
             name: l.name,
@@ -2332,7 +2352,7 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
             intervalMinutes: l.intervalMinutes,
             enabled: l.enabled,
             profileId: l.profileId,
-            profileName: profile?.displayName,
+            profileName: getLoopProfileName(l.profileId),
             runOnStartup: l.runOnStartup,
             lastRunAt: status?.lastRunAt ?? l.lastRunAt,
             isRunning: status?.isRunning ?? false,
@@ -2350,6 +2370,30 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
   fastify.post("/v1/loops/:id/toggle", async (req, reply) => {
     try {
       const params = req.params as { id: string }
+      const loopService = await loadLoopService()
+
+      if (loopService) {
+        const existing = loopService.getLoop(params.id)
+        if (!existing) {
+          return reply.code(404).send({ error: "Repeat task not found" })
+        }
+
+        const updated = { ...existing, enabled: !existing.enabled }
+        loopService.saveLoop(updated)
+
+        if (updated.enabled) {
+          loopService.startLoop(params.id)
+        } else {
+          loopService.stopLoop(params.id)
+        }
+
+        return reply.send({
+          success: true,
+          id: params.id,
+          enabled: updated.enabled,
+        })
+      }
+
       const cfg = configStore.get()
       const loops = cfg.loops || []
       const loopIndex = loops.findIndex(l => l.id === params.id)
@@ -2366,19 +2410,6 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
 
       configStore.save({ ...cfg, loops: updatedLoops })
 
-      // Start or stop the loop scheduling to match the new enabled state
-      try {
-        const { loopService } = await import("./loop-service")
-        const newEnabled = updatedLoops[loopIndex].enabled
-        if (newEnabled) {
-          loopService.startLoop(params.id)
-        } else {
-          loopService.stopLoop(params.id)
-        }
-      } catch {
-        // Repeat task service might not be initialized
-      }
-
       return reply.send({
         success: true,
         id: params.id,
@@ -2394,26 +2425,366 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
   fastify.post("/v1/loops/:id/run", async (req, reply) => {
     try {
       const params = req.params as { id: string }
+      const loopService = await loadLoopService()
 
-      // First check if the repeat task exists in config
-      const cfg = configStore.get()
-      const loops = cfg.loops || []
-      const loopExists = loops.some(l => l.id === params.id)
-      if (!loopExists) {
-        return reply.code(404).send({ error: "Repeat task not found" })
+      if (loopService) {
+        const loopExists = loopService.getLoop(params.id)
+        if (!loopExists) {
+          return reply.code(404).send({ error: "Repeat task not found" })
+        }
+
+        const triggered = await loopService.triggerLoop(params.id)
+
+        if (!triggered) {
+          return reply.code(409).send({ error: "Task is already running" })
+        }
+
+        return reply.send({ success: true, id: params.id })
       }
 
-      const { loopService } = await import("./loop-service")
-      const triggered = await loopService.triggerLoop(params.id)
-
-      if (!triggered) {
-        return reply.code(409).send({ error: "Task is already running" })
-      }
-
-      return reply.send({ success: true, id: params.id })
+      return reply.code(503).send({ error: "Repeat task service is unavailable" })
     } catch (error: any) {
       diagnosticsService.logError("remote-server", "Failed to run repeat task", error)
       return reply.code(500).send({ error: error?.message || "Failed to run repeat task" })
+    }
+  })
+
+  // POST /v1/memories - Create a new memory
+  fastify.post("/v1/memories", async (req, reply) => {
+    try {
+      const body = req.body as {
+        title?: unknown
+        content?: unknown
+        importance?: unknown
+        tags?: unknown
+      }
+
+      const title = typeof body.title === "string" ? body.title.trim() : ""
+      const content = typeof body.content === "string" ? body.content.trim() : ""
+      if (!title || !content) {
+        return reply.code(400).send({ error: "title and content are required and must be non-empty strings" })
+      }
+
+      const validImportance = ["low", "medium", "high", "critical"]
+      const importance = typeof body.importance === "string" && validImportance.includes(body.importance)
+        ? (body.importance as "low" | "medium" | "high" | "critical")
+        : "medium"
+      const tags = Array.isArray(body.tags)
+        ? body.tags.filter((tag): tag is string => typeof tag === "string")
+        : []
+
+      const now = Date.now()
+      const id = `memory_${now}_${Math.random().toString(36).slice(2, 11)}`
+
+      const memory = {
+        id,
+        title,
+        content,
+        importance,
+        tags,
+        createdAt: now,
+        updatedAt: now,
+      }
+
+      const success = await memoryService.saveMemory(memory)
+      if (!success) {
+        return reply.code(500).send({ error: "Failed to save memory" })
+      }
+
+      const savedMemory = await memoryService.getMemory(id)
+      if (!savedMemory) {
+        return reply.code(500).send({ error: "Failed to load saved memory" })
+      }
+
+      return reply.send({
+        memory: {
+          id: savedMemory.id,
+          title: savedMemory.title,
+          content: savedMemory.content,
+          tags: savedMemory.tags,
+          importance: savedMemory.importance,
+          createdAt: savedMemory.createdAt,
+          updatedAt: savedMemory.updatedAt,
+        },
+      })
+    } catch (error: any) {
+      diagnosticsService.logError("remote-server", "Failed to create memory", error)
+      return reply.code(500).send({ error: error?.message || "Failed to create memory" })
+    }
+  })
+
+  // PATCH /v1/memories/:id - Update a memory
+  fastify.patch("/v1/memories/:id", async (req, reply) => {
+    try {
+      const params = req.params as { id: string }
+      const body = req.body as {
+        title?: unknown
+        content?: unknown
+        importance?: unknown
+        tags?: unknown
+        notes?: unknown
+      }
+
+      const existing = await memoryService.getMemory(params.id)
+      if (!existing) {
+        return reply.code(404).send({ error: "Memory not found" })
+      }
+
+      const updates: Record<string, unknown> = {}
+      if (body.title !== undefined) {
+        if (typeof body.title !== "string" || body.title.trim() === "") {
+          return reply.code(400).send({ error: "title must be a non-empty string when provided" })
+        }
+        updates.title = body.title.trim()
+      }
+      if (body.content !== undefined) {
+        if (typeof body.content !== "string" || body.content.trim() === "") {
+          return reply.code(400).send({ error: "content must be a non-empty string when provided" })
+        }
+        updates.content = body.content.trim()
+      }
+      if (Array.isArray(body.tags) && body.tags.every((tag): tag is string => typeof tag === "string")) {
+        updates.tags = body.tags
+      }
+      if (body.notes !== undefined) {
+        if (typeof body.notes !== "string") {
+          return reply.code(400).send({ error: "notes must be a string when provided" })
+        }
+        updates.userNotes = body.notes
+      }
+      if (body.importance !== undefined) {
+        const validImportance = ["low", "medium", "high", "critical"]
+        if (typeof body.importance === "string" && validImportance.includes(body.importance)) {
+          updates.importance = body.importance
+        } else {
+          return reply.code(400).send({ error: `importance must be one of: ${validImportance.join(", ")}` })
+        }
+      }
+
+      const success = await memoryService.updateMemory(params.id, updates)
+      if (!success) {
+        return reply.code(500).send({ error: "Failed to update memory" })
+      }
+
+      const updated = await memoryService.getMemory(params.id)
+      if (!updated) {
+        return reply.code(500).send({ error: "Failed to load updated memory" })
+      }
+
+      return reply.send({
+        success: true,
+        memory: {
+          id: updated.id,
+          title: updated.title,
+          content: updated.content,
+          tags: updated.tags,
+          importance: updated.importance,
+          createdAt: updated.createdAt,
+          updatedAt: updated.updatedAt,
+        },
+      })
+    } catch (error: any) {
+      diagnosticsService.logError("remote-server", "Failed to update memory", error)
+      return reply.code(500).send({ error: error?.message || "Failed to update memory" })
+    }
+  })
+
+  // POST /v1/loops - Create a new loop/repeat task
+  fastify.post("/v1/loops", async (req, reply) => {
+    try {
+      const body = req.body as {
+        name?: unknown
+        prompt?: unknown
+        intervalMinutes?: unknown
+        enabled?: unknown
+        profileId?: unknown
+      }
+
+      const name = typeof body.name === "string" ? body.name.trim() : ""
+      const prompt = typeof body.prompt === "string" ? body.prompt.trim() : ""
+      if (!name || !prompt) {
+        return reply.code(400).send({ error: "name and prompt are required and must be non-empty strings" })
+      }
+
+      if (
+        body.intervalMinutes !== undefined
+        && (
+          typeof body.intervalMinutes !== "number"
+          || !Number.isFinite(body.intervalMinutes)
+          || !Number.isInteger(body.intervalMinutes)
+          || body.intervalMinutes < 1
+        )
+      ) {
+        return reply.code(400).send({ error: "intervalMinutes must be a finite integer >= 1 when provided" })
+      }
+      const intervalMinutes = typeof body.intervalMinutes === "number" ? body.intervalMinutes : 60
+      if (body.enabled !== undefined && typeof body.enabled !== "boolean") {
+        return reply.code(400).send({ error: "enabled must be a boolean when provided" })
+      }
+      if (body.profileId !== undefined && body.profileId !== null && typeof body.profileId !== "string") {
+        return reply.code(400).send({ error: "profileId must be a string when provided" })
+      }
+      const profileId = typeof body.profileId === "string" ? body.profileId.trim() : undefined
+      const enabled = typeof body.enabled === "boolean" ? body.enabled : true
+
+      const id = `loop_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
+
+      const newLoop = {
+        id,
+        name,
+        prompt,
+        intervalMinutes,
+        enabled,
+        profileId: profileId || undefined,
+      }
+
+      const loopService = await loadLoopService()
+      if (loopService) {
+        loopService.saveLoop(newLoop)
+        if (newLoop.enabled) {
+          loopService.startLoop(newLoop.id)
+        }
+      } else {
+        const cfg = configStore.get()
+        const loops = [...(cfg.loops || []), newLoop]
+        configStore.save({ ...cfg, loops })
+      }
+
+      return reply.send({ loop: await formatLoopResponse(loopService?.getLoop(newLoop.id) ?? newLoop) })
+    } catch (error: any) {
+      diagnosticsService.logError("remote-server", "Failed to create repeat task", error)
+      return reply.code(500).send({ error: error?.message || "Failed to create repeat task" })
+    }
+  })
+
+  // PATCH /v1/loops/:id - Update a loop/repeat task
+  fastify.patch("/v1/loops/:id", async (req, reply) => {
+    try {
+      const params = req.params as { id: string }
+      const body = req.body as {
+        name?: unknown
+        prompt?: unknown
+        intervalMinutes?: unknown
+        enabled?: unknown
+        profileId?: unknown
+      }
+
+      const loopService = await loadLoopService()
+      let existing: LoopConfig | undefined
+      let cfg: ReturnType<typeof configStore.get> | undefined
+      let loops: LoopConfig[] = []
+      let loopIndex = -1
+
+      if (loopService) {
+        existing = loopService.getLoop(params.id)
+      } else {
+        cfg = configStore.get()
+        loops = cfg.loops || []
+        loopIndex = loops.findIndex(l => l.id === params.id)
+        existing = loopIndex >= 0 ? loops[loopIndex] : undefined
+      }
+
+      if (!existing) {
+        return reply.code(404).send({ error: "Repeat task not found" })
+      }
+
+      if (body.name !== undefined && (typeof body.name !== "string" || body.name.trim() === "")) {
+        return reply.code(400).send({ error: "name must be a non-empty string when provided" })
+      }
+      if (body.prompt !== undefined && (typeof body.prompt !== "string" || body.prompt.trim() === "")) {
+        return reply.code(400).send({ error: "prompt must be a non-empty string when provided" })
+      }
+      if (
+        body.intervalMinutes !== undefined
+        && (
+          typeof body.intervalMinutes !== "number"
+          || !Number.isFinite(body.intervalMinutes)
+          || !Number.isInteger(body.intervalMinutes)
+          || body.intervalMinutes < 1
+        )
+      ) {
+        return reply.code(400).send({ error: "intervalMinutes must be a finite integer >= 1 when provided" })
+      }
+      if (body.enabled !== undefined && typeof body.enabled !== "boolean") {
+        return reply.code(400).send({ error: "enabled must be a boolean when provided" })
+      }
+      if (body.profileId !== undefined && body.profileId !== null && typeof body.profileId !== "string") {
+        return reply.code(400).send({ error: "profileId must be a string when provided" })
+      }
+
+      const name = typeof body.name === "string" ? body.name.trim() : undefined
+      const prompt = typeof body.prompt === "string" ? body.prompt.trim() : undefined
+      const intervalMinutes =
+        typeof body.intervalMinutes === "number"
+          ? body.intervalMinutes
+          : undefined
+      const enabled = typeof body.enabled === "boolean" ? body.enabled : undefined
+      const profileId = typeof body.profileId === "string" ? body.profileId.trim() : undefined
+      const updated = {
+        ...existing,
+        ...(name !== undefined && { name }),
+        ...(prompt !== undefined && { prompt }),
+        ...(intervalMinutes !== undefined && { intervalMinutes }),
+        ...(enabled !== undefined && { enabled }),
+        ...(body.profileId !== undefined && { profileId: profileId || undefined }),
+      }
+
+      if (loopService) {
+        loopService.saveLoop(updated)
+        if (updated.enabled) {
+          loopService.stopLoop(params.id)
+          loopService.startLoop(params.id)
+        } else {
+          loopService.stopLoop(params.id)
+        }
+      } else if (cfg && loopIndex >= 0) {
+        const updatedLoops = [...loops]
+        updatedLoops[loopIndex] = updated
+        configStore.save({ ...cfg, loops: updatedLoops })
+      }
+
+      return reply.send({ success: true, loop: await formatLoopResponse(loopService?.getLoop(params.id) ?? updated) })
+    } catch (error: any) {
+      diagnosticsService.logError("remote-server", "Failed to update repeat task", error)
+      return reply.code(500).send({ error: error?.message || "Failed to update repeat task" })
+    }
+  })
+
+  // DELETE /v1/loops/:id - Delete a loop/repeat task
+  fastify.delete("/v1/loops/:id", async (req, reply) => {
+    try {
+      const params = req.params as { id: string }
+      const loopService = await loadLoopService()
+
+      if (loopService) {
+        const existing = loopService.getLoop(params.id)
+        if (!existing) {
+          return reply.code(404).send({ error: "Repeat task not found" })
+        }
+
+        const deleted = loopService.deleteLoop(params.id)
+        if (!deleted) {
+          return reply.code(500).send({ error: "Failed to delete repeat task" })
+        }
+
+        return reply.send({ success: true, id: params.id })
+      }
+
+      const cfg = configStore.get()
+      const loops = cfg.loops || []
+      const loopIndex = loops.findIndex(l => l.id === params.id)
+
+      if (loopIndex === -1) {
+        return reply.code(404).send({ error: "Repeat task not found" })
+      }
+
+      const updatedLoops = loops.filter(l => l.id !== params.id)
+      configStore.save({ ...cfg, loops: updatedLoops })
+
+      return reply.send({ success: true, id: params.id })
+    } catch (error: any) {
+      diagnosticsService.logError("remote-server", "Failed to delete repeat task", error)
+      return reply.code(500).send({ error: error?.message || "Failed to delete repeat task" })
     }
   })
 
