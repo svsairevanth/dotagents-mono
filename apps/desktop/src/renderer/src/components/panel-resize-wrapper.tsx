@@ -33,6 +33,7 @@ export function PanelResizeWrapper({
   const [currentSize, setCurrentSize] = useState({ width: 300, height: 200 })
   const resizeStartSizeRef = useRef<{ width: number; height: number } | null>(null)
   const lastResizeCallRef = useRef<number>(0)
+  const inFlightResizeUpdatesRef = useRef(new Set<Promise<unknown>>())
   const RESIZE_THROTTLE_MS = 16 // ~60fps
 
   useEffect(() => {
@@ -63,6 +64,8 @@ export function PanelResizeWrapper({
   const handleResizeStart = useCallback(() => {
     // Capture current size at the start of resize operation
     resizeStartSizeRef.current = currentSize
+    // Reset throttle state so the first move in a new drag is never skipped.
+    lastResizeCallRef.current = 0
   }, [currentSize])
 
   const handleResize = useCallback((delta: { width: number; height: number }) => {
@@ -81,8 +84,12 @@ export function PanelResizeWrapper({
 
     // Update local size immediately; send IPC without awaiting to avoid resize lag.
     setCurrentSize({ width: newWidth, height: newHeight })
-    void tipcClient.updatePanelSize({ width: newWidth, height: newHeight }).catch((error: unknown) => {
+    const updatePromise = tipcClient.updatePanelSize({ width: newWidth, height: newHeight }).catch((error: unknown) => {
       console.error("Failed to update panel size:", error)
+    })
+    inFlightResizeUpdatesRef.current.add(updatePromise)
+    void updatePromise.finally(() => {
+      inFlightResizeUpdatesRef.current.delete(updatePromise)
     })
   }, [enableResize, minWidth, minHeight])
 
@@ -96,6 +103,12 @@ export function PanelResizeWrapper({
 
     // Force one final size sync in case the last throttled mousemove was skipped.
     try {
+      // Ensure all throttled fire-and-forget updates are finished before final sync.
+      const pendingUpdates = Array.from(inFlightResizeUpdatesRef.current)
+      if (pendingUpdates.length > 0) {
+        await Promise.allSettled(pendingUpdates)
+      }
+
       const updatedSize = await tipcClient.updatePanelSize(requestedFinalSize)
       const finalSize = isPanelSize(updatedSize) ? updatedSize : requestedFinalSize
       setCurrentSize(finalSize)

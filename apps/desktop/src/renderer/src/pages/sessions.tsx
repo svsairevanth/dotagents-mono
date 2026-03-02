@@ -600,6 +600,7 @@ export function Component() {
                   sessionId={pendingSessionId}
                   index={0}
                   isCollapsed={collapsedSessions[pendingSessionId] ?? false}
+                  isDraggable={false}
                   onDragStart={() => {}}
                   onDragOver={() => {}}
                   onDragEnd={() => {}}
@@ -626,6 +627,7 @@ export function Component() {
                   sessionId={pendingSessionId}
                   index={0}
                   isCollapsed={false}
+                  isDraggable={false}
                   onDragStart={() => {}}
                   onDragOver={() => {}}
                   onDragEnd={() => {}}

@@ -381,8 +381,11 @@ export function useResizable(options: UseResizableOptions = {}): UseResizableRet
     }
   }, [])
 
-  const renderedWidth = isResizing ? widthRef.current : width
-  const renderedHeight = isResizing ? heightRef.current : height
+  // Use ref-backed preview size immediately once a resize starts, even before
+  // React commits `isResizing`, so parent re-renders can't clobber drag preview.
+  const hasActiveResize = isResizing || resizeTypeRef.current !== null
+  const renderedWidth = hasActiveResize ? widthRef.current : width
+  const renderedHeight = hasActiveResize ? heightRef.current : height
 
   return {
     width: renderedWidth,

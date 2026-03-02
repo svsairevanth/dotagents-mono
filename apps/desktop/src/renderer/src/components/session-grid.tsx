@@ -138,6 +138,7 @@ interface SessionTileWrapperProps {
   index: number
   className?: string
   isCollapsed?: boolean
+  isDraggable?: boolean
   onDragStart?: (sessionId: string, index: number) => void
   onDragOver?: (index: number) => void
   onDragEnd?: () => void
@@ -187,6 +188,7 @@ export function SessionTileWrapper({
   index,
   className,
   isCollapsed,
+  isDraggable = true,
   onDragStart,
   onDragOver,
   onDragEnd,
@@ -259,18 +261,21 @@ export function SessionTileWrapper({
   }, [containerWidth, containerHeight, gap, layoutMode, setSize])
 
   const handleDragStart = (e: React.DragEvent) => {
+    if (!isDraggable) return
     e.dataTransfer.effectAllowed = "move"
     e.dataTransfer.setData("text/plain", sessionId)
     onDragStart?.(sessionId, index)
   }
 
   const handleDragOver = (e: React.DragEvent) => {
+    if (!isDraggable) return
     e.preventDefault()
     e.dataTransfer.dropEffect = "move"
     onDragOver?.(index)
   }
 
   const handleDragEnd = () => {
+    if (!isDraggable) return
     onDragEnd?.()
   }
 
@@ -285,18 +290,20 @@ export function SessionTileWrapper({
         className
       )}
       style={{ width, height: isCollapsed ? "auto" : height }}
-      draggable={!isResizing}
+      draggable={isDraggable && !isResizing}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
       {/* Drag handle indicator in top-left */}
-      <div
-        className="absolute top-2 left-2 z-10 p-1 rounded bg-muted/50 cursor-grab active:cursor-grabbing opacity-0 hover:opacity-100 transition-opacity"
-        title="Drag to reorder"
-      >
-        <GripVertical className="h-4 w-4 text-muted-foreground" />
-      </div>
+      {isDraggable && (
+        <div
+          className="absolute top-2 left-2 z-10 p-1 rounded bg-muted/50 cursor-grab active:cursor-grabbing opacity-0 hover:opacity-100 transition-opacity"
+          title="Drag to reorder"
+        >
+          <GripVertical className="h-4 w-4 text-muted-foreground" />
+        </div>
+      )}
 
       {/* Main content */}
       <div className={cn("w-full", isCollapsed ? "h-auto" : "h-full")}>
@@ -332,4 +339,3 @@ export function SessionTileWrapper({
     </div>
   )
 }
-
