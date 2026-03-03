@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@renderer/components/ui/card"
 import { Badge } from "@renderer/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@renderer/components/ui/tabs"
-import { Trash2, Plus, Edit2, Save, X, Server, Sparkles, Brain, Settings2, ChevronDown, ChevronRight, Wrench, RefreshCw, ExternalLink, Download } from "lucide-react"
+import { Trash2, Plus, Edit2, Save, X, Server, Sparkles, Brain, Settings2, ChevronDown, ChevronRight, Wrench, RefreshCw, ExternalLink, Download, Upload } from "lucide-react"
 import { Facehash } from "facehash"
 import { toast } from "sonner"
 
@@ -28,6 +28,7 @@ function agentColors(seed: string): string[] {
 }
 import { tipcClient } from "@renderer/lib/tipc-client"
 import { ModelSelector } from "@renderer/components/model-selector"
+import { BundleImportDialog } from "@renderer/components/bundle-import-dialog"
 import {
   AgentProfile, AgentProfileConnectionType, AgentProfileConnection,
   ProfileModelConfig, AgentProfileToolConfig, ProfileSkillsConfig, AgentSkill,
@@ -95,6 +96,7 @@ export function SettingsAgents() {
   const [newPropValue, setNewPropValue] = useState("")
   const [showSystemPrompt, setShowSystemPrompt] = useState(false)
   const [defaultSystemPrompt, setDefaultSystemPrompt] = useState("")
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
   const avatarFileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -391,10 +393,19 @@ export function SettingsAgents() {
     }
   }
 
+  const handleImportComplete = () => {
+    loadAgents()
+    queryClient.invalidateQueries({ queryKey: ["agentProfilesSidebar"] })
+    queryClient.invalidateQueries({ queryKey: ["skills"] })
+  }
+
   return (
     <div className="modern-panel h-full overflow-y-auto overflow-x-hidden px-6 py-4">
       {!editing && (
         <div className="flex items-center justify-end gap-2 mb-4">
+          <Button variant="outline" className="gap-2" onClick={() => setIsImportDialogOpen(true)}>
+            <Upload className="h-4 w-4" />Import Bundle
+          </Button>
           <Button variant="outline" className="gap-2" onClick={handleExportBundle}>
             <Download className="h-4 w-4" />Export Bundle
           </Button>
@@ -405,6 +416,11 @@ export function SettingsAgents() {
         </div>
       )}
       {editing ? renderEditForm() : renderAgentList()}
+      <BundleImportDialog
+        open={isImportDialogOpen}
+        onOpenChange={setIsImportDialogOpen}
+        onImportComplete={handleImportComplete}
+      />
     </div>
   )
 
