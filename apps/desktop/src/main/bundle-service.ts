@@ -70,6 +70,13 @@ export interface DotAgentsBundle {
   skills: BundleSkill[]
 }
 
+export interface ExportBundleToFileResult {
+  success: boolean
+  filePath: string | null
+  canceled: boolean
+  error?: string
+}
+
 // ============================================================================
 // Secret stripping
 // ============================================================================
@@ -231,8 +238,16 @@ export async function exportBundle(
 export async function exportBundleToFile(
   agentsDir: string,
   options?: { name?: string; description?: string }
-): Promise<string | null> {
-  const bundle = await exportBundle(agentsDir, options)
+): Promise<ExportBundleToFileResult> {
+  let bundle: DotAgentsBundle
+  try {
+    bundle = await exportBundle(agentsDir, options)
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    logApp("[bundle-service] Failed to prepare bundle export", { error })
+    return { success: false, filePath: null, canceled: false, error: errorMessage }
+  }
+
   const bundleJson = JSON.stringify(bundle, null, 2)
 
   const saveDialogOptions: SaveDialogOptions = {
@@ -243,22 +258,30 @@ export async function exportBundleToFile(
       { name: "JSON", extensions: ["json"] },
     ],
   }
-  const win = BrowserWindow.getFocusedWindow()
-  const result = win
-    ? await dialog.showSaveDialog(win, saveDialogOptions)
-    : await dialog.showSaveDialog(saveDialogOptions)
+  let result: Awaited<ReturnType<typeof dialog.showSaveDialog>>
+  try {
+    const win = BrowserWindow.getFocusedWindow()
+    result = win
+      ? await dialog.showSaveDialog(win, saveDialogOptions)
+      : await dialog.showSaveDialog(saveDialogOptions)
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    logApp("[bundle-service] Failed to open save dialog", { error })
+    return { success: false, filePath: null, canceled: false, error: errorMessage }
+  }
 
   if (result.canceled || !result.filePath) {
-    return null
+    return { success: false, filePath: null, canceled: true }
   }
 
   try {
     fs.writeFileSync(result.filePath, bundleJson, "utf-8")
     logApp("[bundle-service] Bundle saved to", { filePath: result.filePath })
-    return result.filePath
+    return { success: true, filePath: result.filePath, canceled: false }
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
     logApp("[bundle-service] Failed to save bundle", { filePath: result.filePath, error })
-    return null
+    return { success: false, filePath: null, canceled: false, error: errorMessage }
   }
 }
 

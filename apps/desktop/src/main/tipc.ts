@@ -4260,8 +4260,7 @@ export const router = {
   exportBundle: t.procedure.action(async () => {
     const { globalAgentsFolder } = await import("./config")
     const { exportBundleToFile } = await import("./bundle-service")
-    const filePath = await exportBundleToFile(globalAgentsFolder)
-    return { success: !!filePath, filePath }
+    return exportBundleToFile(globalAgentsFolder)
   }),
 
   previewBundle: t.procedure.action(async () => {

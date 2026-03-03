@@ -12,6 +12,7 @@ import { Badge } from "@renderer/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@renderer/components/ui/tabs"
 import { Trash2, Plus, Edit2, Save, X, Server, Sparkles, Brain, Settings2, ChevronDown, ChevronRight, Wrench, RefreshCw, ExternalLink, Download } from "lucide-react"
 import { Facehash } from "facehash"
+import { toast } from "sonner"
 
 // Curated palette of vivid colors to pick from deterministically
 const AVATAR_PALETTE = [
@@ -372,16 +373,29 @@ export function SettingsAgents() {
     e.target.value = ""
   }
 
+  const handleExportBundle = async () => {
+    try {
+      const result = await tipcClient.exportBundle()
+      if (result.success) {
+        toast.success("Bundle exported successfully")
+        return
+      }
+      if (result.canceled) {
+        toast.message("Bundle export canceled")
+        return
+      }
+      toast.error(result.error || "Failed to export bundle")
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      toast.error(`Failed to export bundle: ${errorMessage}`)
+    }
+  }
+
   return (
     <div className="modern-panel h-full overflow-y-auto overflow-x-hidden px-6 py-4">
       {!editing && (
         <div className="flex items-center justify-end gap-2 mb-4">
-          <Button variant="outline" className="gap-2" onClick={async () => {
-            const result = await tipcClient.exportBundle()
-            if (result.success) {
-              // Show success toast if available
-            }
-          }}>
+          <Button variant="outline" className="gap-2" onClick={handleExportBundle}>
             <Download className="h-4 w-4" />Export Bundle
           </Button>
           <Button variant="outline" className="gap-2" onClick={async () => { await tipcClient.reloadAgentProfiles(); loadAgents(); queryClient.invalidateQueries({ queryKey: ["agentProfilesSidebar"] }) }}>
@@ -865,4 +879,3 @@ export function SettingsAgents() {
 }
 
 export { SettingsAgents as Component }
-

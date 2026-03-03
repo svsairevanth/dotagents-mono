@@ -40,6 +40,12 @@ export function ResponseHistoryPanel({
   const [isCollapsed, setIsCollapsed] = useState(true);
   const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
   const isMountedRef = useRef(true);
+  const speechRequestIdRef = useRef(0);
+
+  const nextSpeechRequestId = useCallback(() => {
+    speechRequestIdRef.current += 1;
+    return speechRequestIdRef.current;
+  }, []);
 
   const safeSetSpeakingIndex = useCallback((index: number | null) => {
     if (isMountedRef.current) {
@@ -51,16 +57,18 @@ export function ResponseHistoryPanel({
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
+      nextSpeechRequestId();
       Speech.stop();
     };
-  }, []);
+  }, [nextSpeechRequestId]);
 
   useEffect(() => {
     if (isCollapsed && speakingIndex !== null) {
+      nextSpeechRequestId();
       Speech.stop();
       safeSetSpeakingIndex(null);
     }
-  }, [isCollapsed, speakingIndex, safeSetSpeakingIndex]);
+  }, [isCollapsed, speakingIndex, safeSetSpeakingIndex, nextSpeechRequestId]);
 
   if (responses.length === 0) {
     return null;
@@ -69,12 +77,14 @@ export function ResponseHistoryPanel({
   const handleSpeak = (text: string, index: number) => {
     // If already speaking this message, stop it
     if (speakingIndex === index) {
+      nextSpeechRequestId();
       Speech.stop();
       safeSetSpeakingIndex(null);
       return;
     }
 
     // Stop any current speech
+    const requestId = nextSpeechRequestId();
     Speech.stop();
 
     const processedText = preprocessTextForTTS(text);
@@ -83,13 +93,19 @@ export function ResponseHistoryPanel({
       return;
     }
 
+    const clearIfCurrentRequest = () => {
+      if (speechRequestIdRef.current === requestId) {
+        safeSetSpeakingIndex(null);
+      }
+    };
+
     const speechOptions: Speech.SpeechOptions = {
       language: 'en-US',
       rate: ttsRate,
       pitch: ttsPitch,
-      onDone: () => safeSetSpeakingIndex(null),
-      onStopped: () => safeSetSpeakingIndex(null),
-      onError: () => safeSetSpeakingIndex(null),
+      onDone: clearIfCurrentRequest,
+      onStopped: clearIfCurrentRequest,
+      onError: clearIfCurrentRequest,
     };
     if (ttsVoiceId) {
       speechOptions.voice = ttsVoiceId;
