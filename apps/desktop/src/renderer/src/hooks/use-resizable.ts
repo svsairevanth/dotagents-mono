@@ -110,6 +110,16 @@ export function useResizable(options: UseResizableOptions = {}): UseResizableRet
   const [isResizing, setIsResizing] = useState(false)
 
   const resizeTypeRef = useRef<"width" | "height" | "corner" | null>(null)
+  const isMountedRef = useRef(true)
+  const activeResizeCleanupRef = useRef<(() => void) | null>(null)
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+      activeResizeCleanupRef.current?.()
+      activeResizeCleanupRef.current = null
+    }
+  }, [])
 
   const clampWidth = useCallback((w: number) => Math.min(maxWidth, Math.max(minWidth, w)), [minWidth, maxWidth])
   const clampHeight = useCallback((h: number) => Math.min(maxHeight, Math.max(minHeight, h)), [minHeight, maxHeight])
@@ -132,6 +142,7 @@ export function useResizable(options: UseResizableOptions = {}): UseResizableRet
     setIsResizing(true)
     resizeTypeRef.current = "width"
     onResizeStart?.()
+    activeResizeCleanupRef.current?.()
 
     const startX = e.clientX
     const startWidth = width
@@ -144,19 +155,32 @@ export function useResizable(options: UseResizableOptions = {}): UseResizableRet
       // Throttle state updates to one per animation frame to avoid jank
       if (rafId === null) {
         rafId = requestAnimationFrame(() => {
+          if (!isMountedRef.current) {
+            rafId = null
+            return
+          }
           setWidth(lastWidth)
           rafId = null
         })
       }
     }
 
+    const cleanup = () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId)
+        rafId = null
+      }
+      document.removeEventListener("mousemove", handleMouseMove)
+      document.removeEventListener("mouseup", handleMouseUp)
+    }
+
     const handleMouseUp = () => {
-      if (rafId !== null) cancelAnimationFrame(rafId)
+      cleanup()
+      activeResizeCleanupRef.current = null
+      if (!isMountedRef.current) return
       setIsResizing(false)
       setWidth(lastWidth)
       resizeTypeRef.current = null
-      document.removeEventListener("mousemove", handleMouseMove)
-      document.removeEventListener("mouseup", handleMouseUp)
       const finalSize = { width: lastWidth, height }
       if (storageKey) {
         savePersistedSize(storageKey, finalSize)
@@ -164,6 +188,7 @@ export function useResizable(options: UseResizableOptions = {}): UseResizableRet
       onResizeEnd?.(finalSize)
     }
 
+    activeResizeCleanupRef.current = cleanup
     document.addEventListener("mousemove", handleMouseMove)
     document.addEventListener("mouseup", handleMouseUp)
   }, [width, height, clampWidth, onResizeStart, onResizeEnd, storageKey])
@@ -174,6 +199,7 @@ export function useResizable(options: UseResizableOptions = {}): UseResizableRet
     setIsResizing(true)
     resizeTypeRef.current = "height"
     onResizeStart?.()
+    activeResizeCleanupRef.current?.()
 
     const startY = e.clientY
     const startHeight = height
@@ -186,19 +212,32 @@ export function useResizable(options: UseResizableOptions = {}): UseResizableRet
       // Throttle state updates to one per animation frame to avoid jank
       if (rafId === null) {
         rafId = requestAnimationFrame(() => {
+          if (!isMountedRef.current) {
+            rafId = null
+            return
+          }
           setHeight(lastHeight)
           rafId = null
         })
       }
     }
 
+    const cleanup = () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId)
+        rafId = null
+      }
+      document.removeEventListener("mousemove", handleMouseMove)
+      document.removeEventListener("mouseup", handleMouseUp)
+    }
+
     const handleMouseUp = () => {
-      if (rafId !== null) cancelAnimationFrame(rafId)
+      cleanup()
+      activeResizeCleanupRef.current = null
+      if (!isMountedRef.current) return
       setIsResizing(false)
       setHeight(lastHeight)
       resizeTypeRef.current = null
-      document.removeEventListener("mousemove", handleMouseMove)
-      document.removeEventListener("mouseup", handleMouseUp)
       const finalSize = { width, height: lastHeight }
       if (storageKey) {
         savePersistedSize(storageKey, finalSize)
@@ -206,6 +245,7 @@ export function useResizable(options: UseResizableOptions = {}): UseResizableRet
       onResizeEnd?.(finalSize)
     }
 
+    activeResizeCleanupRef.current = cleanup
     document.addEventListener("mousemove", handleMouseMove)
     document.addEventListener("mouseup", handleMouseUp)
   }, [width, height, clampHeight, onResizeStart, onResizeEnd, storageKey])
@@ -216,6 +256,7 @@ export function useResizable(options: UseResizableOptions = {}): UseResizableRet
     setIsResizing(true)
     resizeTypeRef.current = "corner"
     onResizeStart?.()
+    activeResizeCleanupRef.current?.()
 
     const startX = e.clientX
     const startY = e.clientY
@@ -233,6 +274,10 @@ export function useResizable(options: UseResizableOptions = {}): UseResizableRet
       // Throttle state updates to one per animation frame to avoid jank
       if (rafId === null) {
         rafId = requestAnimationFrame(() => {
+          if (!isMountedRef.current) {
+            rafId = null
+            return
+          }
           setWidth(lastWidth)
           setHeight(lastHeight)
           rafId = null
@@ -240,14 +285,23 @@ export function useResizable(options: UseResizableOptions = {}): UseResizableRet
       }
     }
 
+    const cleanup = () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId)
+        rafId = null
+      }
+      document.removeEventListener("mousemove", handleMouseMove)
+      document.removeEventListener("mouseup", handleMouseUp)
+    }
+
     const handleMouseUp = () => {
-      if (rafId !== null) cancelAnimationFrame(rafId)
+      cleanup()
+      activeResizeCleanupRef.current = null
+      if (!isMountedRef.current) return
       setIsResizing(false)
       setWidth(lastWidth)
       setHeight(lastHeight)
       resizeTypeRef.current = null
-      document.removeEventListener("mousemove", handleMouseMove)
-      document.removeEventListener("mouseup", handleMouseUp)
       const finalSize = { width: lastWidth, height: lastHeight }
       if (storageKey) {
         savePersistedSize(storageKey, finalSize)
@@ -255,6 +309,7 @@ export function useResizable(options: UseResizableOptions = {}): UseResizableRet
       onResizeEnd?.(finalSize)
     }
 
+    activeResizeCleanupRef.current = cleanup
     document.addEventListener("mousemove", handleMouseMove)
     document.addEventListener("mouseup", handleMouseUp)
   }, [width, height, clampWidth, clampHeight, onResizeStart, onResizeEnd, storageKey])
@@ -290,4 +345,3 @@ export function useResizable(options: UseResizableOptions = {}): UseResizableRet
     setSize,
   }
 }
-

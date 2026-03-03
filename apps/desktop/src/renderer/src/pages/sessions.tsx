@@ -8,7 +8,7 @@ import { clearPersistedSize } from "@renderer/hooks/use-resizable"
 import { AgentProgress } from "@renderer/components/agent-progress"
 import { MessageCircle, Mic, Plus, CheckCircle2, LayoutGrid, Maximize2, Grid2x2, Keyboard, Clock } from "lucide-react"
 import { Button } from "@renderer/components/ui/button"
-import { AgentProgressUpdate } from "@shared/types"
+import type { AgentProfile, AgentProgressUpdate } from "@shared/types"
 import { toast } from "sonner"
 
 import { logUI } from "@renderer/lib/debug"
@@ -399,19 +399,51 @@ export function Component() {
     // Already handled by the effect near allProgressEntries
   }, [pendingConversationId, agentProgressById])
 
+  const applySelectedAgentToNextSession = useCallback(async () => {
+    try {
+      let agentIdToApply = selectedAgentId
+
+      if (!agentIdToApply) {
+        const agents = await tipcClient.getAgentProfiles()
+        const enabledAgents = (agents as AgentProfile[]).filter((agent) => agent.enabled)
+        const defaultAgent =
+          enabledAgents.find((agent) => agent.isDefault)
+          ?? enabledAgents.find((agent) => agent.name === "main-agent")
+          ?? enabledAgents[0]
+
+        agentIdToApply = defaultAgent?.id ?? null
+      }
+
+      if (!agentIdToApply) return true
+
+      await tipcClient.setCurrentAgentProfile({ id: agentIdToApply })
+      return true
+    } catch (error) {
+      logUI("[Sessions] Failed to apply selected agent", { selectedAgentId, error })
+      toast.error("Failed to apply selected agent")
+      return false
+    }
+  }, [selectedAgentId])
+
   // Handle text click - open panel with text input
   const handleTextClick = async () => {
+    const applied = await applySelectedAgentToNextSession()
+    if (!applied) return
     await tipcClient.showPanelWindowWithTextInput({})
   }
 
   // Handle voice start - trigger MCP recording
   const handleVoiceStart = async () => {
+    const applied = await applySelectedAgentToNextSession()
+    if (!applied) return
     await tipcClient.showPanelWindow({})
     await tipcClient.triggerMcpRecording({})
   }
 
   // Handle predefined prompt selection - open panel with text input pre-filled
   const handleSelectPrompt = async (content: string) => {
+    const applied = await applySelectedAgentToNextSession()
+    if (!applied) return
     await tipcClient.showPanelWindowWithTextInput({ initialText: content })
   }
 

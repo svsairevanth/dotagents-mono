@@ -249,9 +249,14 @@ export async function exportBundleToFile(
     return null
   }
 
-  fs.writeFileSync(result.filePath, bundleJson, "utf-8")
-  logApp("[bundle-service] Bundle saved to", { filePath: result.filePath })
-  return result.filePath
+  try {
+    fs.writeFileSync(result.filePath, bundleJson, "utf-8")
+    logApp("[bundle-service] Bundle saved to", { filePath: result.filePath })
+    return result.filePath
+  } catch (error) {
+    logApp("[bundle-service] Failed to save bundle", { filePath: result.filePath, error })
+    return null
+  }
 }
 
 // ============================================================================

@@ -81,6 +81,8 @@ export function SessionTile({
   // This prevents the checkmark from appearing on the wrong message if messages are inserted/removed
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isMountedRef = useRef(true)
+  const activeResizeCleanupRef = useRef<(() => void) | null>(null)
 
   // Generate stable message ID from timestamp and role
   const getMessageId = (message: { role: string; timestamp?: number; id?: string }, index: number) => {
@@ -100,6 +102,9 @@ export function SessionTile({
   // Cleanup timeout and in-flight TTS key on unmount
   useEffect(() => {
     return () => {
+      isMountedRef.current = false
+      activeResizeCleanupRef.current?.()
+      activeResizeCleanupRef.current = null
       if (copyTimeoutRef.current) {
         clearTimeout(copyTimeoutRef.current)
       }
@@ -256,6 +261,7 @@ export function SessionTile({
     e.preventDefault()
     e.stopPropagation()
     setIsResizing(true)
+    activeResizeCleanupRef.current?.()
     const startY = e.clientY
     const startHeight = tileHeight
     let rafId: number | null = null
@@ -267,20 +273,34 @@ export function SessionTile({
       // Throttle state updates to one per animation frame to avoid jank
       if (rafId === null) {
         rafId = requestAnimationFrame(() => {
+          if (!isMountedRef.current) {
+            rafId = null
+            return
+          }
           setTileHeight(lastHeight)
           rafId = null
         })
       }
     }
 
-    const handleMouseUp = () => {
-      if (rafId !== null) cancelAnimationFrame(rafId)
-      setIsResizing(false)
-      setTileHeight(lastHeight)
+    const cleanupResize = () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId)
+        rafId = null
+      }
       document.removeEventListener("mousemove", handleMouseMove)
       document.removeEventListener("mouseup", handleMouseUp)
     }
 
+    const handleMouseUp = () => {
+      cleanupResize()
+      activeResizeCleanupRef.current = null
+      if (!isMountedRef.current) return
+      setIsResizing(false)
+      setTileHeight(lastHeight)
+    }
+
+    activeResizeCleanupRef.current = cleanupResize
     document.addEventListener("mousemove", handleMouseMove)
     document.addEventListener("mouseup", handleMouseUp)
   }, [tileHeight])
@@ -689,4 +709,3 @@ export function SessionTile({
     </div>
   )
 }
-
