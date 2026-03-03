@@ -1473,9 +1473,10 @@ export default function ChatScreen({ route, navigation }: any) {
         if (update.userResponse || update.spokenContent) {
           const responseText = update.userResponse || update.spokenContent;
           if (responseText && responseText !== lastUserResponse) {
-            // Add to respond_to_user history (deduplicate by text)
+            // Add to respond_to_user history (deduplicate across entire history)
             setRespondToUserHistory((prev) => {
-              if (prev.length > 0 && prev[prev.length - 1].text === responseText) return prev;
+              // Check if text already exists anywhere in history (not just last item)
+              if (prev.some((entry) => entry.text === responseText)) return prev;
               return [...prev, { text: responseText, timestamp: Date.now() }];
             });
           }
@@ -1905,8 +1906,10 @@ export default function ChatScreen({ route, navigation }: any) {
         if (update.userResponse || update.spokenContent) {
           const responseText = update.userResponse || update.spokenContent;
           if (responseText && responseText !== lastUserResponse) {
+            // Add to respond_to_user history (deduplicate across entire history)
             setRespondToUserHistory((prev) => {
-              if (prev.length > 0 && prev[prev.length - 1].text === responseText) return prev;
+              // Check if text already exists anywhere in history (not just last item)
+              if (prev.some((entry) => entry.text === responseText)) return prev;
               return [...prev, { text: responseText, timestamp: Date.now() }];
             });
           }

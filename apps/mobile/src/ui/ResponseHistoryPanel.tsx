@@ -3,13 +3,14 @@
  * from the current agent session, with per-message TTS playback.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Speech from 'expo-speech';
@@ -28,6 +29,35 @@ interface ResponseHistoryPanelProps {
   ttsRate?: number;
   ttsPitch?: number;
   ttsVoiceId?: string;
+}
+
+/**
+ * Animated wrapper for response items - fades in when first rendered as newest
+ */
+function AnimatedResponseItem({
+  children,
+  isNewest,
+}: {
+  children: React.ReactNode;
+  isNewest: boolean;
+}) {
+  const fadeAnim = useRef(new Animated.Value(isNewest ? 0 : 1)).current;
+
+  useEffect(() => {
+    if (isNewest) {
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [fadeAnim, isNewest]);
+
+  return (
+    <Animated.View style={{ opacity: fadeAnim }}>
+      {children}
+    </Animated.View>
+  );
 }
 
 export function ResponseHistoryPanel({
@@ -119,6 +149,24 @@ export function ResponseHistoryPanel({
     const date = new Date(timestamp);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   };
+
+  // Track previous responses count to detect new entries
+  const prevCountRef = useRef(responses.length);
+  const newestTimestampRef = useRef<number | null>(
+    responses.length > 0 ? Math.max(...responses.map((r) => r.timestamp)) : null
+  );
+
+  // Update refs when responses change
+  useEffect(() => {
+    if (responses.length > prevCountRef.current) {
+      // New entry added - update newest timestamp for animation
+      newestTimestampRef.current = Math.max(...responses.map((r) => r.timestamp));
+    }
+    prevCountRef.current = responses.length;
+  }, [responses]);
+
+  // Memoize the newest timestamp to avoid re-renders triggering new animations
+  const newestTimestamp = useMemo(() => newestTimestampRef.current, [responses.length]);
 
   const styles = StyleSheet.create({
     container: {
@@ -218,28 +266,32 @@ export function ResponseHistoryPanel({
           {[...responses].reverse().map((response, index) => {
             const originalIndex = responses.length - 1 - index;
             const isSpeaking = speakingIndex === originalIndex;
+            // Animate newest entry (shown at top after reverse)
+            const isNewestEntry = index === 0 && response.timestamp === newestTimestamp;
             return (
               <React.Fragment key={`${response.timestamp}-${index}`}>
                 {index > 0 && <View style={styles.separator} />}
-                <View style={styles.responseItem}>
-                  <View style={styles.responseHeader}>
-                    <Text style={styles.timestamp}>
-                      {formatTime(response.timestamp)}
-                    </Text>
-                    <TouchableOpacity
-                      style={styles.speakButton}
-                      onPress={() => handleSpeak(response.text, originalIndex)}
-                      accessibilityLabel={isSpeaking ? 'Stop speaking' : 'Speak this response'}
-                    >
-                      <Ionicons
-                        name={isSpeaking ? 'stop-circle' : 'volume-medium'}
-                        size={18}
-                        color={isSpeaking ? theme.colors.primary : theme.colors.mutedForeground}
-                      />
-                    </TouchableOpacity>
+                <AnimatedResponseItem isNewest={isNewestEntry}>
+                  <View style={styles.responseItem}>
+                    <View style={styles.responseHeader}>
+                      <Text style={styles.timestamp}>
+                        {formatTime(response.timestamp)}
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.speakButton}
+                        onPress={() => handleSpeak(response.text, originalIndex)}
+                        accessibilityLabel={isSpeaking ? 'Stop speaking' : 'Speak this response'}
+                      >
+                        <Ionicons
+                          name={isSpeaking ? 'stop-circle' : 'volume-medium'}
+                          size={18}
+                          color={isSpeaking ? theme.colors.primary : theme.colors.mutedForeground}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                    <MarkdownRenderer content={response.text} />
                   </View>
-                  <MarkdownRenderer content={response.text} />
-                </View>
+                </AnimatedResponseItem>
               </React.Fragment>
             );
           })}
