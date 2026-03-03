@@ -399,7 +399,7 @@ export function Component() {
     // Already handled by the effect near allProgressEntries
   }, [pendingConversationId, agentProgressById])
 
-  const applySelectedAgentToNextSession = useCallback(async () => {
+  const applySelectedAgentToNextSession = useCallback(async (options?: { silent?: boolean }) => {
     try {
       let agentIdToApply = selectedAgentId
 
@@ -420,10 +420,18 @@ export function Component() {
       return true
     } catch (error) {
       logUI("[Sessions] Failed to apply selected agent", { selectedAgentId, error })
-      toast.error("Failed to apply selected agent")
+      if (!options?.silent) {
+        toast.error("Failed to apply selected agent")
+      }
       return false
     }
   }, [selectedAgentId])
+
+  // Keep the main-process current profile aligned with the selected agent so all
+  // new-session entry points (including conversation follow-ups) use the selector.
+  useEffect(() => {
+    void applySelectedAgentToNextSession({ silent: true })
+  }, [applySelectedAgentToNextSession])
 
   // Handle text click - open panel with text input
   const handleTextClick = async () => {

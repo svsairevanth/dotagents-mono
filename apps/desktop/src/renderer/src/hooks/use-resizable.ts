@@ -114,6 +114,7 @@ export function useResizable(options: UseResizableOptions = {}): UseResizableRet
   const activeResizeCleanupRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
+    isMountedRef.current = true
     return () => {
       isMountedRef.current = false
       activeResizeCleanupRef.current?.()

@@ -101,6 +101,7 @@ export function SessionTile({
 
   // Cleanup timeout and in-flight TTS key on unmount
   useEffect(() => {
+    isMountedRef.current = true
     return () => {
       isMountedRef.current = false
       activeResizeCleanupRef.current?.()

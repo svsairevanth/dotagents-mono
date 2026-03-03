@@ -48,6 +48,7 @@ export function ResponseHistoryPanel({
   }, []);
 
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
       Speech.stop();
