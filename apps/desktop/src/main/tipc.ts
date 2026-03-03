@@ -4260,12 +4260,10 @@ export const router = {
     return { success: !!filePath, filePath }
   }),
 
-  previewBundle: t.procedure
-    .input<{ filePath: string }>()
-    .action(async ({ input }) => {
-      const { previewBundle } = await import("./bundle-service")
-      return previewBundle(input.filePath)
-    }),
+  previewBundle: t.procedure.action(async () => {
+    const { previewBundleFromDialog } = await import("./bundle-service")
+    return previewBundleFromDialog()
+  }),
 
   // Memory service handlers
   getAllMemories: t.procedure

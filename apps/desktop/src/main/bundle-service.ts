@@ -84,8 +84,22 @@ const SECRET_PATTERNS = [
   /bearer/i,
 ]
 
+const BUNDLE_FILE_EXTENSIONS = new Set([".dotagents", ".json"])
+
 function isSecretKey(key: string): boolean {
   return SECRET_PATTERNS.some((pattern) => pattern.test(key))
+}
+
+function stripSecretsFromValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => stripSecretsFromValue(item))
+  }
+
+  if (typeof value === "object" && value !== null) {
+    return stripSecretsFromObject(value as Record<string, unknown>)
+  }
+
+  return value
 }
 
 function stripSecretsFromObject(obj: Record<string, unknown>): Record<string, unknown> {
@@ -93,10 +107,8 @@ function stripSecretsFromObject(obj: Record<string, unknown>): Record<string, un
   for (const [key, value] of Object.entries(obj)) {
     if (isSecretKey(key) && typeof value === "string" && value.length > 0) {
       result[key] = "<CONFIGURE_YOUR_KEY>"
-    } else if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-      result[key] = stripSecretsFromObject(value as Record<string, unknown>)
     } else {
-      result[key] = value
+      result[key] = stripSecretsFromValue(value)
     }
   }
   return result
@@ -125,8 +137,9 @@ function sanitizeAgentProfile(profile: AgentProfile): BundleAgentProfile {
 
 function loadMCPServers(agentsDir: string): BundleMCPServer[] {
   const layer = getAgentsLayerPaths(agentsDir)
-  const mcpConfig = safeReadJsonFileSync<Record<string, unknown>>(layer.mcpJsonPath)
-  if (!mcpConfig) return []
+  const mcpConfig = safeReadJsonFileSync<Record<string, unknown>>(layer.mcpJsonPath, {
+    defaultValue: {},
+  })
 
   const servers: BundleMCPServer[] = []
   const mcpServers = (mcpConfig as any)?.mcpServers || mcpConfig
@@ -245,9 +258,24 @@ export async function exportBundleToFile(
 // Preview (for import)
 // ============================================================================
 
+function isSupportedBundleFile(filePath: string): boolean {
+  const extension = path.extname(filePath).toLowerCase()
+  return BUNDLE_FILE_EXTENSIONS.has(extension)
+}
+
 export function previewBundle(filePath: string): DotAgentsBundle | null {
   try {
-    const content = fs.readFileSync(filePath, "utf-8")
+    const normalizedPath = path.resolve(filePath)
+    if (!isSupportedBundleFile(normalizedPath)) {
+      throw new Error("Unsupported bundle file extension")
+    }
+
+    const stats = fs.statSync(normalizedPath)
+    if (!stats.isFile()) {
+      throw new Error("Bundle path must be a file")
+    }
+
+    const content = fs.readFileSync(normalizedPath, "utf-8")
     const bundle = JSON.parse(content) as DotAgentsBundle
 
     // Basic validation
@@ -260,4 +288,28 @@ export function previewBundle(filePath: string): DotAgentsBundle | null {
     logApp("[bundle-service] Failed to preview bundle", { filePath, error })
     return null
   }
+}
+
+export async function previewBundleFromDialog(): Promise<{
+  filePath: string
+  bundle: DotAgentsBundle
+} | null> {
+  const win = BrowserWindow.getFocusedWindow()
+  const result = await dialog.showOpenDialog(win ?? undefined as any, {
+    title: "Select Agent Configuration Bundle",
+    properties: ["openFile"],
+    filters: [{ name: "DotAgents Bundle", extensions: ["dotagents", "json"] }],
+  })
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return null
+  }
+
+  const selectedPath = result.filePaths[0]
+  const bundle = previewBundle(selectedPath)
+  if (!bundle) {
+    return null
+  }
+
+  return { filePath: selectedPath, bundle }
 }

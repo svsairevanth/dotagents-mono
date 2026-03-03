@@ -3,7 +3,7 @@
  * from the current agent session, with per-message TTS playback.
  */
 
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -39,6 +39,27 @@ export function ResponseHistoryPanel({
   const { theme } = useTheme();
   const [isCollapsed, setIsCollapsed] = useState(true);
   const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
+  const isMountedRef = useRef(true);
+
+  const safeSetSpeakingIndex = useCallback((index: number | null) => {
+    if (isMountedRef.current) {
+      setSpeakingIndex(index);
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      Speech.stop();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isCollapsed && speakingIndex !== null) {
+      Speech.stop();
+      safeSetSpeakingIndex(null);
+    }
+  }, [isCollapsed, speakingIndex, safeSetSpeakingIndex]);
 
   if (responses.length === 0) {
     return null;
@@ -48,7 +69,7 @@ export function ResponseHistoryPanel({
     // If already speaking this message, stop it
     if (speakingIndex === index) {
       Speech.stop();
-      setSpeakingIndex(null);
+      safeSetSpeakingIndex(null);
       return;
     }
 
@@ -56,21 +77,24 @@ export function ResponseHistoryPanel({
     Speech.stop();
 
     const processedText = preprocessTextForTTS(text);
-    if (!processedText) return;
+    if (!processedText) {
+      safeSetSpeakingIndex(null);
+      return;
+    }
 
     const speechOptions: Speech.SpeechOptions = {
       language: 'en-US',
       rate: ttsRate,
       pitch: ttsPitch,
-      onDone: () => setSpeakingIndex(null),
-      onStopped: () => setSpeakingIndex(null),
-      onError: () => setSpeakingIndex(null),
+      onDone: () => safeSetSpeakingIndex(null),
+      onStopped: () => safeSetSpeakingIndex(null),
+      onError: () => safeSetSpeakingIndex(null),
     };
     if (ttsVoiceId) {
       speechOptions.voice = ttsVoiceId;
     }
 
-    setSpeakingIndex(index);
+    safeSetSpeakingIndex(index);
     Speech.speak(processedText, speechOptions);
   };
 
