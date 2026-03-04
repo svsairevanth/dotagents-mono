@@ -974,5 +974,36 @@ describe("bundle-service", () => {
         mcpDisabledTools: ["github:create_issue"],
       })
     })
+
+    it("does not treat empty top-level objects as legacy MCP servers during canonicalization", async () => {
+      writeTestMcpJson(targetDir, {
+        localNotes: {},
+        mcpDisabledTools: ["github:create_issue"],
+      })
+
+      const bundle = createTestMcpBundle("exa")
+      const bundlePath = path.join(tempDir, "import-mcp-empty-object.dotagents")
+      fs.writeFileSync(bundlePath, JSON.stringify(bundle))
+
+      const result = await importBundle(bundlePath, targetDir, { conflictStrategy: "skip" })
+      const mcpJson = readTestMcpJson(targetDir)
+
+      expect(result.success).toBe(true)
+      expect(result.mcpServers).toEqual([{ id: "exa", name: "exa", action: "imported" }])
+      expect(mcpJson).toEqual({
+        localNotes: {},
+        mcpConfig: {
+          mcpServers: {
+            exa: {
+              command: "npx",
+              args: ["-y", "@modelcontextprotocol/server-github"],
+              transport: "stdio",
+              disabled: true,
+            },
+          },
+        },
+        mcpDisabledTools: ["github:create_issue"],
+      })
+    })
   })
 })

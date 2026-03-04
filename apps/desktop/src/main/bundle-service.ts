@@ -264,12 +264,13 @@ function stripSecretsFromObject(obj: Record<string, unknown>): Record<string, un
 function isLikelyMcpServerConfig(value: unknown): value is Record<string, unknown> {
   if (!isRecordObject(value)) return false
   const keys = Object.keys(value)
-  if (keys.length === 0) return true
+  if (keys.length === 0) return false
   return keys.some((key) => (MCP_SERVER_CONFIG_KEYS as readonly string[]).includes(key))
 }
 
 function readLegacyTopLevelMcpServers(mcpJson: Record<string, unknown>): Record<string, unknown> {
-  const legacyServers: Record<string, unknown> = {}
+  const legacyServerCandidates: Record<string, Record<string, unknown>> = {}
+  const knownShapeLegacyServers: Record<string, Record<string, unknown>> = {}
 
   for (const [key, value] of Object.entries(mcpJson)) {
     if (key === "mcpConfig" || key === "mcpServers") continue
@@ -278,16 +279,27 @@ function readLegacyTopLevelMcpServers(mcpJson: Record<string, unknown>): Record<
     if (key.startsWith("mcp")) continue
     if (!isRecordObject(value)) continue
 
-    // Accept unknown object shapes as legacy servers for backward compatibility.
-    if (!isLikelyMcpServerConfig(value)) {
-      legacyServers[key] = value
-      continue
+    legacyServerCandidates[key] = value
+    if (isLikelyMcpServerConfig(value)) {
+      knownShapeLegacyServers[key] = value
     }
-
-    legacyServers[key] = value
   }
 
-  return legacyServers
+  if (Object.keys(knownShapeLegacyServers).length > 0) {
+    return knownShapeLegacyServers
+  }
+
+  // Backward compatibility: some legacy server entries use non-canonical keys.
+  // Only fall back to non-empty object candidates to avoid treating `{}` placeholders
+  // as MCP server definitions and deleting them during canonicalization.
+  const fallbackLegacyServers: Record<string, Record<string, unknown>> = {}
+  for (const [key, value] of Object.entries(legacyServerCandidates)) {
+    if (Object.keys(value).length > 0) {
+      fallbackLegacyServers[key] = value
+    }
+  }
+
+  return fallbackLegacyServers
 }
 
 function readMcpServersFromConfig(mcpJson: Record<string, unknown>): Record<string, unknown> {

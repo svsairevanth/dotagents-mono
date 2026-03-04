@@ -181,7 +181,7 @@ export function BundleImportDialog({
   const manifest = preview?.bundle?.manifest
   const conflicts = preview?.conflicts
   const hasConflicts = conflicts
-    ? COMPONENT_KEYS.some(key => isComponentAvailable(key) && conflicts[key].length > 0)
+    ? COMPONENT_KEYS.some(key => normalizedComponents[key] && conflicts[key].length > 0)
     : false
 
   const toggleComponent = (key: keyof typeof components) => {
@@ -349,4 +349,3 @@ function ComponentRow({ icon: Icon, label, count, conflicts, checked, onToggle }
     </div>
   )
 }
-
