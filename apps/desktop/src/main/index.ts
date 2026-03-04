@@ -372,17 +372,22 @@ app.whenReady().then(async () => {
     logApp("Failed to initialize bundled skills:", error)
   }
 
-	  try {
-	    const cfg = configStore.get()
-	    if (cfg.remoteServerEnabled) {
-	      startRemoteServer()
-	        .then(async () => {
-	          logApp("Remote server started")
+		  try {
+		    const cfg = configStore.get()
+		    if (cfg.remoteServerEnabled) {
+		      startRemoteServer()
+		        .then(async (result) => {
+		          if (!result.running) {
+		            logApp(`Remote server failed to start: ${result.error || "Unknown error"}`)
+		            return
+		          }
 
-	          // Auto-start Cloudflare tunnel if enabled
-	          // Wrapped in try/catch to isolate tunnel errors from remote server startup reporting
-	          if (cfg.cloudflareTunnelAutoStart) {
-	            try {
+		          logApp("Remote server started")
+
+		          // Auto-start Cloudflare tunnel if enabled
+		          // Wrapped in try/catch to isolate tunnel errors from remote server startup reporting
+		          if (cfg.cloudflareTunnelAutoStart) {
+		            try {
 	              const cloudflaredInstalled = await checkCloudflaredInstalled()
 	              if (!cloudflaredInstalled) {
 	                logApp("Cloudflare tunnel auto-start skipped: cloudflared not installed")
