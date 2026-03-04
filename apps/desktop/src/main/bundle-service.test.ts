@@ -16,7 +16,7 @@ import {
   type ImportConflictStrategy,
 } from "./bundle-service"
 import { getAgentsLayerPaths } from "./agents-files/modular-config"
-import { writeAgentsProfileFiles } from "./agents-files/agent-profiles"
+import { loadAgentProfilesLayer, writeAgentsProfileFiles } from "./agents-files/agent-profiles"
 import { writeAgentsSkillFile } from "./agents-files/skills"
 import { writeAgentsMemoryFile } from "./agents-files/memories"
 import { writeTaskFile } from "./agents-files/tasks"
@@ -146,6 +146,40 @@ describe("bundle-service", () => {
       expect(bundle.agentProfiles[0].id).toBe("test-agent")
       expect(bundle.agentProfiles[0].name).toBe("Test Agent")
       expect(bundle.agentProfiles[0].connection.type).toBe("internal")
+    })
+
+    it("exports non-secret connection fields for external agent profiles", async () => {
+      const layer = getAgentsLayerPaths(agentsDir)
+      const now = Date.now()
+      const profile: AgentProfile = {
+        id: "external-agent",
+        name: "external-agent",
+        displayName: "External Agent",
+        enabled: true,
+        connection: {
+          type: "stdio",
+          command: "node",
+          args: ["agent.js", "--mode", "safe"],
+          cwd: "/tmp/external-agent",
+          baseUrl: "https://agents.example.com",
+          env: { API_KEY: "super-secret" },
+        },
+        createdAt: now,
+        updatedAt: now,
+      }
+      writeAgentsProfileFiles(layer, profile)
+
+      const bundle = await exportBundle(agentsDir)
+
+      expect(bundle.agentProfiles).toHaveLength(1)
+      expect(bundle.agentProfiles[0].connection).toEqual({
+        type: "stdio",
+        command: "node",
+        args: ["agent.js", "--mode", "safe"],
+        cwd: "/tmp/external-agent",
+        baseUrl: "https://agents.example.com",
+      })
+      expect(bundle.agentProfiles[0].connection).not.toHaveProperty("env")
     })
 
     it("exports skills with full instructions", async () => {
@@ -438,6 +472,37 @@ describe("bundle-service", () => {
       }
 
       const bundlePath = path.join(tempDir, "invalid-role.dotagents")
+      fs.writeFileSync(bundlePath, JSON.stringify(invalidBundle))
+
+      expect(previewBundle(bundlePath)).toBeNull()
+    })
+
+    it("returns null when an agent profile has malformed connection metadata", async () => {
+      const invalidBundle = {
+        manifest: {
+          version: 1,
+          name: "Malformed Connection Metadata",
+          createdAt: new Date().toISOString(),
+          exportedFrom: "test",
+          components: { agentProfiles: 1, mcpServers: 0, skills: 0 },
+        },
+        agentProfiles: [
+          {
+            id: "bad-connection-meta",
+            name: "Bad Connection Meta",
+            enabled: true,
+            connection: {
+              type: "stdio",
+              command: "node",
+              args: "--should-be-array",
+            },
+          },
+        ],
+        mcpServers: [],
+        skills: [],
+      }
+
+      const bundlePath = path.join(tempDir, "invalid-connection-metadata.dotagents")
       fs.writeFileSync(bundlePath, JSON.stringify(invalidBundle))
 
       expect(previewBundle(bundlePath)).toBeNull()
@@ -771,6 +836,61 @@ describe("bundle-service", () => {
       const result = await importBundle(bundlePath, targetDir, { conflictStrategy: "overwrite" })
 
       expect(result.agentProfiles[0].action).toBe("overwritten")
+    })
+
+    it("imports agent profiles with non-secret connection fields intact", async () => {
+      const bundle: DotAgentsBundle = {
+        manifest: {
+          version: 1,
+          name: "External Agent Import",
+          createdAt: new Date().toISOString(),
+          exportedFrom: "test",
+          components: { agentProfiles: 1, mcpServers: 0, skills: 0, repeatTasks: 0, memories: 0 },
+        },
+        agentProfiles: [
+          {
+            id: "external-agent",
+            name: "external-agent",
+            displayName: "External Agent",
+            enabled: true,
+            connection: {
+              type: "stdio",
+              command: "node",
+              args: ["agent.js", "--profile", "ops"],
+              cwd: "/tmp/external-agent",
+              baseUrl: "https://agents.example.com",
+            },
+          },
+        ],
+        mcpServers: [],
+        skills: [],
+        repeatTasks: [],
+        memories: [],
+      }
+
+      const bundlePath = path.join(tempDir, "import-external-agent.dotagents")
+      fs.writeFileSync(bundlePath, JSON.stringify(bundle))
+
+      const result = await importBundle(bundlePath, targetDir, { conflictStrategy: "skip" })
+      const layer = getAgentsLayerPaths(targetDir)
+      const imported = loadAgentProfilesLayer(layer).profiles.find((profile) => profile.id === "external-agent")
+
+      expect(result.success).toBe(true)
+      expect(result.agentProfiles).toHaveLength(1)
+      expect(result.agentProfiles[0]).toMatchObject({
+        id: "external-agent",
+        name: "external-agent",
+        action: "imported",
+      })
+      expect(imported).toBeTruthy()
+      expect(imported?.connection).toEqual({
+        type: "stdio",
+        command: "node",
+        args: ["agent.js", "--profile", "ops"],
+        cwd: "/tmp/external-agent",
+        baseUrl: "https://agents.example.com",
+      })
+      expect(imported?.connection.env).toBeUndefined()
     })
 
     it("respects component selection", async () => {

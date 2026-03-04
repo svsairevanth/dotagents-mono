@@ -11,6 +11,7 @@ import path from "path"
 import { dialog, BrowserWindow, type OpenDialogOptions, type SaveDialogOptions } from "electron"
 import type {
   AgentProfile,
+  AgentProfileConnection,
   AgentSkill,
   AgentMemory,
   LoopConfig,
@@ -55,7 +56,11 @@ export interface BundleAgentProfile {
   guidelines?: string
   connection: {
     type: AgentProfileConnectionType
-    // Secrets stripped — no API keys, tokens, or passwords
+    // Preserve non-secret connection fields to keep imported external agents functional.
+    command?: string
+    args?: string[]
+    cwd?: string
+    baseUrl?: string
   }
 }
 
@@ -370,6 +375,23 @@ function writeCanonicalMcpConfig(
 // ============================================================================
 
 function sanitizeAgentProfile(profile: AgentProfile): BundleAgentProfile {
+  const sanitizedConnection: BundleAgentProfile["connection"] = {
+    type: profile.connection?.type || "internal",
+  }
+  if (isNonEmptyString(profile.connection?.command)) {
+    sanitizedConnection.command = profile.connection.command
+  }
+  if (Array.isArray(profile.connection?.args)) {
+    sanitizedConnection.args = profile.connection.args
+      .filter((arg): arg is string => typeof arg === "string")
+  }
+  if (isNonEmptyString(profile.connection?.cwd)) {
+    sanitizedConnection.cwd = profile.connection.cwd
+  }
+  if (isNonEmptyString(profile.connection?.baseUrl)) {
+    sanitizedConnection.baseUrl = profile.connection.baseUrl
+  }
+
   const sanitized: BundleAgentProfile = {
     id: profile.id,
     name: profile.name,
@@ -379,9 +401,7 @@ function sanitizeAgentProfile(profile: AgentProfile): BundleAgentProfile {
     role: profile.role,
     systemPrompt: profile.systemPrompt,
     guidelines: profile.guidelines,
-    connection: {
-      type: profile.connection?.type || "internal",
-    },
+    connection: sanitizedConnection,
   }
   return sanitized
 }
@@ -619,7 +639,12 @@ function isBundleAgentProfile(value: unknown): value is BundleAgentProfile {
   if (!isOptionalString(value.systemPrompt)) return false
   if (!isOptionalString(value.guidelines)) return false
   if (!isRecordObject(value.connection)) return false
-  return isAgentProfileConnectionType(value.connection.type)
+  if (!isAgentProfileConnectionType(value.connection.type)) return false
+  if (!isOptionalString(value.connection.command)) return false
+  if (value.connection.args !== undefined && !isStringArray(value.connection.args)) return false
+  if (!isOptionalString(value.connection.cwd)) return false
+  if (!isOptionalString(value.connection.baseUrl)) return false
+  return true
 }
 
 function isBundleMcpServer(value: unknown): value is BundleMCPServer {
@@ -920,6 +945,23 @@ export async function importBundle(
 
         // Convert bundle profile to full AgentProfile
         const now = Date.now()
+        const connection: AgentProfileConnection = {
+          type: bundleProfile.connection.type,
+        }
+        if (isNonEmptyString(bundleProfile.connection.command)) {
+          connection.command = bundleProfile.connection.command
+        }
+        if (Array.isArray(bundleProfile.connection.args)) {
+          connection.args = bundleProfile.connection.args
+            .filter((arg): arg is string => typeof arg === "string")
+        }
+        if (isNonEmptyString(bundleProfile.connection.cwd)) {
+          connection.cwd = bundleProfile.connection.cwd
+        }
+        if (isNonEmptyString(bundleProfile.connection.baseUrl)) {
+          connection.baseUrl = bundleProfile.connection.baseUrl
+        }
+
         const fullProfile: AgentProfile = {
           id: finalId,
           name: bundleProfile.name,
@@ -927,7 +969,7 @@ export async function importBundle(
           description: bundleProfile.description,
           systemPrompt: bundleProfile.systemPrompt,
           guidelines: bundleProfile.guidelines,
-          connection: { type: bundleProfile.connection.type },
+          connection,
           role: bundleProfile.role,
           enabled: bundleProfile.enabled,
           createdAt: now,
