@@ -213,11 +213,31 @@ interface ConnectableIpOptions {
   warn?: boolean
 }
 
+function isWildcardBindHost(host: string): boolean {
+  return host === "0.0.0.0" || host === "::"
+}
+
+function isLoopbackHost(host: string): boolean {
+  return host === "127.0.0.1" || host === "localhost" || host === "::1"
+}
+
+function formatHostForHttpUrl(host: string): string {
+  // IPv6 literals must be bracketed in URLs: http://[::1]:3210/v1
+  if (host.includes(":") && !host.startsWith("[") && !host.endsWith("]")) {
+    return `[${host}]`
+  }
+  return host
+}
+
+function buildRemoteServerBaseUrl(host: string, port: number): string {
+  return `http://${formatHostForHttpUrl(host)}:${port}/v1`
+}
+
 export function getConnectableIp(bind: string, options: ConnectableIpOptions = {}): string {
   const { warn = true } = options
 
   // If bound to loopback, warn that mobile devices cannot connect
-  if (bind === "127.0.0.1" || bind === "localhost") {
+  if (isLoopbackHost(bind)) {
     if (warn) {
       console.warn(
         `[Remote Server] Warning: Server is bound to ${bind} (loopback only). ` +
@@ -229,7 +249,7 @@ export function getConnectableIp(bind: string, options: ConnectableIpOptions = {
   }
 
   // If already a specific IP (not wildcard), use it
-  if (bind !== "0.0.0.0") {
+  if (!isWildcardBindHost(bind)) {
     return bind
   }
 
@@ -255,7 +275,7 @@ export function getConnectableIp(bind: string, options: ConnectableIpOptions = {
 }
 
 function isUnconnectableHostForMobilePairing(host: string): boolean {
-  return host === "0.0.0.0" || host === "127.0.0.1" || host === "localhost" || host === "::"
+  return isWildcardBindHost(host) || isLoopbackHost(host)
 }
 
 function resolveActiveModelId(cfg: any): string {
@@ -2820,7 +2840,7 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
       if (currentCfg.remoteServerApiKey && !currentCfg.streamerModeEnabled) {
         // Use connectable IP for QR code (not 0.0.0.0 or 127.0.0.1)
         const connectableIp = getConnectableIp(bind)
-        const serverUrl = `http://${connectableIp}:${port}/v1`
+        const serverUrl = buildRemoteServerBaseUrl(connectableIp, port)
 
         // In headless environments, always print the QR code
         // Otherwise, print if terminal QR is explicitly enabled
@@ -2862,12 +2882,12 @@ export function getRemoteServerStatus() {
   const bind = cfg.remoteServerBindAddress || "127.0.0.1"
   const port = cfg.remoteServerPort || 3210
   const running = !!server
-  const url = running ? `http://${bind}:${port}/v1` : undefined
+  const url = running ? buildRemoteServerBaseUrl(bind, port) : undefined
   let connectableUrl: string | undefined
   if (running) {
     const connectableHost = getConnectableIp(bind, { warn: false })
     if (!isUnconnectableHostForMobilePairing(connectableHost)) {
-      connectableUrl = `http://${connectableHost}:${port}/v1`
+      connectableUrl = buildRemoteServerBaseUrl(connectableHost, port)
     }
   }
   return { running, url, connectableUrl, bind, port, lastError }
@@ -2902,7 +2922,7 @@ export async function printQRCodeToTerminal(urlOverride?: string): Promise<boole
     const port = cfg.remoteServerPort || 3210
     // Use connectable IP for QR code (not 0.0.0.0 or 127.0.0.1)
     const connectableIp = getConnectableIp(bind)
-    serverUrl = `http://${connectableIp}:${port}/v1`
+    serverUrl = buildRemoteServerBaseUrl(connectableIp, port)
   }
 
   // Return the actual result from printTerminalQRCode to indicate success/failure

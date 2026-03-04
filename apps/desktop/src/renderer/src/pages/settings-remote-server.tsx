@@ -27,6 +27,17 @@ function maskUrl(url: string): string {
   return url.replace(/([a-zA-Z0-9-]+)/g, (match) => "*".repeat(Math.min(match.length, 8)))
 }
 
+function isUnconnectableMobileHost(host: string): boolean {
+  return host === "0.0.0.0" || host === "::"
+}
+
+function formatHostForHttpUrl(host: string): string {
+  if (host.includes(":") && !host.startsWith("[") && !host.endsWith("]")) {
+    return `[${host}]`
+  }
+  return host
+}
+
 interface RemoteServerSettingsGroupsProps {
   collapsible?: boolean
   defaultCollapsed?: boolean
@@ -128,9 +139,9 @@ export function RemoteServerSettingsGroups({
   const streamerMode = cfg.streamerModeEnabled ?? false
 
   const fallbackBaseUrl = cfg.remoteServerBindAddress &&
-    cfg.remoteServerBindAddress !== "0.0.0.0" &&
+    !isUnconnectableMobileHost(cfg.remoteServerBindAddress) &&
     cfg.remoteServerPort
-      ? `http://${cfg.remoteServerBindAddress}:${cfg.remoteServerPort}/v1`
+      ? `http://${formatHostForHttpUrl(cfg.remoteServerBindAddress)}:${cfg.remoteServerPort}/v1`
       : undefined
 
   const baseUrl = remoteServerStatus?.connectableUrl ?? fallbackBaseUrl
