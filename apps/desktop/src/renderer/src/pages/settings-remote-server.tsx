@@ -27,6 +27,36 @@ function maskUrl(url: string): string {
   return url.replace(/([a-zA-Z0-9-]+)/g, (match) => "*".repeat(Math.min(match.length, 8)))
 }
 
+function normalizeHostForComparison(host: string): string {
+  const normalized = host.trim().toLowerCase()
+  if (normalized.startsWith("[") && normalized.endsWith("]")) {
+    return normalized.slice(1, -1)
+  }
+  return normalized
+}
+
+function isWildcardMobileHost(host: string): boolean {
+  const normalizedHost = normalizeHostForComparison(host)
+  return normalizedHost === "0.0.0.0" || normalizedHost === "::"
+}
+
+function isLoopbackMobileHost(host: string): boolean {
+  const normalizedHost = normalizeHostForComparison(host)
+  return normalizedHost === "127.0.0.1" || normalizedHost === "localhost" || normalizedHost === "::1"
+}
+
+function isUnconnectableMobileHost(host: string): boolean {
+  return isWildcardMobileHost(host) || isLoopbackMobileHost(host)
+}
+
+function formatHostForHttpUrl(host: string): string {
+  const normalizedHost = host.trim()
+  if (normalizedHost.includes(":") && !normalizedHost.startsWith("[") && !normalizedHost.endsWith("]")) {
+    return `[${normalizedHost}]`
+  }
+  return normalizedHost
+}
+
 interface RemoteServerSettingsGroupsProps {
   collapsible?: boolean
   defaultCollapsed?: boolean
@@ -78,6 +108,13 @@ export function RemoteServerSettingsGroups({
     enabled: cfg?.remoteServerEnabled ?? false,
   })
 
+  const remoteServerStatusQuery = useQuery({
+    queryKey: ["remote-server-status"],
+    queryFn: () => tipcClient.getRemoteServerStatus(),
+    refetchInterval: 2000,
+    enabled: cfg?.remoteServerEnabled ?? false,
+  })
+
   const startTunnelMutation = useMutation({
     mutationFn: () => tipcClient.startCloudflareTunnel(),
     onSuccess: () => {
@@ -101,6 +138,7 @@ export function RemoteServerSettingsGroups({
   })
 
   const tunnelStatus = tunnelStatusQuery.data
+  const remoteServerStatus = remoteServerStatusQuery.data
   const isCloudflaredInstalled = cloudflaredInstalledQuery.data ?? false
   const isCloudflaredLoggedIn = cloudflaredLoggedInQuery.data ?? false
   const tunnelList: Array<{ id: string; name: string; created_at: string }> = tunnelListQuery.data?.tunnels ?? []
@@ -118,10 +156,26 @@ export function RemoteServerSettingsGroups({
 
   const enabled = cfg.remoteServerEnabled ?? false
   const streamerMode = cfg.streamerModeEnabled ?? false
+  const configuredBindAddress = cfg.remoteServerBindAddress || "127.0.0.1"
+  const isRemoteServerRunning = enabled && (remoteServerStatus?.running ?? false)
 
-  const baseUrl = cfg.remoteServerBindAddress && cfg.remoteServerPort
-    ? `http://${cfg.remoteServerBindAddress}:${cfg.remoteServerPort}/v1`
+  const fallbackBaseUrl = !isUnconnectableMobileHost(configuredBindAddress) &&
+    cfg.remoteServerPort
+      ? `http://${formatHostForHttpUrl(configuredBindAddress)}:${cfg.remoteServerPort}/v1`
+      : undefined
+
+  const liveConnectableUrl = isRemoteServerRunning
+    ? remoteServerStatus?.connectableUrl
     : undefined
+  const baseUrl = liveConnectableUrl ?? fallbackBaseUrl
+  const shouldShowConnectabilityWarning =
+    isRemoteServerRunning &&
+    isUnconnectableMobileHost(configuredBindAddress) &&
+    !liveConnectableUrl
+  const showConnectableUrlResolutionWarning =
+    shouldShowConnectabilityWarning && isWildcardMobileHost(configuredBindAddress)
+  const showLoopbackBindWarning =
+    shouldShowConnectabilityWarning && isLoopbackMobileHost(configuredBindAddress)
 
   return (
     <>
@@ -280,21 +334,37 @@ export function RemoteServerSettingsGroups({
                 </div>
               </Control>
 
-              {baseUrl && (
+              {(baseUrl || showConnectableUrlResolutionWarning || showLoopbackBindWarning) && (
                 <>
                   <Control label="Base URL" className="px-3">
-                    <div className="text-sm text-muted-foreground select-text break-all">
-                      {streamerMode ? maskUrl(baseUrl) : baseUrl}
-                    </div>
-                    {streamerMode && (
+                    {baseUrl ? (
+                      <div className="text-sm text-muted-foreground select-text break-all">
+                        {streamerMode ? maskUrl(baseUrl) : baseUrl}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-amber-700 dark:text-amber-300 break-words">
+                        Unable to resolve a LAN-reachable URL for the current bind address.
+                      </div>
+                    )}
+                    {streamerMode && baseUrl && (
                       <div className="mt-1 text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
                         <EyeOff className="h-3 w-3" />
                         URL masked in Streamer Mode
                       </div>
                     )}
+                    {showConnectableUrlResolutionWarning && (
+                      <div className="mt-1 text-xs text-amber-600 dark:text-amber-400 break-words">
+                        The server is running, but no LAN-reachable address was detected for wildcard bind (0.0.0.0/::). Connect to a local network or use a specific LAN IP/host to enable mobile pairing.
+                      </div>
+                    )}
+                    {showLoopbackBindWarning && (
+                      <div className="mt-1 text-xs text-amber-600 dark:text-amber-400 break-words">
+                        The server is running on loopback ({configuredBindAddress}), which is only reachable from this computer. Use 0.0.0.0 or a LAN IP to enable mobile pairing.
+                      </div>
+                    )}
                   </Control>
 
-                  {cfg?.remoteServerApiKey && (
+                  {baseUrl && cfg?.remoteServerApiKey && (
                     <Control label={<ControlLabel label="Mobile App QR Code" tooltip="Scan this QR code with the DotAgents mobile app to connect (local network only)" />} className="px-3">
                       <div className="flex flex-col items-start gap-3">
                         {streamerMode ? (
@@ -664,4 +734,3 @@ export function Component() {
     </div>
   )
 }
-

@@ -209,39 +209,133 @@ function redact(value?: string) {
  * When bind is 127.0.0.1 or localhost, the server is bound to loopback only and cannot
  * accept connections from mobile devices - we warn and return the original address.
  */
-function getConnectableIp(bind: string): string {
+interface ConnectableIpOptions {
+  warn?: boolean
+}
+
+function normalizeHostForComparison(host: string): string {
+  const normalized = host.trim().toLowerCase()
+  if (normalized.startsWith("[") && normalized.endsWith("]")) {
+    return normalized.slice(1, -1)
+  }
+  return normalized
+}
+
+function isWildcardBindHost(host: string): boolean {
+  const normalizedHost = normalizeHostForComparison(host)
+  return normalizedHost === "0.0.0.0" || normalizedHost === "::"
+}
+
+function isLoopbackHost(host: string): boolean {
+  const normalizedHost = normalizeHostForComparison(host)
+  return normalizedHost === "127.0.0.1" || normalizedHost === "localhost" || normalizedHost === "::1"
+}
+
+function isConnectableIpv6Address(host: string): boolean {
+  const normalizedHost = normalizeHostForComparison(host)
+  // Zone-scoped addresses (e.g. fe80::1%en0) are not reliable for QR/deep-link URLs.
+  if (normalizedHost.includes("%")) {
+    return false
+  }
+  // Exclude unspecified/loopback/link-local/multicast ranges.
+  if (normalizedHost === "::" || normalizedHost === "::1" || /^fe[89ab]/.test(normalizedHost) || normalizedHost.startsWith("ff")) {
+    return false
+  }
+  return true
+}
+
+function formatHostForHttpUrl(host: string): string {
+  const normalizedHost = host.trim()
+  // IPv6 literals must be bracketed in URLs: http://[::1]:3210/v1
+  if (normalizedHost.includes(":") && !normalizedHost.startsWith("[") && !normalizedHost.endsWith("]")) {
+    return `[${normalizedHost}]`
+  }
+  return normalizedHost
+}
+
+function buildRemoteServerBaseUrl(host: string, port: number): string {
+  return `http://${formatHostForHttpUrl(host)}:${port}/v1`
+}
+
+export function getConnectableIp(bind: string, options: ConnectableIpOptions = {}): string {
+  const { warn = true } = options
+  const normalizedBind = normalizeHostForComparison(bind)
+
   // If bound to loopback, warn that mobile devices cannot connect
-  if (bind === "127.0.0.1" || bind === "localhost") {
-    console.warn(
-      `[Remote Server] Warning: Server is bound to ${bind} (loopback only). ` +
-      `Mobile devices on the same network cannot connect. ` +
-      `Change bind address to 0.0.0.0 or your LAN IP for mobile access.`
-    )
-    return bind
+  if (isLoopbackHost(normalizedBind)) {
+    if (warn) {
+      console.warn(
+        `[Remote Server] Warning: Server is bound to ${normalizedBind} (loopback only). ` +
+        `Mobile devices on the same network cannot connect. ` +
+        `Change bind address to 0.0.0.0 or your LAN IP for mobile access.`
+      )
+    }
+    return normalizedBind
   }
 
   // If already a specific IP (not wildcard), use it
-  if (bind !== "0.0.0.0") {
-    return bind
+  if (!isWildcardBindHost(normalizedBind)) {
+    return normalizedBind
   }
 
-  // Find first non-internal IPv4 address
+  const wildcardWantsIpv6 = normalizedBind === "::"
+  let firstIpv4Address: string | undefined
+  let firstIpv6Address: string | undefined
+
+  // For wildcard binds, discover LAN-reachable interface addresses.
   const interfaces = os.networkInterfaces()
   for (const name of Object.keys(interfaces)) {
     const addrs = interfaces[name]
     if (!addrs) continue
     for (const addr of addrs) {
-      if (addr.family === "IPv4" && !addr.internal) {
-        return addr.address
+      if (addr.internal) {
+        continue
+      }
+      if (addr.family === "IPv4" && !firstIpv4Address) {
+        firstIpv4Address = addr.address
+      }
+      if (addr.family === "IPv6" && !firstIpv6Address && isConnectableIpv6Address(addr.address)) {
+        firstIpv6Address = addr.address
       }
     }
   }
 
+  if (wildcardWantsIpv6) {
+    if (firstIpv6Address) {
+      return firstIpv6Address
+    }
+    // Some platforms expose dual-stack sockets for ::, so IPv4 can still be connectable.
+    if (firstIpv4Address) {
+      return firstIpv4Address
+    }
+  } else if (firstIpv4Address) {
+    return firstIpv4Address
+  }
+
   // Fallback to the original bind address with a warning
-  console.warn(
-    `[Remote Server] Warning: Could not find LAN IP. QR code will use ${bind} which may not be reachable from mobile devices.`
-  )
-  return bind
+  if (warn) {
+    const expectedFamily = wildcardWantsIpv6 ? "IPv6" : "IPv4"
+    console.warn(
+      `[Remote Server] Warning: Could not find LAN ${expectedFamily} address. QR code will use ${normalizedBind} which may not be reachable from mobile devices.`
+    )
+  }
+  return normalizedBind
+}
+
+function isUnconnectableHostForMobilePairing(host: string): boolean {
+  return isWildcardBindHost(host) || isLoopbackHost(host)
+}
+
+function getConnectableBaseUrlForMobilePairing(
+  bind: string,
+  port: number,
+  options: ConnectableIpOptions = {},
+): string | undefined {
+  const connectableHost = getConnectableIp(bind, options)
+  if (isUnconnectableHostForMobilePairing(connectableHost)) {
+    return undefined
+  }
+  return buildRemoteServerBaseUrl(connectableHost, port)
 }
 
 function resolveActiveModelId(cfg: any): string {
@@ -2793,7 +2887,7 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
     await fastify.listen({ port, host: bind })
     diagnosticsService.logInfo(
       "remote-server",
-      `Remote server listening at http://${bind}:${port}/v1`,
+      `Remote server listening at ${buildRemoteServerBaseUrl(bind, port)}`,
     )
     server = fastify
 
@@ -2804,14 +2898,17 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
     if (!skipAutoPrintQR) {
       const currentCfg = configStore.get()
       if (currentCfg.remoteServerApiKey && !currentCfg.streamerModeEnabled) {
-        // Use connectable IP for QR code (not 0.0.0.0 or 127.0.0.1)
-        const connectableIp = getConnectableIp(bind)
-        const serverUrl = `http://${connectableIp}:${port}/v1`
-
         // In headless environments, always print the QR code
         // Otherwise, print if terminal QR is explicitly enabled
         if (isHeadlessEnvironment() || currentCfg.remoteServerTerminalQrEnabled) {
-          await printTerminalQRCode(serverUrl, currentCfg.remoteServerApiKey)
+          const serverUrl = getConnectableBaseUrlForMobilePairing(bind, port)
+          if (serverUrl) {
+            await printTerminalQRCode(serverUrl, currentCfg.remoteServerApiKey)
+          } else {
+            console.warn(
+              `[Remote Server] Warning: Could not resolve a LAN-reachable URL for bind ${bind}. Skipping terminal QR code output.`
+            )
+          }
         }
       }
     }
@@ -2848,8 +2945,9 @@ export function getRemoteServerStatus() {
   const bind = cfg.remoteServerBindAddress || "127.0.0.1"
   const port = cfg.remoteServerPort || 3210
   const running = !!server
-  const url = running ? `http://${bind}:${port}/v1` : undefined
-  return { running, url, bind, port, lastError }
+  const url = running ? buildRemoteServerBaseUrl(bind, port) : undefined
+  const connectableUrl = running ? getConnectableBaseUrlForMobilePairing(bind, port, { warn: false }) : undefined
+  return { running, url, connectableUrl, bind, port, lastError }
 }
 
 /**
@@ -2879,9 +2977,12 @@ export async function printQRCodeToTerminal(urlOverride?: string): Promise<boole
   } else {
     const bind = cfg.remoteServerBindAddress || "127.0.0.1"
     const port = cfg.remoteServerPort || 3210
-    // Use connectable IP for QR code (not 0.0.0.0 or 127.0.0.1)
-    const connectableIp = getConnectableIp(bind)
-    serverUrl = `http://${connectableIp}:${port}/v1`
+    const connectableBaseUrl = getConnectableBaseUrlForMobilePairing(bind, port)
+    if (!connectableBaseUrl) {
+      console.log("[Remote Server] Cannot print QR code: unable to resolve a LAN-reachable URL for the current bind address")
+      return false
+    }
+    serverUrl = connectableBaseUrl
   }
 
   // Return the actual result from printTerminalQRCode to indicate success/failure
