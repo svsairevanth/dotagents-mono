@@ -157,17 +157,21 @@ export function RemoteServerSettingsGroups({
   const enabled = cfg.remoteServerEnabled ?? false
   const streamerMode = cfg.streamerModeEnabled ?? false
   const configuredBindAddress = cfg.remoteServerBindAddress || "127.0.0.1"
+  const isRemoteServerRunning = enabled && (remoteServerStatus?.running ?? false)
 
   const fallbackBaseUrl = !isUnconnectableMobileHost(configuredBindAddress) &&
     cfg.remoteServerPort
       ? `http://${formatHostForHttpUrl(configuredBindAddress)}:${cfg.remoteServerPort}/v1`
       : undefined
 
-  const baseUrl = remoteServerStatus?.connectableUrl ?? fallbackBaseUrl
+  const liveConnectableUrl = isRemoteServerRunning
+    ? remoteServerStatus?.connectableUrl
+    : undefined
+  const baseUrl = liveConnectableUrl ?? fallbackBaseUrl
   const shouldShowConnectabilityWarning =
-    (remoteServerStatus?.running ?? false) &&
+    isRemoteServerRunning &&
     isUnconnectableMobileHost(configuredBindAddress) &&
-    !remoteServerStatus?.connectableUrl
+    !liveConnectableUrl
   const showConnectableUrlResolutionWarning =
     shouldShowConnectabilityWarning && isWildcardMobileHost(configuredBindAddress)
   const showLoopbackBindWarning =
