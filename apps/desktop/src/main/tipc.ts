@@ -656,6 +656,7 @@ async function refreshRuntimeAfterBundleImport(): Promise<void> {
 
     // Restart currently connected enabled servers so overwritten configs take effect immediately.
     for (const [serverName, serverConfig] of Object.entries(configuredServers)) {
+      if (serverName === BUILTIN_SERVER_NAME) continue
       if ((serverConfig as MCPServerConfig).disabled) continue
       const status = serverStatusAfterStops[serverName]
       if (status?.runtimeEnabled === false) continue

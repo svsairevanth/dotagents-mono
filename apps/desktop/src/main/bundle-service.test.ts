@@ -1215,6 +1215,37 @@ describe("bundle-service", () => {
       })
     })
 
+    it("preserves non-object top-level metadata keys even when they match imported server names", async () => {
+      writeTestMcpJson(targetDir, {
+        exa: "workspace-note",
+        mcpDisabledTools: ["github:create_issue"],
+      })
+
+      const bundle = createTestMcpBundle("exa")
+      const bundlePath = path.join(tempDir, "import-mcp-preserve-metadata.dotagents")
+      fs.writeFileSync(bundlePath, JSON.stringify(bundle))
+
+      const result = await importBundle(bundlePath, targetDir, { conflictStrategy: "skip" })
+      const mcpJson = readTestMcpJson(targetDir)
+
+      expect(result.success).toBe(true)
+      expect(result.mcpServers).toEqual([{ id: "exa", name: "exa", action: "imported" }])
+      expect(mcpJson).toEqual({
+        exa: "workspace-note",
+        mcpConfig: {
+          mcpServers: {
+            exa: {
+              command: "npx",
+              args: ["-y", "@modelcontextprotocol/server-github"],
+              transport: "stdio",
+              disabled: true,
+            },
+          },
+        },
+        mcpDisabledTools: ["github:create_issue"],
+      })
+    })
+
     it("merges canonical and legacy MCP server maps before canonicalization", async () => {
       writeTestMcpJson(targetDir, {
         mcpConfig: {

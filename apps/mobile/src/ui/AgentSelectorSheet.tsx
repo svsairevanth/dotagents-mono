@@ -42,6 +42,7 @@ export function AgentSelectorSheet({ visible, onClose }: AgentSelectorSheetProps
 
   const fetchProfiles = useCallback(async () => {
     if (!hasApiConfig) {
+      setIsLoading(false);
       setProfiles([]);
       setError(missingConfigError);
       return;

@@ -355,12 +355,6 @@ function writeCanonicalMcpConfig(
     delete nextMcpJson[legacyServerName]
   }
 
-  // Also remove any top-level keys that match canonical server names to avoid duplicates.
-  for (const serverName of Object.keys(mcpServers)) {
-    if (isReservedTopLevelMcpKey(serverName)) continue
-    delete nextMcpJson[serverName]
-  }
-
   const existingMcpConfig =
     isRecordObject(nextMcpJson.mcpConfig)
       ? { ...(nextMcpJson.mcpConfig as Record<string, unknown>) }
