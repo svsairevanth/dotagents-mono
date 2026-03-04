@@ -254,6 +254,10 @@ export function getConnectableIp(bind: string, options: ConnectableIpOptions = {
   return bind
 }
 
+function isUnconnectableHostForMobilePairing(host: string): boolean {
+  return host === "0.0.0.0" || host === "127.0.0.1" || host === "localhost" || host === "::"
+}
+
 function resolveActiveModelId(cfg: any): string {
   const provider = cfg.mcpToolsProviderId || "openai"
   if (provider === "openai") return cfg.mcpToolsOpenaiModel || "openai"
@@ -2859,7 +2863,13 @@ export function getRemoteServerStatus() {
   const port = cfg.remoteServerPort || 3210
   const running = !!server
   const url = running ? `http://${bind}:${port}/v1` : undefined
-  const connectableUrl = running ? `http://${getConnectableIp(bind, { warn: false })}:${port}/v1` : undefined
+  let connectableUrl: string | undefined
+  if (running) {
+    const connectableHost = getConnectableIp(bind, { warn: false })
+    if (!isUnconnectableHostForMobilePairing(connectableHost)) {
+      connectableUrl = `http://${connectableHost}:${port}/v1`
+    }
+  }
   return { running, url, connectableUrl, bind, port, lastError }
 }
 
