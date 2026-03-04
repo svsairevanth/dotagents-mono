@@ -591,21 +591,21 @@ async function refreshRuntimeAfterBundleImport(): Promise<void> {
   try {
     configStore.reload()
   } catch (error) {
-    logApp("[tipc] Failed to reload config after bundle import", { error })
+    logApp("[tipc] Failed to reload config after bundle load", { error })
   }
 
   try {
     agentProfileService.reload()
     agentProfileService.syncAgentProfilesToACPRegistry()
   } catch (error) {
-    logApp("[tipc] Failed to reload agent profiles after bundle import", { error })
+    logApp("[tipc] Failed to reload agent profiles after bundle load", { error })
   }
 
   try {
     const { skillsService } = await import("./skills-service")
     skillsService.scanSkillsFolder()
   } catch (error) {
-    logApp("[tipc] Failed to reload skills after bundle import", { error })
+    logApp("[tipc] Failed to reload skills after bundle load", { error })
   }
 
   try {
@@ -614,7 +614,7 @@ async function refreshRuntimeAfterBundleImport(): Promise<void> {
     loopService.resumeScheduling()
     loopService.startAllLoops()
   } catch (error) {
-    logApp("[tipc] Failed to reload repeat tasks after bundle import", { error })
+    logApp("[tipc] Failed to reload repeat tasks after bundle load", { error })
     // Avoid leaving loop scheduling paused if stopAllLoops() succeeded but reload/start failed.
     try {
       loopService.resumeScheduling()
@@ -626,7 +626,7 @@ async function refreshRuntimeAfterBundleImport(): Promise<void> {
   try {
     await memoryService.reload()
   } catch (error) {
-    logApp("[tipc] Failed to reload memories after bundle import", { error })
+    logApp("[tipc] Failed to reload memories after bundle load", { error })
   }
 
   try {
@@ -644,7 +644,7 @@ async function refreshRuntimeAfterBundleImport(): Promise<void> {
 
       const stopResult = await mcpService.stopServer(serverName)
       if (!stopResult.success) {
-        logApp("[tipc] Failed to stop MCP server after bundle import", {
+        logApp("[tipc] Failed to stop MCP server after bundle load", {
           serverName,
           error: stopResult.error,
           wasConnected: status.connected,
@@ -664,7 +664,7 @@ async function refreshRuntimeAfterBundleImport(): Promise<void> {
 
       const restartResult = await mcpService.restartServer(serverName)
       if (!restartResult.success) {
-        logApp("[tipc] Failed to restart MCP server after bundle import", {
+        logApp("[tipc] Failed to restart MCP server after bundle load", {
           serverName,
           error: restartResult.error,
         })
@@ -674,7 +674,7 @@ async function refreshRuntimeAfterBundleImport(): Promise<void> {
     // Start any newly imported enabled servers that were previously absent.
     await mcpService.initialize()
   } catch (error) {
-    logApp("[tipc] Failed to reinitialize MCP after bundle import", { error })
+    logApp("[tipc] Failed to reinitialize MCP after bundle load", { error })
   }
 }
 
