@@ -234,6 +234,11 @@ const MCP_SERVER_CONFIG_KEYS = [
 const AGENT_PROFILE_CONNECTION_TYPES = ["internal", "acp", "stdio", "remote"] as const
 const AGENT_PROFILE_ROLES = ["user-profile", "delegation-target", "external-agent"] as const
 
+function isReservedTopLevelMcpKey(key: string): boolean {
+  if (key === "mcpConfig" || key === "mcpServers") return true
+  return (TOP_LEVEL_MCP_CONFIG_KEYS as readonly string[]).includes(key)
+}
+
 function isRecordObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
@@ -278,14 +283,17 @@ function readLegacyTopLevelMcpServers(mcpJson: Record<string, unknown>): Record<
   const knownShapeLegacyServers: Record<string, Record<string, unknown>> = {}
 
   for (const [key, value] of Object.entries(mcpJson)) {
-    if (key === "mcpConfig" || key === "mcpServers") continue
-    if ((TOP_LEVEL_MCP_CONFIG_KEYS as readonly string[]).includes(key)) continue
-    // Reserve future top-level `mcp*` config keys.
-    if (key.startsWith("mcp")) continue
     if (!isRecordObject(value)) continue
+    if (isReservedTopLevelMcpKey(key)) continue
+
+    const likelyServerConfig = isLikelyMcpServerConfig(value)
+
+    // Reserve future top-level `mcp*` config keys unless this key clearly
+    // looks like a legacy server entry (e.g. mcpGithub: { command, args }).
+    if (key.startsWith("mcp") && !likelyServerConfig) continue
 
     legacyServerCandidates[key] = value
-    if (isLikelyMcpServerConfig(value)) {
+    if (likelyServerConfig) {
       knownShapeLegacyServers[key] = value
     }
   }
@@ -349,8 +357,7 @@ function writeCanonicalMcpConfig(
 
   // Also remove any top-level keys that match canonical server names to avoid duplicates.
   for (const serverName of Object.keys(mcpServers)) {
-    if (serverName === "mcpConfig" || serverName === "mcpServers") continue
-    if ((TOP_LEVEL_MCP_CONFIG_KEYS as readonly string[]).includes(serverName)) continue
+    if (isReservedTopLevelMcpKey(serverName)) continue
     delete nextMcpJson[serverName]
   }
 

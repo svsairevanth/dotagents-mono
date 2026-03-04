@@ -397,6 +397,7 @@ export function SettingsAgents() {
     void loadAgents()
     void loadSkills()
     void loadServers()
+    void loadAllTools()
     queryClient.invalidateQueries({ queryKey: ["agentProfilesSidebar"] })
     queryClient.invalidateQueries({ queryKey: ["agentProfilesSelector"] })
     queryClient.invalidateQueries({ queryKey: ["skills"] })

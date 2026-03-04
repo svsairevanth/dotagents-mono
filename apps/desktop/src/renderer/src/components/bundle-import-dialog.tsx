@@ -97,6 +97,7 @@ export function BundleImportDialog({
   const [components, setComponents] = useState<BundleComponentsState>(() => resolveComponents(initialComponents))
   const isOpenRef = useRef(open)
   const previewRequestIdRef = useRef(0)
+  isOpenRef.current = open
 
   const isComponentAvailable = (key: BundleComponentKey) => availableComponents?.[key] ?? true
 
@@ -182,6 +183,7 @@ export function BundleImportDialog({
   }
 
   const handleClose = () => {
+    isOpenRef.current = false
     previewRequestIdRef.current += 1
     setLoading(false)
     setPreview(null)

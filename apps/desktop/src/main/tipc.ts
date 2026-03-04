@@ -632,30 +632,34 @@ async function refreshRuntimeAfterBundleImport(): Promise<void> {
   try {
     const config = configStore.get()
     const configuredServers = config.mcpConfig?.mcpServers || {}
-    const serverStatus = mcpService.getServerStatus()
+    const serverStatusBeforeRefresh = mcpService.getServerStatus()
 
     // Stop servers that were removed/disabled by the imported bundle.
-    for (const [serverName, status] of Object.entries(serverStatus)) {
+    for (const [serverName, status] of Object.entries(serverStatusBeforeRefresh)) {
       if (serverName === BUILTIN_SERVER_NAME) continue
 
       const serverConfig = configuredServers[serverName]
       const shouldBeStopped = !serverConfig || !!(serverConfig as MCPServerConfig).disabled
-      if (!shouldBeStopped || !status.connected) continue
+      if (!shouldBeStopped) continue
 
       const stopResult = await mcpService.stopServer(serverName)
       if (!stopResult.success) {
         logApp("[tipc] Failed to stop MCP server after bundle import", {
           serverName,
           error: stopResult.error,
+          wasConnected: status.connected,
         })
       }
     }
 
-    // Restart enabled servers so overwritten configs take effect immediately.
+    const serverStatusAfterStops = mcpService.getServerStatus()
+
+    // Restart currently connected enabled servers so overwritten configs take effect immediately.
     for (const [serverName, serverConfig] of Object.entries(configuredServers)) {
       if ((serverConfig as MCPServerConfig).disabled) continue
-      const status = serverStatus[serverName]
+      const status = serverStatusAfterStops[serverName]
       if (status?.runtimeEnabled === false) continue
+      if (!status?.connected) continue
 
       const restartResult = await mcpService.restartServer(serverName)
       if (!restartResult.success) {
