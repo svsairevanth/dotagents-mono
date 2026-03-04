@@ -49,6 +49,7 @@ import { useHeaderHeight } from '@react-navigation/elements';
 import { useTheme } from '../ui/ThemeProvider';
 import { spacing, radius, Theme, hexToRgba } from '../ui/theme';
 import { MarkdownRenderer } from '../ui/MarkdownRenderer';
+import { AgentSelectorSheet } from '../ui/AgentSelectorSheet';
 
 interface PendingImageAttachment {
   id: string;
@@ -222,6 +223,7 @@ export default function ChatScreen({ route, navigation }: any) {
 
   const [responding, setResponding] = useState(false);
   const [connectionState, setConnectionState] = useState<RecoveryState | null>(null);
+  const [agentSelectorVisible, setAgentSelectorVisible] = useState(false);
 
   // Track the current active request to prevent cross-request state clobbering
   // Each request gets a unique ID; only the currently active request can reset UI states
@@ -360,28 +362,32 @@ export default function ChatScreen({ route, navigation }: any) {
   useLayoutEffect(() => {
     navigation?.setOptions?.({
       headerTitle: () => (
-        <View style={{ flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+        <TouchableOpacity
+          style={{ flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}
+          onPress={() => setAgentSelectorVisible(true)}
+          accessibilityRole="button"
+          accessibilityLabel={`Current agent: ${currentProfile?.name || 'Default'}. Tap to change.`}
+          accessibilityHint="Opens agent selection menu"
+        >
           <Text style={{ fontSize: 17, fontWeight: '600', color: theme.colors.foreground }}>Chat</Text>
-          {currentProfile && (
-            <View style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              backgroundColor: theme.colors.primary + '33',
-              paddingHorizontal: 8,
-              paddingVertical: 2,
-              borderRadius: 10,
-              marginTop: 2,
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: theme.colors.primary + '33',
+            paddingHorizontal: 8,
+            paddingVertical: 2,
+            borderRadius: 10,
+            marginTop: 2,
+          }}>
+            <Text style={{
+              fontSize: 11,
+              color: theme.colors.primary,
+              fontWeight: '500',
             }}>
-              <Text style={{
-                fontSize: 11,
-                color: theme.colors.primary,
-                fontWeight: '500',
-              }}>
-                {currentProfile.name}
-              </Text>
-            </View>
-          )}
-        </View>
+              {currentProfile?.name || 'Default'} ▼
+            </Text>
+          </View>
+        </TouchableOpacity>
       ),
       headerLeft: () => (
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -1409,7 +1415,7 @@ export default function ChatScreen({ route, navigation }: any) {
 	    const messageCountBeforeTurn = currentMessages.length;
     // Clear progress messages ref for this new request (#1083)
     progressMessagesRef.current = [];
-    setMessages((m) => [...m, userMsg, { role: 'assistant', content: 'Assistant is thinking...' }]);
+    setMessages((m) => [...m, userMsg, { role: 'assistant', content: '' }]);
     setResponding(true);
 
     // Generate a unique request ID for this request
@@ -1782,7 +1788,7 @@ export default function ChatScreen({ route, navigation }: any) {
 
       setDebugInfo(`Error: ${errorMessage}`);
       // Update the in-flight assistant message instead of appending a new one
-      // This avoids duplicating the "Assistant is thinking..." message and ensures
+      // This avoids duplicating the assistant loading placeholder and ensures
       // the retry pop logic removes the correct items
       setMessages((m) => {
         const errorContent = hasPartialContent
@@ -1881,7 +1887,7 @@ export default function ChatScreen({ route, navigation }: any) {
     // Use ref to get latest messages to avoid stale closure when called via setTimeout (PR review fix)
     const currentMessages = messagesRef.current;
     const messageCountBeforeTurn = currentMessages.length;
-    setMessages((m) => [...m, userMsg, { role: 'assistant', content: 'Assistant is thinking...' }]);
+    setMessages((m) => [...m, userMsg, { role: 'assistant', content: '' }]);
     setResponding(true);
 
     const thisRequestId = Date.now();
@@ -2670,6 +2676,15 @@ export default function ChatScreen({ route, navigation }: any) {
       keyboardVerticalOffset={headerHeight}
     >
       <View style={{ flex: 1 }}>
+        {/* Respond-to-user history panel (Issue #26) */}
+        {respondToUserHistory.length > 0 && (
+          <ResponseHistoryPanel
+            responses={respondToUserHistory}
+            ttsRate={config.ttsRate ?? 1.0}
+            ttsPitch={config.ttsPitch ?? 1.0}
+            ttsVoiceId={config.ttsVoiceId}
+          />
+        )}
         <ScrollView
           ref={scrollViewRef}
           style={{ flex: 1, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, backgroundColor: theme.colors.background }}
@@ -2682,15 +2697,18 @@ export default function ChatScreen({ route, navigation }: any) {
           scrollEventThrottle={16}
         >
           {sessionStore.isLoadingMessages && messages.length === 0 && (
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 40 }}>
+            <View
+              accessible
+              accessibilityRole="progressbar"
+              accessibilityLabel="Loading messages from desktop"
+              accessibilityState={{ busy: true }}
+              style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 40 }}
+            >
               <Image
                 source={isDark ? darkSpinner : lightSpinner}
-                style={{ width: 32, height: 32, marginBottom: 12 }}
+                style={{ width: 32, height: 32 }}
                 resizeMode="contain"
               />
-              <Text style={{ color: theme.colors.mutedForeground, fontSize: 14 }}>
-                Loading messages from desktop…
-              </Text>
             </View>
           )}
           {messages.map((m, i) => {
@@ -2737,13 +2755,18 @@ export default function ChatScreen({ route, navigation }: any) {
                 )}
 
                 {m.role === 'assistant' && (!m.content || m.content.length === 0) && !m.toolCalls && !m.toolResults ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <View
+                    accessible
+                    accessibilityRole="progressbar"
+                    accessibilityLabel="Assistant is thinking"
+                    accessibilityState={{ busy: true }}
+                    style={{ flexDirection: 'row', alignItems: 'center' }}
+                  >
                     <Image
                       source={isDark ? darkSpinner : lightSpinner}
                       style={{ width: 14, height: 14 }}
                       resizeMode="contain"
                     />
-                    <Text style={{ color: theme.colors.mutedForeground, fontSize: 11 }}>thinking...</Text>
                   </View>
                 ) : (
                   <>
@@ -2977,15 +3000,6 @@ export default function ChatScreen({ route, navigation }: any) {
               </Text>
             )}
           </View>
-        )}
-        {/* Respond-to-user history panel (Issue #26) */}
-        {respondToUserHistory.length > 0 && (
-          <ResponseHistoryPanel
-            responses={respondToUserHistory}
-            ttsRate={config.ttsRate ?? 1.0}
-            ttsPitch={config.ttsPitch ?? 1.0}
-            ttsVoiceId={config.ttsVoiceId}
-          />
         )}
         {/* Message Queue Panel */}
         {messageQueueEnabled && queuedMessages.length > 0 && (
@@ -3310,6 +3324,10 @@ export default function ChatScreen({ route, navigation }: any) {
           </View>
         </View>
       </View>
+      <AgentSelectorSheet
+        visible={agentSelectorVisible}
+        onClose={() => setAgentSelectorVisible(false)}
+      />
     </KeyboardAvoidingView>
   );
 }

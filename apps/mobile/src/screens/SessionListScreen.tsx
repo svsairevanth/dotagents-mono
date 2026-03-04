@@ -9,6 +9,7 @@ import { useConnectionManager } from '../store/connectionManager';
 import { useTunnelConnection } from '../store/tunnelConnection';
 import { useProfile } from '../store/profile';
 import { ConnectionStatusIndicator } from '../ui/ConnectionStatusIndicator';
+import { AgentSelectorSheet } from '../ui/AgentSelectorSheet';
 import { ChatMessage, AgentProgressUpdate } from '../lib/openaiClient';
 import { SessionListItem, isStubSession } from '../types/session';
 
@@ -26,6 +27,7 @@ export default function SessionListScreen({ navigation }: Props) {
   const connectionManager = useConnectionManager();
   const { connectionInfo } = useTunnelConnection();
   const { currentProfile } = useProfile();
+  const [agentSelectorVisible, setAgentSelectorVisible] = useState(false);
 
   // ── Rapid Fire voice state ─────────────────────────────────────────────────
   const [rfListening, setRfListening] = useState(false);
@@ -594,28 +596,32 @@ export default function SessionListScreen({ navigation }: Props) {
   useLayoutEffect(() => {
     navigation?.setOptions?.({
       headerTitle: () => (
-        <View style={{ flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+        <TouchableOpacity
+          style={{ flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}
+          onPress={() => setAgentSelectorVisible(true)}
+          accessibilityRole="button"
+          accessibilityLabel={`Current agent: ${currentProfile?.name || 'Default'}. Tap to change.`}
+          accessibilityHint="Opens agent selection menu"
+        >
           <Text style={{ fontSize: 17, fontWeight: '600', color: theme.colors.foreground }}>Chats</Text>
-          {currentProfile && (
-            <View style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              backgroundColor: theme.colors.primary + '33',
-              paddingHorizontal: 8,
-              paddingVertical: 2,
-              borderRadius: 10,
-              marginTop: 2,
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: theme.colors.primary + '33',
+            paddingHorizontal: 8,
+            paddingVertical: 2,
+            borderRadius: 10,
+            marginTop: 2,
+          }}>
+            <Text style={{
+              fontSize: 11,
+              color: theme.colors.primary,
+              fontWeight: '500',
             }}>
-              <Text style={{
-                fontSize: 11,
-                color: theme.colors.primary,
-                fontWeight: '500',
-              }}>
-                {currentProfile.name}
-              </Text>
-            </View>
-          )}
-        </View>
+              {currentProfile?.name || 'Default'} ▼
+            </Text>
+          </View>
+        </TouchableOpacity>
       ),
       headerRight: () => (
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -635,7 +641,7 @@ export default function SessionListScreen({ navigation }: Props) {
         </View>
       ),
     });
-  }, [navigation, theme, connectionInfo.state, connectionInfo.retryCount, currentProfile]);
+  }, [navigation, theme, connectionInfo.state, connectionInfo.retryCount, currentProfile, setAgentSelectorVisible]);
   const insets = useSafeAreaInsets();
   const sessionStore = useSessionContext();
   sessionStoreRef.current = sessionStore;
@@ -897,6 +903,10 @@ export default function SessionListScreen({ navigation }: Props) {
           </Text>
         </Pressable>
       </View>
+      <AgentSelectorSheet
+        visible={agentSelectorVisible}
+        onClose={() => setAgentSelectorVisible(false)}
+      />
     </View>
   );
 }
