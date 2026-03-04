@@ -76,6 +76,7 @@ import { fetchModelsDevData, getModelFromModelsDevByProviderId, findBestModelMat
 import * as parakeetStt from "./parakeet-stt"
 import { loopService } from "./loop-service"
 import { clearSessionUserResponse } from "./session-user-response-store"
+import { BUILTIN_SERVER_NAME } from "./builtin-tool-definitions"
 
 /**
  * Convert Float32Array audio samples to WAV format buffer
@@ -595,6 +596,7 @@ async function refreshRuntimeAfterBundleImport(): Promise<void> {
 
   try {
     agentProfileService.reload()
+    agentProfileService.syncAgentProfilesToACPRegistry()
   } catch (error) {
     logApp("[tipc] Failed to reload agent profiles after bundle import", { error })
   }
@@ -607,9 +609,18 @@ async function refreshRuntimeAfterBundleImport(): Promise<void> {
   }
 
   try {
+    loopService.stopAllLoops()
     loopService.reload()
+    loopService.resumeScheduling()
+    loopService.startAllLoops()
   } catch (error) {
     logApp("[tipc] Failed to reload repeat tasks after bundle import", { error })
+    // Avoid leaving loop scheduling paused if stopAllLoops() succeeded but reload/start failed.
+    try {
+      loopService.resumeScheduling()
+    } catch {
+      // best-effort
+    }
   }
 
   try {
@@ -619,10 +630,113 @@ async function refreshRuntimeAfterBundleImport(): Promise<void> {
   }
 
   try {
+    const config = configStore.get()
+    const configuredServers = config.mcpConfig?.mcpServers || {}
+    const serverStatus = mcpService.getServerStatus()
+
+    // Stop servers that were removed/disabled by the imported bundle.
+    for (const [serverName, status] of Object.entries(serverStatus)) {
+      if (serverName === BUILTIN_SERVER_NAME) continue
+
+      const serverConfig = configuredServers[serverName]
+      const shouldBeStopped = !serverConfig || !!(serverConfig as MCPServerConfig).disabled
+      if (!shouldBeStopped || !status.connected) continue
+
+      const stopResult = await mcpService.stopServer(serverName)
+      if (!stopResult.success) {
+        logApp("[tipc] Failed to stop MCP server after bundle import", {
+          serverName,
+          error: stopResult.error,
+        })
+      }
+    }
+
+    // Restart enabled servers so overwritten configs take effect immediately.
+    for (const [serverName, serverConfig] of Object.entries(configuredServers)) {
+      if ((serverConfig as MCPServerConfig).disabled) continue
+      const status = serverStatus[serverName]
+      if (status?.runtimeEnabled === false) continue
+
+      const restartResult = await mcpService.restartServer(serverName)
+      if (!restartResult.success) {
+        logApp("[tipc] Failed to restart MCP server after bundle import", {
+          serverName,
+          error: restartResult.error,
+        })
+      }
+    }
+
+    // Start any newly imported enabled servers that were previously absent.
     await mcpService.initialize()
   } catch (error) {
     logApp("[tipc] Failed to reinitialize MCP after bundle import", { error })
   }
+}
+
+type BundleConflictItem = {
+  id: string
+  name: string
+  existingName?: string
+}
+
+type BundleConflictMap = {
+  agentProfiles: BundleConflictItem[]
+  mcpServers: BundleConflictItem[]
+  skills: BundleConflictItem[]
+  repeatTasks: BundleConflictItem[]
+  memories: BundleConflictItem[]
+}
+
+type BundleConflictPreview = {
+  success: boolean
+  conflicts?: BundleConflictMap
+}
+
+const BUNDLE_CONFLICT_KEYS: Array<keyof BundleConflictMap> = [
+  "agentProfiles",
+  "mcpServers",
+  "skills",
+  "repeatTasks",
+  "memories",
+]
+
+function mergeConflictItems(
+  primary: BundleConflictItem[] | undefined,
+  secondary: BundleConflictItem[] | undefined
+): BundleConflictItem[] {
+  const merged = new Map<string, BundleConflictItem>()
+
+  for (const item of primary || []) {
+    if (!item?.id) continue
+    merged.set(item.id, item)
+  }
+  for (const item of secondary || []) {
+    if (!item?.id) continue
+    merged.set(item.id, item)
+  }
+
+  return Array.from(merged.values())
+}
+
+function mergeConflictMaps(
+  primary: BundleConflictMap | undefined,
+  secondary: BundleConflictMap | undefined
+): BundleConflictMap | undefined {
+  if (!primary && !secondary) return undefined
+
+  const merged: BundleConflictMap = {
+    agentProfiles: [],
+    mcpServers: [],
+    skills: [],
+    repeatTasks: [],
+    memories: [],
+  }
+
+  for (const key of BUNDLE_CONFLICT_KEYS) {
+    merged[key] = mergeConflictItems(primary?.[key], secondary?.[key])
+  }
+
+  return merged
 }
 
 /**
@@ -4311,15 +4425,21 @@ export const router = {
     } | undefined>()
     .action(async ({ input }) => {
       const { globalAgentsFolder, resolveWorkspaceAgentsFolder } = await import("./config")
-      const { exportBundleToFile } = await import("./bundle-service")
-      // Use workspace layer if present, otherwise global
-      const targetDir = resolveWorkspaceAgentsFolder() || globalAgentsFolder
-      return exportBundleToFile(targetDir, {
+      const { exportBundleToFile, exportBundleToFileFromLayers } = await import("./bundle-service")
+      const workspaceAgentsFolder = resolveWorkspaceAgentsFolder()
+      const exportOptions = {
         name: input?.name,
         description: input?.description,
         skillIds: input?.skillIds,
         components: input?.components,
-      })
+      }
+
+      // Export from merged layers when a workspace overlay exists (workspace wins on conflicts).
+      if (workspaceAgentsFolder) {
+        return exportBundleToFileFromLayers([globalAgentsFolder, workspaceAgentsFolder], exportOptions)
+      }
+
+      return exportBundleToFile(globalAgentsFolder, exportOptions)
     }),
 
   previewBundle: t.procedure.action(async () => {
@@ -4332,9 +4452,30 @@ export const router = {
     .action(async ({ input }) => {
       const { globalAgentsFolder, resolveWorkspaceAgentsFolder } = await import("./config")
       const { previewBundleWithConflicts } = await import("./bundle-service")
-      // Use workspace layer if present, otherwise global
-      const targetDir = resolveWorkspaceAgentsFolder() || globalAgentsFolder
-      return previewBundleWithConflicts(input.filePath, targetDir)
+      const workspaceAgentsFolder = resolveWorkspaceAgentsFolder()
+      const targetDir = workspaceAgentsFolder || globalAgentsFolder
+      const targetPreview = previewBundleWithConflicts(input.filePath, targetDir)
+
+      // With workspace overlays, merge conflicts from global + workspace so preview
+      // matches the merged UI view and catches shadowing collisions.
+      if (!workspaceAgentsFolder || !targetPreview.success) {
+        return targetPreview
+      }
+
+      const globalPreview = previewBundleWithConflicts(input.filePath, globalAgentsFolder)
+      if (!globalPreview.success) {
+        return targetPreview
+      }
+
+      const mergedConflicts = mergeConflictMaps(
+        (globalPreview as BundleConflictPreview).conflicts,
+        (targetPreview as BundleConflictPreview).conflicts
+      )
+
+      return {
+        ...targetPreview,
+        conflicts: mergedConflicts,
+      }
     }),
 
   importBundle: t.procedure

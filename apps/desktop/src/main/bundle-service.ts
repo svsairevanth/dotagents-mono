@@ -484,6 +484,50 @@ function loadMemoriesForBundle(layer: AgentsLayerPaths): BundleMemory[] {
   }))
 }
 
+function buildBundle(
+  options: ExportBundleOptions | undefined,
+  data: {
+    agentProfiles: BundleAgentProfile[]
+    mcpServers: BundleMCPServer[]
+    skills: BundleSkill[]
+    repeatTasks: BundleRepeatTask[]
+    memories: BundleMemory[]
+  }
+): DotAgentsBundle {
+  return {
+    manifest: {
+      version: 1,
+      name: options?.name || "My Agent Configuration",
+      description: options?.description,
+      createdAt: new Date().toISOString(),
+      exportedFrom: "dotagents-desktop",
+      components: {
+        agentProfiles: data.agentProfiles.length,
+        mcpServers: data.mcpServers.length,
+        skills: data.skills.length,
+        repeatTasks: data.repeatTasks.length,
+        memories: data.memories.length,
+      },
+    },
+    agentProfiles: data.agentProfiles,
+    mcpServers: data.mcpServers,
+    skills: data.skills,
+    repeatTasks: data.repeatTasks,
+    memories: data.memories,
+  }
+}
+
+function mergeByKey<T>(
+  values: T[],
+  getKey: (value: T) => string
+): T[] {
+  const merged = new Map<string, T>()
+  for (const value of values) {
+    merged.set(getKey(value), value)
+  }
+  return Array.from(merged.values())
+}
+
 export async function exportBundle(
   agentsDir: string,
   options?: ExportBundleOptions
@@ -499,27 +543,13 @@ export async function exportBundle(
   const repeatTasks = components.repeatTasks ? loadRepeatTasksForBundle(layer) : []
   const memories = components.memories ? loadMemoriesForBundle(layer) : []
 
-  const bundle: DotAgentsBundle = {
-    manifest: {
-      version: 1,
-      name: options?.name || "My Agent Configuration",
-      description: options?.description,
-      createdAt: new Date().toISOString(),
-      exportedFrom: "dotagents-desktop",
-      components: {
-        agentProfiles: profiles.length,
-        mcpServers: mcpServers.length,
-        skills: skills.length,
-        repeatTasks: repeatTasks.length,
-        memories: memories.length,
-      },
-    },
+  const bundle = buildBundle(options, {
     agentProfiles: profiles,
     mcpServers,
     skills,
     repeatTasks,
     memories,
-  }
+  })
 
   logApp("[bundle-service] Exported bundle", {
     profiles: profiles.length,
@@ -530,6 +560,112 @@ export async function exportBundle(
   })
 
   return bundle
+}
+
+export async function exportBundleFromLayers(
+  agentsDirs: string[],
+  options?: ExportBundleOptions
+): Promise<DotAgentsBundle> {
+  const normalizedDirs = Array.from(
+    new Set(agentsDirs.map((dir) => path.resolve(dir)).filter((dir) => dir.length > 0))
+  )
+
+  if (normalizedDirs.length === 0) {
+    throw new Error("No agents directories provided for bundle export")
+  }
+
+  if (normalizedDirs.length === 1) {
+    return exportBundle(normalizedDirs[0], options)
+  }
+
+  // Layer order matters: later layers override earlier layers by id/name.
+  const layerBundles = await Promise.all(
+    normalizedDirs.map((dir) => exportBundle(dir, options))
+  )
+
+  const mergedAgentProfiles = mergeByKey(
+    layerBundles.flatMap((bundle) => bundle.agentProfiles),
+    (profile) => profile.id
+  )
+  const mergedMcpServers = mergeByKey(
+    layerBundles.flatMap((bundle) => bundle.mcpServers),
+    (server) => server.name
+  )
+  const mergedSkills = mergeByKey(
+    layerBundles.flatMap((bundle) => bundle.skills),
+    (skill) => skill.id
+  )
+  const mergedRepeatTasks = mergeByKey(
+    layerBundles.flatMap((bundle) => bundle.repeatTasks),
+    (task) => task.id
+  )
+  const mergedMemories = mergeByKey(
+    layerBundles.flatMap((bundle) => bundle.memories),
+    (memory) => memory.id
+  )
+
+  const mergedBundle = buildBundle(options, {
+    agentProfiles: mergedAgentProfiles,
+    mcpServers: mergedMcpServers,
+    skills: mergedSkills,
+    repeatTasks: mergedRepeatTasks,
+    memories: mergedMemories,
+  })
+
+  logApp("[bundle-service] Exported merged bundle", {
+    layers: normalizedDirs.length,
+    profiles: mergedAgentProfiles.length,
+    mcpServers: mergedMcpServers.length,
+    skills: mergedSkills.length,
+    repeatTasks: mergedRepeatTasks.length,
+    memories: mergedMemories.length,
+  })
+
+  return mergedBundle
+}
+
+async function saveBundleToFile(bundle: DotAgentsBundle): Promise<ExportBundleToFileResult> {
+  try {
+    const bundleJson = JSON.stringify(bundle, null, 2)
+
+    const saveDialogOptions: SaveDialogOptions = {
+      title: "Export Agent Configuration",
+      defaultPath: `${bundle.manifest.name.replace(/[^a-zA-Z0-9-_ ]/g, "")}.dotagents`,
+      filters: [
+        { name: "DotAgents Bundle", extensions: ["dotagents"] },
+        { name: "JSON", extensions: ["json"] },
+      ],
+    }
+    let result: Awaited<ReturnType<typeof dialog.showSaveDialog>>
+    try {
+      const win = BrowserWindow.getFocusedWindow()
+      result = win
+        ? await dialog.showSaveDialog(win, saveDialogOptions)
+        : await dialog.showSaveDialog(saveDialogOptions)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      logApp("[bundle-service] Failed to open save dialog", { error })
+      return { success: false, filePath: null, canceled: false, error: errorMessage }
+    }
+
+    if (result.canceled || !result.filePath) {
+      return { success: false, filePath: null, canceled: true }
+    }
+
+    try {
+      fs.writeFileSync(result.filePath, bundleJson, "utf-8")
+      logApp("[bundle-service] Bundle saved to", { filePath: result.filePath })
+      return { success: true, filePath: result.filePath, canceled: false }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      logApp("[bundle-service] Failed to save bundle", { filePath: result.filePath, error })
+      return { success: false, filePath: null, canceled: false, error: errorMessage }
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    logApp("[bundle-service] Failed to serialize bundle for export", { error })
+    return { success: false, filePath: null, canceled: false, error: errorMessage }
+  }
 }
 
 export async function exportBundleToFile(
@@ -545,41 +681,23 @@ export async function exportBundleToFile(
     return { success: false, filePath: null, canceled: false, error: errorMessage }
   }
 
-  const bundleJson = JSON.stringify(bundle, null, 2)
+  return saveBundleToFile(bundle)
+}
 
-  const saveDialogOptions: SaveDialogOptions = {
-    title: "Export Agent Configuration",
-    defaultPath: `${bundle.manifest.name.replace(/[^a-zA-Z0-9-_ ]/g, "")}.dotagents`,
-    filters: [
-      { name: "DotAgents Bundle", extensions: ["dotagents"] },
-      { name: "JSON", extensions: ["json"] },
-    ],
-  }
-  let result: Awaited<ReturnType<typeof dialog.showSaveDialog>>
+export async function exportBundleToFileFromLayers(
+  agentsDirs: string[],
+  options?: ExportBundleOptions
+): Promise<ExportBundleToFileResult> {
+  let bundle: DotAgentsBundle
   try {
-    const win = BrowserWindow.getFocusedWindow()
-    result = win
-      ? await dialog.showSaveDialog(win, saveDialogOptions)
-      : await dialog.showSaveDialog(saveDialogOptions)
+    bundle = await exportBundleFromLayers(agentsDirs, options)
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
-    logApp("[bundle-service] Failed to open save dialog", { error })
+    logApp("[bundle-service] Failed to prepare merged bundle export", { error })
     return { success: false, filePath: null, canceled: false, error: errorMessage }
   }
 
-  if (result.canceled || !result.filePath) {
-    return { success: false, filePath: null, canceled: true }
-  }
-
-  try {
-    fs.writeFileSync(result.filePath, bundleJson, "utf-8")
-    logApp("[bundle-service] Bundle saved to", { filePath: result.filePath })
-    return { success: true, filePath: result.filePath, canceled: false }
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    logApp("[bundle-service] Failed to save bundle", { filePath: result.filePath, error })
-    return { success: false, filePath: null, canceled: false, error: errorMessage }
-  }
+  return saveBundleToFile(bundle)
 }
 
 // ============================================================================
