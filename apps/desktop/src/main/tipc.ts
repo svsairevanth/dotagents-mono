@@ -4257,13 +4257,31 @@ export const router = {
   // Bundle Export/Import (Issue #25: .dotagents bundles)
   // ============================================================================
 
-  exportBundle: t.procedure.action(async () => {
-    const { globalAgentsFolder, resolveWorkspaceAgentsFolder } = await import("./config")
-    const { exportBundleToFile } = await import("./bundle-service")
-    // Use workspace layer if present, otherwise global
-    const targetDir = resolveWorkspaceAgentsFolder() || globalAgentsFolder
-    return exportBundleToFile(targetDir)
-  }),
+  exportBundle: t.procedure
+    .input<{
+      name?: string
+      description?: string
+      skillIds?: string[]
+      components?: {
+        agentProfiles?: boolean
+        mcpServers?: boolean
+        skills?: boolean
+        repeatTasks?: boolean
+        memories?: boolean
+      }
+    } | undefined>()
+    .action(async ({ input }) => {
+      const { globalAgentsFolder, resolveWorkspaceAgentsFolder } = await import("./config")
+      const { exportBundleToFile } = await import("./bundle-service")
+      // Use workspace layer if present, otherwise global
+      const targetDir = resolveWorkspaceAgentsFolder() || globalAgentsFolder
+      return exportBundleToFile(targetDir, {
+        name: input?.name,
+        description: input?.description,
+        skillIds: input?.skillIds,
+        components: input?.components,
+      })
+    }),
 
   previewBundle: t.procedure.action(async () => {
     const { previewBundleFromDialog } = await import("./bundle-service")

@@ -111,6 +111,21 @@ export interface ExportBundleToFileResult {
   error?: string
 }
 
+export interface BundleComponentSelection {
+  agentProfiles?: boolean
+  mcpServers?: boolean
+  skills?: boolean
+  repeatTasks?: boolean
+  memories?: boolean
+}
+
+export interface ExportBundleOptions {
+  name?: string
+  description?: string
+  components?: BundleComponentSelection
+  skillIds?: string[]
+}
+
 // ============================================================================
 // Import Types
 // ============================================================================
@@ -216,6 +231,60 @@ function stripSecretsFromObject(obj: Record<string, unknown>): Record<string, un
   return result
 }
 
+function readMcpServersFromConfig(mcpJson: Record<string, unknown>): Record<string, unknown> {
+  const nestedMcpConfig = mcpJson.mcpConfig
+  if (typeof nestedMcpConfig === "object" && nestedMcpConfig !== null && !Array.isArray(nestedMcpConfig)) {
+    const nestedServers = (nestedMcpConfig as Record<string, unknown>).mcpServers
+    if (typeof nestedServers === "object" && nestedServers !== null && !Array.isArray(nestedServers)) {
+      return nestedServers as Record<string, unknown>
+    }
+    return {}
+  }
+
+  const topLevelServers = mcpJson.mcpServers
+  if (typeof topLevelServers === "object" && topLevelServers !== null && !Array.isArray(topLevelServers)) {
+    return topLevelServers as Record<string, unknown>
+  }
+
+  const hasTopLevelMcpConfigKeys = [
+    "mcpDisabledTools",
+    "mcpRuntimeDisabledServers",
+    "mcpToolsCollapsedServers",
+    "mcpServersCollapsedServers",
+  ].some((key) => key in mcpJson)
+
+  if (hasTopLevelMcpConfigKeys) {
+    return {}
+  }
+
+  return mcpJson
+}
+
+function writeCanonicalMcpConfig(
+  mcpJson: Record<string, unknown>,
+  mcpServers: Record<string, unknown>
+): Record<string, unknown> {
+  const nextMcpJson = { ...mcpJson }
+  delete nextMcpJson.mcpServers
+
+  const existingMcpConfig =
+    typeof nextMcpJson.mcpConfig === "object" &&
+    nextMcpJson.mcpConfig !== null &&
+    !Array.isArray(nextMcpJson.mcpConfig)
+      ? { ...(nextMcpJson.mcpConfig as Record<string, unknown>) }
+      : {}
+
+  delete existingMcpConfig.mcpServers
+
+  return {
+    ...nextMcpJson,
+    mcpConfig: {
+      ...existingMcpConfig,
+      mcpServers,
+    },
+  }
+}
+
 // ============================================================================
 // Export
 // ============================================================================
@@ -243,7 +312,7 @@ function loadMCPServersForBundle(layer: AgentsLayerPaths): BundleMCPServer[] {
   })
 
   const servers: BundleMCPServer[] = []
-  const mcpServers = (mcpConfig as any)?.mcpServers || mcpConfig
+  const mcpServers = readMcpServersFromConfig(mcpConfig)
 
   if (typeof mcpServers === "object" && mcpServers !== null) {
     for (const [name, config] of Object.entries(mcpServers)) {
@@ -266,15 +335,27 @@ function loadMCPServersForBundle(layer: AgentsLayerPaths): BundleMCPServer[] {
   return servers
 }
 
-function loadSkillsForBundle(layer: AgentsLayerPaths): BundleSkill[] {
+const DEFAULT_EXPORT_COMPONENTS: Required<BundleComponentSelection> = {
+  agentProfiles: true,
+  mcpServers: true,
+  skills: true,
+  repeatTasks: true,
+  memories: true,
+}
+
+function loadSkillsForBundle(layer: AgentsLayerPaths, options?: { skillIds?: string[] }): BundleSkill[] {
   const skillsResult = loadAgentsSkillsLayer(layer)
-  return skillsResult.skills.map((skill): BundleSkill => ({
+  const selectedSkillIds = options?.skillIds?.length ? new Set(options.skillIds) : null
+
+  return skillsResult.skills
+    .filter(skill => !selectedSkillIds || selectedSkillIds.has(skill.id))
+    .map((skill): BundleSkill => ({
     id: skill.id,
     name: skill.name,
     description: skill.description,
     instructions: skill.instructions,
     source: skill.source || "local",
-  }))
+    }))
 }
 
 function loadRepeatTasksForBundle(layer: AgentsLayerPaths): BundleRepeatTask[] {
@@ -305,16 +386,18 @@ function loadMemoriesForBundle(layer: AgentsLayerPaths): BundleMemory[] {
 
 export async function exportBundle(
   agentsDir: string,
-  options?: { name?: string; description?: string }
+  options?: ExportBundleOptions
 ): Promise<DotAgentsBundle> {
   const layer = getAgentsLayerPaths(agentsDir)
+  const components = { ...DEFAULT_EXPORT_COMPONENTS, ...options?.components }
 
-  const profilesResult = loadAgentProfilesLayer(layer)
-  const profiles = profilesResult.profiles.map(sanitizeAgentProfile)
-  const mcpServers = loadMCPServersForBundle(layer)
-  const skills = loadSkillsForBundle(layer)
-  const repeatTasks = loadRepeatTasksForBundle(layer)
-  const memories = loadMemoriesForBundle(layer)
+  const profiles = components.agentProfiles
+    ? loadAgentProfilesLayer(layer).profiles.map(sanitizeAgentProfile)
+    : []
+  const mcpServers = components.mcpServers ? loadMCPServersForBundle(layer) : []
+  const skills = components.skills ? loadSkillsForBundle(layer, { skillIds: options?.skillIds }) : []
+  const repeatTasks = components.repeatTasks ? loadRepeatTasksForBundle(layer) : []
+  const memories = components.memories ? loadMemoriesForBundle(layer) : []
 
   const bundle: DotAgentsBundle = {
     manifest: {
@@ -351,7 +434,7 @@ export async function exportBundle(
 
 export async function exportBundleToFile(
   agentsDir: string,
-  options?: { name?: string; description?: string }
+  options?: ExportBundleOptions
 ): Promise<ExportBundleToFileResult> {
   let bundle: DotAgentsBundle
   try {
@@ -480,9 +563,7 @@ export function previewBundleWithConflicts(
   const mcpConfig = safeReadJsonFileSync<Record<string, unknown>>(layer.mcpJsonPath, {
     defaultValue: {},
   })
-  const existingMcpServers = new Set(
-    Object.keys((mcpConfig as any)?.mcpServers || mcpConfig || {})
-  )
+  const existingMcpServers = new Set(Object.keys(readMcpServersFromConfig(mcpConfig)))
 
   // Detect conflicts
   const conflicts = {
@@ -674,7 +755,7 @@ export async function importBundle(
       const mcpConfig = safeReadJsonFileSync<Record<string, unknown>>(layer.mcpJsonPath, {
         defaultValue: {},
       })
-      const mcpServers = (mcpConfig as any)?.mcpServers || mcpConfig || {}
+      const mcpServers = { ...readMcpServersFromConfig(mcpConfig) }
       const existingNames = new Set(Object.keys(mcpServers))
       let modified = false
 
@@ -720,7 +801,7 @@ export async function importBundle(
       }
 
       if (modified) {
-        const newMcpConfig = { ...(mcpConfig as any), mcpServers }
+        const newMcpConfig = writeCanonicalMcpConfig(mcpConfig, mcpServers)
         safeWriteJsonFileSync(layer.mcpJsonPath, newMcpConfig, {
           backupDir: layer.backupsDir,
           maxBackups: 10,

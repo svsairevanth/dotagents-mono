@@ -88,6 +88,22 @@ function createTestTask(id: string, name: string): LoopConfig {
   }
 }
 
+function writeTestMcpJson(
+  agentsDir: string,
+  mcpJson: Record<string, unknown> = {
+    mcpConfig: { mcpServers: {} },
+  }
+): string {
+  const layer = getAgentsLayerPaths(agentsDir)
+  fs.writeFileSync(layer.mcpJsonPath, JSON.stringify(mcpJson, null, 2), "utf-8")
+  return layer.mcpJsonPath
+}
+
+function readTestMcpJson(agentsDir: string): Record<string, unknown> {
+  const layer = getAgentsLayerPaths(agentsDir)
+  return JSON.parse(fs.readFileSync(layer.mcpJsonPath, "utf-8")) as Record<string, unknown>
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -171,6 +187,66 @@ describe("bundle-service", () => {
       expect(bundle.repeatTasks.length).toBe(1)
       expect(bundle.repeatTasks[0].id).toBe("test-task")
       expect((bundle.repeatTasks[0] as any).profileId).toBeUndefined()
+    })
+
+    it("exports MCP servers from canonical mcpConfig and omits secret-bearing fields", async () => {
+      writeTestMcpJson(agentsDir, {
+        mcpConfig: {
+          mcpServers: {
+            github: {
+              transport: "stdio",
+              command: "npx",
+              args: ["-y", "@modelcontextprotocol/server-github"],
+              env: {
+                GITHUB_PERSONAL_ACCESS_TOKEN: "ghp_secret",
+                SAFE_VALUE: "keep-out-of-bundle",
+              },
+              headers: {
+                Authorization: "Bearer secret",
+                "X-Api-Key": "api-secret",
+              },
+              oauth: {
+                clientId: "client-id",
+                clientSecret: "client-secret",
+              },
+              timeout: 30_000,
+            },
+            exa: {
+              transport: "streamableHttp",
+              url: "https://mcp.exa.ai/mcp",
+              headers: {
+                Authorization: "Bearer remote-secret",
+              },
+              disabled: true,
+            },
+          },
+        },
+        mcpDisabledTools: ["github:create_issue"],
+      })
+
+      const bundle = await exportBundle(agentsDir)
+
+      expect(bundle.manifest.components.mcpServers).toBe(2)
+      expect(bundle.mcpServers).toEqual([
+        {
+          name: "github",
+          command: "npx",
+          args: ["-y", "@modelcontextprotocol/server-github"],
+          transport: "stdio",
+          enabled: true,
+        },
+        {
+          name: "exa",
+          transport: "streamableHttp",
+          enabled: false,
+        },
+      ])
+
+      expect(bundle.mcpServers[0]).not.toHaveProperty("env")
+      expect(bundle.mcpServers[0]).not.toHaveProperty("headers")
+      expect(bundle.mcpServers[0]).not.toHaveProperty("oauth")
+      expect(bundle.mcpServers[0]).not.toHaveProperty("timeout")
+      expect(bundle.mcpServers[1]).not.toHaveProperty("url")
     })
   })
 
@@ -270,6 +346,62 @@ describe("bundle-service", () => {
       expect(result.conflicts?.agentProfiles.length).toBe(1)
       expect(result.conflicts?.agentProfiles[0].id).toBe("conflict-id")
     })
+
+    it("includes MCP server conflicts as structured conflict entries", async () => {
+      writeTestMcpJson(agentsDir, {
+        mcpConfig: {
+          mcpServers: {
+            github: {
+              transport: "stdio",
+              command: "old-github-server",
+            },
+          },
+        },
+        mcpDisabledTools: ["github:create_issue"],
+      })
+
+      const bundle: DotAgentsBundle = {
+        manifest: {
+          version: 1,
+          name: "MCP Conflict Bundle",
+          createdAt: new Date().toISOString(),
+          exportedFrom: "test",
+          components: { agentProfiles: 0, mcpServers: 2, skills: 0, repeatTasks: 0, memories: 0 },
+        },
+        agentProfiles: [],
+        mcpServers: [
+          {
+            name: "github",
+            transport: "stdio",
+            command: "npx",
+            args: ["-y", "@modelcontextprotocol/server-github"],
+            enabled: true,
+          },
+          {
+            name: "exa",
+            transport: "streamableHttp",
+            enabled: true,
+          },
+        ],
+        skills: [],
+        repeatTasks: [],
+        memories: [],
+      }
+
+      const bundlePath = path.join(tempDir, "mcp-conflict.dotagents")
+      fs.writeFileSync(bundlePath, JSON.stringify(bundle))
+
+      const result = previewBundleWithConflicts(bundlePath, agentsDir)
+
+      expect(result.success).toBe(true)
+      expect(result.conflicts).toEqual({
+        agentProfiles: [],
+        mcpServers: [{ id: "github", name: "github" }],
+        skills: [],
+        repeatTasks: [],
+        memories: [],
+      })
+    })
   })
 
   describe("importBundle", () => {
@@ -294,6 +426,31 @@ describe("bundle-service", () => {
         skills: [{ id: "import-skill", name: "Import Skill", description: "Test", instructions: "# Test" }],
         repeatTasks: [{ id: "import-task", name: "Import Task", prompt: "Test", intervalMinutes: 30, enabled: true }],
         memories: [{ id: "import-memory", title: "Import Memory", content: "Test", importance: "low", tags: [] }],
+      }
+    }
+
+    function createTestMcpBundle(serverName: string = "github"): DotAgentsBundle {
+      return {
+        manifest: {
+          version: 1,
+          name: "MCP Import Test",
+          createdAt: new Date().toISOString(),
+          exportedFrom: "test",
+          components: { agentProfiles: 0, mcpServers: 1, skills: 0, repeatTasks: 0, memories: 0 },
+        },
+        agentProfiles: [],
+        mcpServers: [
+          {
+            name: serverName,
+            command: "npx",
+            args: ["-y", "@modelcontextprotocol/server-github"],
+            transport: "stdio",
+            enabled: false,
+          },
+        ],
+        skills: [],
+        repeatTasks: [],
+        memories: [],
       }
     }
 
@@ -371,6 +528,131 @@ describe("bundle-service", () => {
       expect(result.skills.length).toBe(0)
       expect(result.repeatTasks.length).toBe(0)
       expect(result.memories.length).toBe(0)
+    })
+
+    it("skips conflicting MCP servers and preserves canonical mcpConfig shape", async () => {
+      writeTestMcpJson(targetDir, {
+        mcpConfig: {
+          mcpServers: {
+            github: {
+              transport: "stdio",
+              command: "existing-command",
+              args: ["existing-arg"],
+            },
+          },
+        },
+        mcpDisabledTools: ["github:create_issue"],
+      })
+
+      const bundle = createTestMcpBundle()
+      const bundlePath = path.join(tempDir, "import-mcp-skip.dotagents")
+      fs.writeFileSync(bundlePath, JSON.stringify(bundle))
+
+      const result = await importBundle(bundlePath, targetDir, { conflictStrategy: "skip" })
+      const mcpJson = readTestMcpJson(targetDir)
+
+      expect(result.success).toBe(true)
+      expect(result.mcpServers).toEqual([{ id: "github", name: "github", action: "skipped" }])
+      expect(mcpJson).toEqual({
+        mcpConfig: {
+          mcpServers: {
+            github: {
+              transport: "stdio",
+              command: "existing-command",
+              args: ["existing-arg"],
+            },
+          },
+        },
+        mcpDisabledTools: ["github:create_issue"],
+      })
+    })
+
+    it("overwrites conflicting MCP servers in canonical mcpConfig", async () => {
+      writeTestMcpJson(targetDir, {
+        mcpConfig: {
+          mcpServers: {
+            github: {
+              transport: "stdio",
+              command: "existing-command",
+              args: ["existing-arg"],
+            },
+          },
+        },
+        mcpDisabledTools: ["github:create_issue"],
+      })
+
+      const bundle = createTestMcpBundle()
+      const bundlePath = path.join(tempDir, "import-mcp-overwrite.dotagents")
+      fs.writeFileSync(bundlePath, JSON.stringify(bundle))
+
+      const result = await importBundle(bundlePath, targetDir, { conflictStrategy: "overwrite" })
+      const mcpJson = readTestMcpJson(targetDir)
+
+      expect(result.success).toBe(true)
+      expect(result.mcpServers).toEqual([
+        { id: "github", name: "github", action: "overwritten" },
+      ])
+      expect(mcpJson).toEqual({
+        mcpConfig: {
+          mcpServers: {
+            github: {
+              command: "npx",
+              args: ["-y", "@modelcontextprotocol/server-github"],
+              transport: "stdio",
+              disabled: true,
+            },
+          },
+        },
+        mcpDisabledTools: ["github:create_issue"],
+      })
+    })
+
+    it("renames conflicting MCP servers in canonical mcpConfig", async () => {
+      writeTestMcpJson(targetDir, {
+        mcpConfig: {
+          mcpServers: {
+            github: {
+              transport: "stdio",
+              command: "existing-command",
+            },
+          },
+        },
+        mcpDisabledTools: ["github:create_issue"],
+      })
+
+      const bundle = createTestMcpBundle()
+      const bundlePath = path.join(tempDir, "import-mcp-rename.dotagents")
+      fs.writeFileSync(bundlePath, JSON.stringify(bundle))
+
+      const result = await importBundle(bundlePath, targetDir, { conflictStrategy: "rename" })
+      const mcpJson = readTestMcpJson(targetDir)
+
+      expect(result.success).toBe(true)
+      expect(result.mcpServers).toEqual([
+        {
+          id: "github",
+          name: "github",
+          action: "renamed",
+          newId: "github_imported",
+        },
+      ])
+      expect(mcpJson).toEqual({
+        mcpConfig: {
+          mcpServers: {
+            github: {
+              transport: "stdio",
+              command: "existing-command",
+            },
+            github_imported: {
+              command: "npx",
+              args: ["-y", "@modelcontextprotocol/server-github"],
+              transport: "stdio",
+              disabled: true,
+            },
+          },
+        },
+        mcpDisabledTools: ["github:create_issue"],
+      })
     })
   })
 })
