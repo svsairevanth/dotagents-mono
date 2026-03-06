@@ -45,6 +45,7 @@ import {
 } from "@shared/key-utils"
 import { RemoteServerSettingsGroups } from "./settings-remote-server"
 import { getSelectableMainAcpAgents } from "./settings-general-main-agent-options"
+import { getSettingsSaveErrorMessage } from "./settings-general-save-error"
 
 export function Component() {
   const configQuery = useConfigQuery()
@@ -143,7 +144,7 @@ export function Component() {
         {
           onError: (error) => {
             console.error("Failed to save config:", error)
-            // TODO: Show user-friendly error notification
+            toast.error(getSettingsSaveErrorMessage(error))
           },
         },
       )
