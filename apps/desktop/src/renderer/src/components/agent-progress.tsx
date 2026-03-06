@@ -1555,18 +1555,18 @@ const SubAgentConversationPanel: React.FC<{
     <div className="border border-gray-200 dark:border-gray-700 rounded-md overflow-hidden">
       {/* Collapsible Header */}
       <div
-        className="flex items-center gap-2 px-2.5 py-1.5 bg-gray-50 dark:bg-gray-800/50 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+        className="flex flex-wrap items-center gap-2 px-2.5 py-1.5 bg-gray-50 dark:bg-gray-800/50 cursor-pointer transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
         onClick={onToggle}
       >
-        <div className="min-w-0 flex-1 flex items-center gap-2">
-          <span className="text-[11px] font-medium text-gray-600 dark:text-gray-400">
+        <div className="min-w-0 flex flex-1 items-center gap-2">
+          <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-gray-600 dark:text-gray-400">
             {isOpen ? "Recent activity" : conversationPreview}
           </span>
-          <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">
+          <Badge variant="outline" className="h-4 shrink-0 px-1 py-0 text-[10px]">
             {conversation.length}
           </Badge>
         </div>
-        <div className="flex items-center gap-1 flex-shrink-0">
+        <div className="ml-auto flex flex-shrink-0 items-center gap-1">
           <button
             onClick={(e) => { e.stopPropagation(); void handleCopyAll() }}
             className="inline-flex h-6 w-6 items-center justify-center rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
@@ -3154,33 +3154,33 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
           <>
             {/* Tab toggle for Chat/Summary view - only show when summaries exist */}
             {(progress.stepSummaries?.length ?? 0) > 0 && (
-              <div className="flex items-center gap-1 px-3 py-1.5 border-b border-border/30 bg-muted/5" onClick={(e) => e.stopPropagation()}>
+              <div className="flex flex-wrap items-center gap-1 border-b border-border/30 bg-muted/5 px-2.5 py-1.5" onClick={(e) => e.stopPropagation()}>
                 <button
                   type="button"
                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActiveTab("chat"); }}
                   className={cn(
-                    "flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md transition-colors",
+                    "inline-flex min-w-0 max-w-full items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
                     activeTab === "chat"
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   )}
                 >
                   <MessageSquare className="h-3 w-3" />
-                  Chat
+                  <span className="truncate">Chat</span>
                 </button>
                 <button
                   type="button"
                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActiveTab("summary"); }}
                   className={cn(
-                    "flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md transition-colors",
+                    "inline-flex min-w-0 max-w-full items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
                     activeTab === "summary"
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   )}
                 >
                   <Brain className="h-3 w-3" />
-                  Summary
-                  <Badge variant="secondary" className="ml-1 text-[10px] px-1 py-0 h-4">
+                  <span className="truncate">Summary</span>
+                  <Badge variant="secondary" className="ml-1 h-4 shrink-0 px-1 py-0 text-[10px]">
                     {progress.stepSummaries?.length ?? 0}
                   </Badge>
                 </button>
@@ -3525,33 +3525,33 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
 
       {/* Tab toggle for Chat/Summary view - only show when summaries exist */}
       {(progress.stepSummaries?.length ?? 0) > 0 && (
-        <div className="flex items-center gap-1 px-3 py-1.5 border-b border-border/30 bg-muted/5" onClick={(e) => e.stopPropagation()}>
+        <div className="flex flex-wrap items-center gap-1 border-b border-border/30 bg-muted/5 px-2.5 py-1.5" onClick={(e) => e.stopPropagation()}>
           <button
             type="button"
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActiveTab("chat"); }}
             className={cn(
-              "flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md transition-colors",
+              "inline-flex min-w-0 max-w-full items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
               activeTab === "chat"
                 ? "bg-primary text-primary-foreground"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
           >
             <MessageSquare className="h-3 w-3" />
-            Chat
+            <span className="truncate">Chat</span>
           </button>
           <button
             type="button"
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActiveTab("summary"); }}
             className={cn(
-              "flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md transition-colors",
+              "inline-flex min-w-0 max-w-full items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
               activeTab === "summary"
                 ? "bg-primary text-primary-foreground"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
           >
             <Brain className="h-3 w-3" />
-            Summary
-            <Badge variant="secondary" className="ml-1 text-[10px] px-1 py-0 h-4">
+            <span className="truncate">Summary</span>
+            <Badge variant="secondary" className="ml-1 h-4 shrink-0 px-1 py-0 text-[10px]">
               {progress.stepSummaries?.length ?? 0}
             </Badge>
           </button>

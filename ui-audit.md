@@ -1,5 +1,49 @@
 ## UI Audit Log
 
+### 2026-03-06 — Chunk 12: Sessions tile body controls at narrow widths / zoom
+
+- Area selected: desktop sessions tile body controls inside `apps/desktop/src/renderer/src/components/agent-progress.tsx`
+- Why this chunk: chunk 11 intentionally stopped at tile chrome and explicitly left the tile body itself as the next follow-up, especially the message/summary controls under the grid's `200px` minimum width and increased font scaling.
+- Audit method:
+  - reviewed `apps/desktop/DEBUGGING.md`
+  - launched the desktop app with remote debugging enabled via `REMOTE_DEBUGGING_PORT=9343 ELECTRON_EXTRA_LAUNCH_ARGS="--inspect=9349" pnpm dev -- -d`
+  - inspected the tile-body code paths for the chat/summary switcher and delegated-subagent conversation preview inside `agent-progress.tsx`
+  - cross-checked `apps/mobile/src/` for an equivalent chat/summary or delegation surface; no matching mobile UI needed the same change
+
+#### Findings
+
+- The sessions tile body still had two non-wrapping control rows that were likely to crowd or clip at narrow tile widths and under zoomed text:
+  - the `Chat` / `Summary` tab switcher shown when step summaries exist
+  - the delegated-subagent `Recent activity` / collapsed preview header
+- Both rows packed icons, labels, badges, and actions into single-line inline layouts without enough wrapping/truncation protection:
+  - the tab buttons used plain inline labels plus a summary-count badge
+  - the delegated preview label did not truncate, so a longer preview string could push the copy/expand controls into a cramped edge state
+- This was more of a body-content polish issue than a page-level structural bug, but it was the most obvious remaining sessions hotspot after the earlier header/footer chrome fixes.
+
+#### Changes made
+
+- Updated both tile-body chat/summary switcher rows in `agent-progress.tsx` to use wrapping control chrome:
+  - `flex-wrap` on the row container
+  - `min-w-0 max-w-full` on the tab buttons
+  - truncating text spans for `Chat` / `Summary`
+  - `shrink-0` summary-count badge so the count remains readable when space is tight
+- Updated the delegated-subagent conversation preview header to behave better in compressed tiles:
+  - wrapping outer row
+  - `min-w-0 flex-1 truncate` on the preview text
+  - `shrink-0` conversation-count badge
+  - preserved right-side copy/expand controls with `ml-auto flex-shrink-0`
+- Extended the focused regression coverage in `apps/desktop/src/renderer/src/components/agent-progress.tile-layout.test.ts` so the responsive class contract now also covers the tile-body controls.
+
+#### Verification
+
+- Targeted test: `pnpm --filter @dotagents/desktop exec vitest run src/renderer/src/components/agent-progress.tile-layout.test.ts`
+- Targeted web typecheck: `pnpm --filter @dotagents/desktop typecheck:web`
+
+#### Notes
+
+- As with chunk 11, Electron renderer automation did not give a stable hydrated DOM for this surface, so the audit used live app startup plus direct inspection of the concrete narrow-width layout code paths.
+- Best next UI audit chunk after this one: a live pass on the sessions tile message stream itself (tool output blocks, markdown bubbles, and summary cards) at high zoom, since the body control chrome is now covered.
+
 ### 2026-03-06 — Chunk 9: Panel waveform footer at narrow widths / zoom
 
 - Area selected: desktop floating panel recording state (`apps/desktop/src/renderer/src/pages/panel.tsx`)
