@@ -2,6 +2,57 @@
 
 ---
 
+## 2026-03-06 — chunk 6: bundle dialogs + settings-loops + mobile cross-check (all clear)
+
+### Sources consulted
+- `apps/desktop/src/renderer/src/components/ui/dialog.tsx` (base component)
+- `apps/desktop/src/renderer/src/components/bundle-export-dialog.tsx`
+- `apps/desktop/src/renderer/src/components/bundle-import-dialog.tsx`
+- `apps/desktop/src/renderer/src/components/bundle-publish-dialog.tsx`
+- `apps/desktop/src/renderer/src/pages/settings-loops.tsx`
+- `apps/desktop/src/renderer/src/components/mcp-elicitation-dialog.tsx`
+- `apps/desktop/src/renderer/src/pages/settings-whatsapp.tsx`
+- `apps/mobile/src/ui/MarkdownRenderer.tsx`
+
+### Findings
+
+**bundle-export/publish dialogs — already safe**
+- Initial concern: `DialogContent className="max-w-xl"` (export) and `max-w-2xl` (publish) had no explicit `max-h` or `overflow-y-auto`.
+- Root cause check: base `dialog.tsx` already has `max-h-[calc(100%-40px)] overflow-y-auto w-[calc(100%-40px)] max-w-[calc(100%-40px)]` baked in. The additional `max-h` in bundle-import-dialog is redundant but harmless.
+- **No changes needed** for any bundle dialogs.
+
+**settings-loops.tsx — already safe**
+- Outer container uses `flex h-full flex-col overflow-hidden` with `min-h-0 flex-1 overflow-y-auto overflow-x-hidden` on scroll area.
+- Loop rows use `flex items-start justify-between gap-2` with `min-w-0 flex-1` on content and `flex shrink-0` on actions.
+- `flex flex-wrap gap-3` on metadata row prevents overflow.
+- **No changes needed**.
+
+**mcp-elicitation-dialog.tsx — already safe**
+- Uses `max-w-md` dialog with `max-h-[60vh] overflow-y-auto` on the form section.
+- **No changes needed**.
+
+**settings-whatsapp.tsx — minor note, no critical issues**
+- Outer page uses `overflow-y-auto overflow-x-hidden` (correctly added on line 137).
+- The 256×256 fixed QR code SVG might be tight at panel widths <320px, but WhatsApp is a desktop-only integration and such narrow widths are extreme edge cases.
+- Status display row could benefit from `min-w-0` + `truncate` on the status text for very long usernames, but in practice usernames are short.
+- **No critical issues; no changes made**.
+
+**mobile MarkdownRenderer.tsx — not applicable**
+- Uses React Native `StyleSheet.create` with device-independent units. Font sizes (13, 16, 15, 14, 11, 10) are appropriate for RN and not affected by browser CSS scaling.
+- **No changes needed**.
+
+### Changes made
+None — all audited surfaces are already safe. No mechanical fixes to commit.
+
+### Follow-up areas for next chunk
+- `settings-agents.tsx` — complex page with agent list, accordions, and inline editors. Check for long agent name/description truncation and narrow-panel overflow.
+- `setup.tsx` — the onboarding wizard flow (a different surface from onboarding.tsx).
+- `panel.tsx` — the main panel page, wrapping tile-follow-up-input and the agent session view.
+
+
+
+---
+
 ## 2026-03-06 — chunk 5: agent-capabilities-sidebar micro-fonts + providers overflow
 
 ### Sources consulted
