@@ -297,6 +297,54 @@ describe("acp-main-agent", () => {
     )
   })
 
+  it("keeps fallback ACP toolCall ids unique when updates omit toolCallId", async () => {
+    const { processTranscriptWithACPAgent } = await import("./acp-main-agent")
+    const updates: Array<any> = []
+
+    mockSendPrompt.mockImplementation(async () => {
+      sessionUpdateHandler?.({
+        sessionId: "acp-session-1",
+        toolCall: {
+          title: "Tool: web_search",
+          status: "running",
+          rawInput: { query: "first query" },
+        },
+        isComplete: false,
+      })
+      sessionUpdateHandler?.({
+        sessionId: "acp-session-1",
+        toolCall: {
+          title: "Tool: web_search",
+          status: "running",
+          rawInput: { query: "second query" },
+        },
+        isComplete: false,
+      })
+
+      return { success: true, response: "done" }
+    })
+
+    await processTranscriptWithACPAgent("hello", {
+      agentName: "test-agent",
+      conversationId: "conversation-1",
+      sessionId: "ui-session-1",
+      runId: 1,
+      onProgress: (update) => updates.push(update),
+    })
+
+    const lastStreamingUpdate = [...updates].reverse().find((update) => update.isComplete === false)
+    expect(
+      lastStreamingUpdate?.conversationHistory?.filter((entry: any) => entry.role === "assistant" && entry.toolCalls?.length),
+    ).toEqual([
+      expect.objectContaining({
+        toolCalls: [expect.objectContaining({ arguments: { query: "first query" } })],
+      }),
+      expect.objectContaining({
+        toolCalls: [expect.objectContaining({ arguments: { query: "second query" } })],
+      }),
+    ])
+  })
+
   it("emits userResponse history for ACP respond_to_user calls and prefers it as the final response", async () => {
     const { processTranscriptWithACPAgent } = await import("./acp-main-agent")
     const updates: Array<any> = []

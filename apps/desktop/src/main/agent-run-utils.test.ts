@@ -68,6 +68,11 @@ describe("agent-run-utils", () => {
         profileName: "fallback-agent",
         guidelines: "Stay helpful",
       } as any)).toContain("[Acting as: fallback-agent]")
+
+      expect(buildProfileContext({
+        displayName: "",
+        profileName: "  trimmed-agent  ",
+      })).toContain("[Acting as: trimmed-agent]")
     })
   })
 

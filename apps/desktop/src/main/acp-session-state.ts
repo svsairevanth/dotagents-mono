@@ -156,6 +156,7 @@ export function setAcpClientSessionTokenMapping(clientSessionToken: string, acpS
 
   acpClientTokenToSession.set(clientSessionToken, acpSessionId)
   acpSessionToClientToken.set(acpSessionId, clientSessionToken)
+  pendingClientTokenToAppSession.delete(clientSessionToken)
 }
 
 /**

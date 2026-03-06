@@ -17,7 +17,7 @@ interface ACPSessionBadgeProps {
       id: string
       name: string
       currentValue: string
-      options: Array<{ value: string; name: string }>
+      options?: Array<{ value: string; name: string }> | unknown
     }>
   }
   className?: string

@@ -88,7 +88,8 @@ export function buildProfileContext(
   const displayName = profile && "displayName" in profile && typeof profile.displayName === "string"
     ? profile.displayName.trim()
     : ""
-  const profileName = displayName || profile?.profileName
+  const profileName = displayName
+    || (typeof profile?.profileName === "string" ? profile.profileName.trim() : "")
 
   if (existingContext) parts.push(existingContext)
   if (profileName) parts.push(`[Acting as: ${profileName}]`)

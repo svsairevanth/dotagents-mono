@@ -24,9 +24,9 @@ type ConversationHistoryMessage = NonNullable<AgentProgressUpdate["conversationH
 
 const ACP_INJECTED_BUILTIN_SERVER_NAME = "dotagents-builtin"
 const ACP_BUILTIN_TOOL_PROMPT_CONTEXT = [
-  `If the injected MCP server \"${ACP_INJECTED_BUILTIN_SERVER_NAME}\" is available, prefer it for DotAgents builtin user-facing communication tools.`,
-  `When \"${RESPOND_TO_USER_TOOL}\" is available, use it for every user-facing response instead of plain assistant text.`,
-  `When the task is fully complete and \"${MARK_WORK_COMPLETE_TOOL}\" is available, call \"${RESPOND_TO_USER_TOOL}\" first with the final user-facing answer, then call \"${MARK_WORK_COMPLETE_TOOL}\" with a concise completion summary.`,
+  `If the injected MCP server "${ACP_INJECTED_BUILTIN_SERVER_NAME}" is available, prefer it for DotAgents builtin user-facing communication tools.`,
+  `When "${RESPOND_TO_USER_TOOL}" is available, use it for every user-facing response instead of plain assistant text.`,
+  `When the task is fully complete and "${MARK_WORK_COMPLETE_TOOL}" is available, call "${RESPOND_TO_USER_TOOL}" first with the final user-facing answer, then call "${MARK_WORK_COMPLETE_TOOL}" with a concise completion summary.`,
   `Only fall back to plain assistant text if those builtin tools are unavailable or fail repeatedly.`,
 ].join("\n")
 
@@ -333,6 +333,7 @@ export async function processTranscriptWithACPAgent(
   let sawAssistantTextBlock = false
   let lastAssistantTextMessageIndex: number | undefined
   const trackedToolCalls = new Map<string, { assistantIndex: number; resultIndex?: number }>()
+  let fallbackToolCallIdCounter = 0
 
   // Counter for generating unique step IDs to avoid collisions in tight loops
   let stepIdCounter = 0
@@ -412,7 +413,7 @@ export async function processTranscriptWithACPAgent(
   }
 
   const applyAcpToolCallUpdateToConversation = (toolCallUpdate: ACPToolCallUpdate, timestamp: number) => {
-    const toolCallId = toolCallUpdate.toolCallId || `acp-tool-${timestamp}`
+    const toolCallId = toolCallUpdate.toolCallId || `acp-tool-${timestamp}-${++fallbackToolCallIdCounter}`
     const toolCall: ToolCall = {
       name: formatAcpToolCallName(toolCallUpdate),
       arguments: normalizeToolArguments(toolCallUpdate.rawInput),

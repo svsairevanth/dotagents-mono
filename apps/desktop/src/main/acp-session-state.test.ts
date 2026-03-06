@@ -33,4 +33,14 @@ describe("acp-session-state", () => {
     expect(sessionState.getPendingAppSessionForClientSessionToken("pending-client-token")).toBeUndefined()
     expect(sessionState.getAcpSessionForClientSessionToken("pending-client-token")).toBeUndefined()
   })
+
+  it("clears pending token mappings when promoting them to ACP session mappings", async () => {
+    const sessionState = await import("./acp-session-state")
+
+    sessionState.setPendingAcpClientSessionTokenMapping("pending-client-token", "app-session-2")
+    sessionState.setAcpClientSessionTokenMapping("pending-client-token", "acp-session-2")
+
+    expect(sessionState.getAcpSessionForClientSessionToken("pending-client-token")).toBe("acp-session-2")
+    expect(sessionState.getPendingAppSessionForClientSessionToken("pending-client-token")).toBeUndefined()
+  })
 })
