@@ -32,6 +32,13 @@ const acpToAppSession: Map<string, string> = new Map()
 // Used so ACP-originated updates can be tagged with the originating run.
 const acpToAppRunId: Map<string, number> = new Map()
 
+// Mapping from injected MCP client token → ACP session ID.
+// The token is embedded in the injected MCP base URL so remote MCP requests can
+// resolve back to the correct ACP session, then to the DotAgents session/profile.
+const acpClientTokenToSession: Map<string, string> = new Map()
+const acpSessionToClientToken: Map<string, string> = new Map()
+const pendingClientTokenToAppSession: Map<string, string> = new Map()
+
 /**
  * Get the ACP session for a conversation (if any).
  * @param conversationId The DotAgents conversation ID
@@ -139,6 +146,43 @@ export function setAcpToAppSessionMapping(
 export const setAcpToSpeakMcpSessionMapping = setAcpToAppSessionMapping
 
 /**
+ * Register the client-side token embedded in an injected MCP server URL.
+ */
+export function setAcpClientSessionTokenMapping(clientSessionToken: string, acpSessionId: string): void {
+  const previousToken = acpSessionToClientToken.get(acpSessionId)
+  if (previousToken && previousToken !== clientSessionToken) {
+    clearAcpClientSessionTokenMapping(previousToken)
+  }
+
+  acpClientTokenToSession.set(clientSessionToken, acpSessionId)
+  acpSessionToClientToken.set(acpSessionId, clientSessionToken)
+  pendingClientTokenToAppSession.delete(clientSessionToken)
+}
+
+/**
+ * Register the app session associated with a pending injected MCP client token.
+ * This lets injected MCP routes resolve the profile context during session/new-time
+ * tool discovery before the ACP session ID is available for ACP→app mapping.
+ */
+export function setPendingAcpClientSessionTokenMapping(clientSessionToken: string, appSessionId: string): void {
+  pendingClientTokenToAppSession.set(clientSessionToken, appSessionId)
+}
+
+/**
+ * Resolve the ACP session associated with an injected MCP client token.
+ */
+export function getAcpSessionForClientSessionToken(clientSessionToken: string): string | undefined {
+  return acpClientTokenToSession.get(clientSessionToken)
+}
+
+/**
+ * Resolve the pending app session associated with an injected MCP client token.
+ */
+export function getPendingAppSessionForClientSessionToken(clientSessionToken: string): string | undefined {
+  return pendingClientTokenToAppSession.get(clientSessionToken)
+}
+
+/**
  * Get the DotAgents session ID for a given ACP session ID.
  * @param acpSessionId The ACP agent's session ID
  * @returns The DotAgents session ID, or undefined if not mapped
@@ -160,13 +204,32 @@ export function getAppRunIdForAcpSession(acpSessionId: string): number | undefin
 }
 
 /**
+ * Clear all mappings associated with an injected MCP client token.
+ */
+export function clearAcpClientSessionTokenMapping(clientSessionToken: string): void {
+  const acpSessionId = acpClientTokenToSession.get(clientSessionToken)
+  if (acpSessionId && acpSessionToClientToken.get(acpSessionId) === clientSessionToken) {
+    acpSessionToClientToken.delete(acpSessionId)
+  }
+
+  acpClientTokenToSession.delete(clientSessionToken)
+  pendingClientTokenToAppSession.delete(clientSessionToken)
+}
+
+/**
  * Clear the ACP → DotAgents session mapping.
  * @param acpSessionId The ACP session ID to remove
  */
 export function clearAcpToAppSessionMapping(acpSessionId: string): void {
-  if (acpToAppSession.has(acpSessionId)) {
-    acpToAppSession.delete(acpSessionId)
-    acpToAppRunId.delete(acpSessionId)
+  const removedAppSession = acpToAppSession.delete(acpSessionId)
+  const removedRunId = acpToAppRunId.delete(acpSessionId)
+
+  const clientSessionToken = acpSessionToClientToken.get(acpSessionId)
+  if (clientSessionToken) {
+    clearAcpClientSessionTokenMapping(clientSessionToken)
+  }
+
+  if (removedAppSession || removedRunId || clientSessionToken) {
     logApp(`[ACP Session] Cleared ACP → app session mapping for ${acpSessionId}`)
   }
 }

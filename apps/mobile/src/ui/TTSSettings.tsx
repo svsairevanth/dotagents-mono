@@ -92,7 +92,7 @@ export function TTSSettings({
           style={styles.voiceSelector}
           onPress={() => setShowVoicePicker(true)}
         >
-          <Text style={styles.voiceSelectorText} numberOfLines={1}>
+          <Text style={styles.voiceSelectorText} numberOfLines={2}>
             {selectedVoice?.name || 'System Default'}
           </Text>
           <Text style={styles.chevron}>▼</Text>
@@ -214,32 +214,40 @@ const createStyles = (theme: Theme) =>
     },
     row: {
       flexDirection: 'row',
+      flexWrap: 'wrap',
       justifyContent: 'space-between',
       alignItems: 'center',
+      gap: spacing.sm,
       paddingVertical: spacing.sm,
     },
     label: {
       fontSize: 16,
       color: theme.colors.foreground,
+      flexGrow: 1,
+      flexShrink: 1,
     },
     voiceSelector: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.colors.muted,
-      paddingHorizontal: spacing.md,
+      paddingHorizontal: spacing.sm,
       paddingVertical: spacing.sm,
       borderRadius: radius.md,
-      maxWidth: '60%',
+      flexGrow: 1,
+      maxWidth: '100%',
+      minWidth: 140,
     },
     voiceSelectorText: {
       fontSize: 14,
       color: theme.colors.foreground,
       marginRight: spacing.sm,
       flex: 1,
+      flexShrink: 1,
     },
     chevron: {
       fontSize: 10,
       color: theme.colors.mutedForeground,
+      flexShrink: 0,
     },
     sliderRow: {
       paddingVertical: spacing.sm,

@@ -320,6 +320,7 @@ export function OverlayFollowUpInput({
         <PredefinedPromptsMenu
           onSelectPrompt={(content) => setText(content)}
           disabled={isDisabled}
+          buttonSize="sm"
         />
         <Button
           type="button"

@@ -13,8 +13,22 @@ interface ACPSessionBadgeProps {
     agentVersion?: string
     currentModel?: string
     currentMode?: string
+    configOptions?: Array<{
+      id: string
+      name: string
+      currentValue: string
+      options?: Array<{ value: string; name: string }> | unknown
+    }>
   }
   className?: string
+}
+
+function getConfigOptionLabel(option: {
+  currentValue: string
+  options?: Array<{ value: string; name: string }> | unknown
+}): string {
+  const values = Array.isArray(option.options) ? option.options : []
+  return values.find((value) => value.value === option.currentValue)?.name || option.currentValue
 }
 
 /**
@@ -24,7 +38,7 @@ interface ACPSessionBadgeProps {
  * Visual example: `[Claude Code v0.12.6] [Sonnet 4.5]`
  */
 export function ACPSessionBadge({ info, className }: ACPSessionBadgeProps) {
-  const { agentTitle, agentVersion, currentModel, currentMode } = info
+  const { agentTitle, agentVersion, currentModel, currentMode, configOptions } = info
 
   // Build agent label (e.g., "Claude Code v0.12.6")
   const agentLabel = agentTitle
@@ -35,6 +49,11 @@ export function ACPSessionBadge({ info, className }: ACPSessionBadgeProps) {
 
   // Build model label (e.g., "Sonnet 4.5" or "claude-3-5-sonnet")
   const modelLabel = currentModel || null
+  const modelBadgeLabel = modelLabel
+    ? currentMode
+      ? `${modelLabel} • ${currentMode}`
+      : modelLabel
+    : null
 
   // If nothing to display, return null
   if (!agentLabel && !modelLabel) {
@@ -47,6 +66,11 @@ export function ACPSessionBadge({ info, className }: ACPSessionBadgeProps) {
   if (agentVersion) tooltipLines.push(`Version: ${agentVersion}`)
   if (currentModel) tooltipLines.push(`Model: ${currentModel}`)
   if (currentMode) tooltipLines.push(`Mode: ${currentMode}`)
+  for (const option of configOptions || []) {
+    if (option.id === "model" || option.id === "mode") continue
+    const label = getConfigOptionLabel(option)
+    tooltipLines.push(`${option.name}: ${label}`)
+  }
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -54,27 +78,24 @@ export function ACPSessionBadge({ info, className }: ACPSessionBadgeProps) {
         <TooltipTrigger asChild>
           <div
             className={cn(
-              "inline-flex items-center gap-1.5 cursor-help",
+              "inline-flex max-w-full min-w-0 flex-wrap items-center gap-1.5 cursor-help",
               className
             )}
           >
             {agentLabel && (
               <Badge
                 variant="secondary"
-                className="text-[10px] px-1.5 py-0 font-medium"
+                className="max-w-full min-w-0 text-[10px] px-1.5 py-0 font-medium"
               >
-                {agentLabel}
+                <span className="truncate">{agentLabel}</span>
               </Badge>
             )}
-            {modelLabel && (
+            {modelBadgeLabel && (
               <Badge
                 variant="outline"
-                className="text-[10px] px-1.5 py-0 font-mono"
+                className="max-w-full min-w-0 text-[10px] px-1.5 py-0 font-mono"
               >
-                {modelLabel}
-                {currentMode && (
-                  <span className="ml-1 opacity-60">• {currentMode}</span>
-                )}
+                <span className="truncate">{modelBadgeLabel}</span>
               </Badge>
             )}
           </div>
@@ -90,4 +111,3 @@ export function ACPSessionBadge({ info, className }: ACPSessionBadgeProps) {
     </TooltipProvider>
   )
 }
-

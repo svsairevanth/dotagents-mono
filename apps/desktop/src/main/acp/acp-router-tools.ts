@@ -12,7 +12,7 @@ import type {
 import { acpBackgroundNotifier } from './acp-background-notifier';
 import { configStore } from '../config';
 import { acpService, ACPContentBlock } from '../acp-service';
-import { getPreferredDelegationOutput } from '../agent-run-utils';
+import { buildProfileContext, getPreferredDelegationOutput } from '../agent-run-utils';
 import { emitAgentProgress } from '../emit-agent-progress';
 import { agentSessionStateManager } from '../state';
 import type { ACPDelegationProgress, ACPSubAgentMessage } from '../../shared/types';
@@ -759,19 +759,6 @@ async function executeAgentProfileDelegation(
         error: `Unsupported connection type for agent "${profile.name}": ${profile.connection.type}`,
       };
   }
-}
-
-/**
- * Build context string from agent profile, optionally combining with existing context.
- */
-function buildProfileContext(profile: AgentProfile, existingContext?: string): string {
-  const parts: (string | null | undefined)[] = [
-    existingContext,
-    `[Acting as: ${profile.displayName}]`,
-    profile.systemPrompt ? `System Prompt: ${profile.systemPrompt}` : null,
-    profile.guidelines ? `Guidelines: ${profile.guidelines}` : null,
-  ];
-  return parts.filter(Boolean).join('\n\n');
 }
 
 /**

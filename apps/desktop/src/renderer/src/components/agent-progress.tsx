@@ -463,11 +463,11 @@ const CompactMessage: React.FC<{
                       key={index}
                       className="rounded-lg border border-border/30 bg-muted/20 p-2 text-xs"
                     >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-mono font-semibold text-primary">
+                      <div className="mb-1 flex flex-wrap items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate font-mono font-semibold text-primary" title={toolCall.name}>
                           {toolCall.name}
                         </span>
-                        <Badge variant="outline" className="text-xs">
+                        <Badge variant="outline" className="shrink-0 whitespace-nowrap text-xs">
                           Tool {index + 1}
                         </Badge>
                       </div>
@@ -498,9 +498,9 @@ const CompactMessage: React.FC<{
                           : "border-red-200/50 bg-red-50/30 text-red-800 dark:border-red-700/50 dark:bg-red-950/40 dark:text-red-200",
                       )}
                     >
-                      <div className="flex items-center justify-between mb-1">
+                      <div className="mb-1 flex flex-wrap items-center gap-2">
                         <span className={cn(
-                          "font-semibold flex items-center gap-1",
+                          "flex min-w-0 flex-1 items-center gap-1 font-semibold",
                           result.success ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
                         )}>
                           {result.success ? (
@@ -509,11 +509,11 @@ const CompactMessage: React.FC<{
                             <><XCircle className="h-3 w-3" /> Error</>
                           )}
                         </span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] opacity-60 font-mono">
+                        <div className="ml-auto flex shrink-0 flex-wrap items-center gap-2">
+                          <span className="whitespace-nowrap font-mono text-[10px] opacity-60">
                             {(result.content?.length || 0).toLocaleString()} chars
                           </span>
-                          <Badge variant="outline" className="text-xs">
+                          <Badge variant="outline" className="shrink-0 whitespace-nowrap text-xs">
                             Result {index + 1}
                           </Badge>
                         </div>
@@ -524,7 +524,7 @@ const CompactMessage: React.FC<{
                           <div className="text-xs font-medium opacity-70 mb-1">
                             Content:
                           </div>
-                          <pre className="rounded bg-muted/30 p-2 overflow-auto text-xs whitespace-pre-wrap break-all max-h-80 scrollbar-thin">
+                          <pre className="rounded bg-muted/30 p-2 text-xs whitespace-pre-wrap break-words overflow-x-auto overflow-y-auto max-w-full max-h-80 scrollbar-thin">
                             {result.content || "No content returned"}
                           </pre>
                         </div>
@@ -534,7 +534,7 @@ const CompactMessage: React.FC<{
                             <div className="text-xs font-medium text-destructive mb-1">
                               Error Details:
                             </div>
-                            <pre className="rounded bg-destructive/10 p-2 overflow-auto text-xs whitespace-pre-wrap break-all max-h-60 scrollbar-thin">
+                            <pre className="rounded bg-destructive/10 p-2 text-xs whitespace-pre-wrap break-words overflow-x-auto overflow-y-auto max-w-full max-h-60 scrollbar-thin">
                               {result.error}
                             </pre>
                           </div>
@@ -549,7 +549,7 @@ const CompactMessage: React.FC<{
 
           {/* TTS Audio Player - show for all completed assistant messages with content */}
           {shouldShowTTSButton && (
-            <div className="mt-2">
+            <div className="mt-2 min-w-0 space-y-1">
               <AudioPlayer
                 audioData={audioData || undefined}
                 text={ttsSource}
@@ -561,7 +561,7 @@ const CompactMessage: React.FC<{
                 onPlayStateChange={setIsTTSPlaying}
               />
               {ttsError && (
-                <div className="mt-1 rounded-md bg-red-50 p-2 text-xs text-red-700 dark:bg-red-900/20 dark:text-red-300">
+                <div className="rounded-md bg-red-50 p-2 text-xs text-red-700 break-words [overflow-wrap:anywhere] dark:bg-red-900/20 dark:text-red-300">
                   <span className="font-medium">Audio generation failed:</span>{" "}
                   {ttsError.includes("terms acceptance") ? (
                     <>
@@ -714,7 +714,7 @@ const ToolExecutionBubble: React.FC<{
             {/* Single line tool header */}
             <div
               className={cn(
-                "flex items-center gap-1.5 py-0.5 px-1.5 rounded text-[11px] cursor-pointer hover:bg-muted/30",
+                "flex min-w-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-[11px] cursor-pointer hover:bg-muted/30",
                 callIsPending
                   ? "text-blue-600 dark:text-blue-400"
                   : callSuccess
@@ -725,8 +725,8 @@ const ToolExecutionBubble: React.FC<{
             >
               {execCmdDisplay ? (
                 <>
-                  <span className="font-mono font-medium truncate" title={call.arguments?.command}>{execCmdDisplay.displayCommand}</span>
-                  <span className="text-[10px]">
+                  <span className="min-w-0 shrink truncate font-mono font-medium" title={call.arguments?.command}>{execCmdDisplay.displayCommand}</span>
+                  <span className="shrink-0 text-[10px] opacity-60">
                     {callIsPending ? (
                       <Loader2 className="h-2.5 w-2.5 animate-spin" />
                     ) : callSuccess ? (
@@ -736,13 +736,13 @@ const ToolExecutionBubble: React.FC<{
                     )}
                   </span>
                   {!isToolExpanded && execCmdDisplay.outputPreview && (
-                    <span className="text-[10px] opacity-50 truncate flex-1 font-mono">→ {execCmdDisplay.outputPreview}</span>
+                    <span className="min-w-0 flex-1 truncate text-[10px] font-mono opacity-50">→ {execCmdDisplay.outputPreview}</span>
                   )}
                 </>
               ) : (
                 <>
-                  <span className="font-mono font-medium truncate">{call.name}</span>
-                  <span className="text-[10px]">
+                  <span className="min-w-0 shrink truncate font-mono font-medium" title={call.name}>{call.name}</span>
+                  <span className="shrink-0 text-[10px] opacity-60">
                     {callIsPending ? (
                       <Loader2 className="h-2.5 w-2.5 animate-spin" />
                     ) : callSuccess ? (
@@ -752,7 +752,7 @@ const ToolExecutionBubble: React.FC<{
                     )}
                   </span>
                   {!isToolExpanded && callResultSummary && (
-                    <span className="text-[10px] opacity-50 truncate flex-1">{callResultSummary}</span>
+                    <span className="min-w-0 flex-1 truncate text-[10px] opacity-50">{callResultSummary}</span>
                   )}
                 </>
               )}
@@ -764,46 +764,46 @@ const ToolExecutionBubble: React.FC<{
 
             {/* Expanded details for this tool */}
             {isToolExpanded && (
-              <div className="ml-4 mt-0.5 mb-1 border-l border-border/50 pl-2 space-y-1 text-[10px]">
+              <div className="mb-1 ml-3 mt-0.5 space-y-1 border-l border-border/50 pl-2 text-[10px]">
                 {call.arguments && (
                   <>
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium opacity-70">Parameters</span>
-                      <Button size="sm" variant="ghost" className="h-4 px-1 text-[10px]" onClick={(e) => handleCopy(e, JSON.stringify(call.arguments, null, 2))}>
+                    <div className="flex flex-wrap items-center justify-between gap-1.5">
+                      <span className="min-w-0 font-medium opacity-70">Parameters</span>
+                      <Button size="sm" variant="ghost" className="h-5 shrink-0 px-1.5 text-[10px]" onClick={(e) => handleCopy(e, JSON.stringify(call.arguments, null, 2))}>
                         <Copy className="h-2 w-2 mr-0.5" /> Copy
                       </Button>
                     </div>
-                    <pre className="rounded bg-muted/40 p-1.5 overflow-auto whitespace-pre-wrap max-h-32 scrollbar-thin text-[10px]">
+                    <pre className="rounded bg-muted/40 p-1.5 overflow-x-auto overflow-y-auto whitespace-pre-wrap max-w-full max-h-32 scrollbar-thin text-[10px]">
                       {JSON.stringify(call.arguments, null, 2)}
                     </pre>
                   </>
                 )}
                 {result && (
                   <>
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-1.5">
                       <span className={cn(
-                        "font-medium",
+                        "min-w-0 flex-1 font-medium",
                         result.success ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
                       )}>
                         {result.success ? "Result" : "Error"}
                       </span>
-                      <span className="opacity-50 text-[10px]">{(result.content?.length || 0).toLocaleString()} chars</span>
+                      <span className="shrink-0 whitespace-nowrap opacity-50 text-[10px]">{(result.content?.length || 0).toLocaleString()} chars</span>
                     </div>
                     {result.error && (
-                      <pre className="rounded p-1.5 overflow-auto whitespace-pre-wrap break-all max-h-32 scrollbar-thin text-[10px] bg-red-50/50 dark:bg-red-950/30 text-red-700 dark:text-red-300">
+                      <pre className="rounded p-1.5 overflow-x-auto overflow-y-auto whitespace-pre-wrap break-words max-w-full max-h-32 scrollbar-thin text-[10px] bg-red-50/50 dark:bg-red-950/30 text-red-700 dark:text-red-300">
                         {result.error}
                       </pre>
                     )}
                     {result.content && (
                       <pre className={cn(
-                        "rounded p-1.5 overflow-auto whitespace-pre-wrap break-all max-h-32 scrollbar-thin text-[10px]",
+                        "rounded p-1.5 overflow-x-auto overflow-y-auto whitespace-pre-wrap break-words max-w-full max-h-32 scrollbar-thin text-[10px]",
                         result.success ? "bg-green-50/50 dark:bg-green-950/30" : "bg-muted/40"
                       )}>
                         {result.content}
                       </pre>
                     )}
                     {!result.error && !result.content && (
-                      <pre className="rounded p-1.5 overflow-auto whitespace-pre-wrap break-all max-h-32 scrollbar-thin text-[10px] bg-muted/40">
+                      <pre className="rounded p-1.5 overflow-x-auto overflow-y-auto whitespace-pre-wrap break-words max-w-full max-h-32 scrollbar-thin text-[10px] bg-muted/40">
                         No content
                       </pre>
                     )}
@@ -918,7 +918,7 @@ const AssistantWithToolsBubble: React.FC<{
                 <div
                   key={idx}
                   className={cn(
-                    "flex items-center gap-1.5 py-0.5 px-1 rounded text-[11px] cursor-pointer hover:bg-muted/30",
+                    "flex min-w-0 items-center gap-1.5 rounded px-1 py-0.5 text-[11px] cursor-pointer hover:bg-muted/30",
                     callIsPending
                       ? "text-blue-600 dark:text-blue-400"
                       : callSuccess
@@ -929,8 +929,8 @@ const AssistantWithToolsBubble: React.FC<{
                 >
                   {execCmdDisplay ? (
                     <>
-                      <span className="font-mono font-medium truncate" title={call.arguments?.command}>{execCmdDisplay.displayCommand}</span>
-                      <span className="text-[10px] opacity-60">
+                      <span className="min-w-0 shrink truncate font-mono font-medium" title={call.arguments?.command}>{execCmdDisplay.displayCommand}</span>
+                      <span className="shrink-0 text-[10px] opacity-60">
                         {callIsPending ? (
                           <Loader2 className="h-2.5 w-2.5 animate-spin" />
                         ) : callSuccess ? (
@@ -940,13 +940,13 @@ const AssistantWithToolsBubble: React.FC<{
                         )}
                       </span>
                       {!showToolDetails && execCmdDisplay.outputPreview && (
-                        <span className="text-[10px] opacity-50 truncate flex-1 font-mono">→ {execCmdDisplay.outputPreview}</span>
+                        <span className="min-w-0 flex-1 truncate text-[10px] font-mono opacity-50">→ {execCmdDisplay.outputPreview}</span>
                       )}
                     </>
                   ) : (
                     <>
-                      <span className="font-mono font-medium truncate">{call.name}</span>
-                      <span className="text-[10px] opacity-60">
+                      <span className="min-w-0 shrink truncate font-mono font-medium" title={call.name}>{call.name}</span>
+                      <span className="shrink-0 text-[10px] opacity-60">
                         {callIsPending ? (
                           <Loader2 className="h-2.5 w-2.5 animate-spin" />
                         ) : callSuccess ? (
@@ -956,7 +956,7 @@ const AssistantWithToolsBubble: React.FC<{
                         )}
                       </span>
                       {!showToolDetails && callResultSummary && (
-                        <span className="text-[10px] opacity-50 truncate flex-1">{callResultSummary}</span>
+                        <span className="min-w-0 flex-1 truncate text-[10px] opacity-50">{callResultSummary}</span>
                       )}
                     </>
                   )}
@@ -971,43 +971,43 @@ const AssistantWithToolsBubble: React.FC<{
 
           {/* Expanded tool details */}
           {showToolDetails && (
-            <div className="mt-1 space-y-1 ml-4 border-l border-border/50 pl-2">
+            <div className="mt-1 ml-3 space-y-1 border-l border-border/50 pl-2">
               {data.calls.map((call, idx) => {
                 const result = data.results[idx]
                 return (
                   <div key={idx} className="text-[10px] space-y-1">
-                    <div className="font-medium opacity-70">Parameters:</div>
+                    <div className="font-medium opacity-70 break-words">Parameters:</div>
                     {call.arguments && (
-                      <pre className="rounded bg-muted/40 p-1.5 overflow-auto whitespace-pre-wrap max-h-32 scrollbar-thin text-[10px]">
+                      <pre className="rounded bg-muted/40 p-1.5 overflow-x-auto overflow-y-auto whitespace-pre-wrap max-w-full max-h-32 scrollbar-thin text-[10px]">
                         {JSON.stringify(call.arguments, null, 2)}
                       </pre>
                     )}
                     {result && (
                       <>
-                        <div className="font-medium opacity-70 flex items-center gap-1">
+                        <div className="flex flex-wrap items-center gap-1.5 font-medium opacity-70">
                           Result:
                           <span className={cn(
-                            "text-[10px] font-semibold",
+                            "shrink-0 text-[10px] font-semibold",
                             result.success ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
                           )}>
                             {result.success ? "OK" : "ERR"}
                           </span>
                         </div>
                         {result.error && (
-                          <pre className="rounded p-1.5 overflow-auto whitespace-pre-wrap break-all max-h-32 scrollbar-thin text-[10px] bg-red-50/50 dark:bg-red-950/30 text-red-700 dark:text-red-300">
+                          <pre className="rounded p-1.5 overflow-x-auto overflow-y-auto whitespace-pre-wrap break-words max-w-full max-h-32 scrollbar-thin text-[10px] bg-red-50/50 dark:bg-red-950/30 text-red-700 dark:text-red-300">
                             {result.error}
                           </pre>
                         )}
                         {result.content && (
                           <pre className={cn(
-                            "rounded p-1.5 overflow-auto whitespace-pre-wrap break-all max-h-32 scrollbar-thin text-[10px]",
+                            "rounded p-1.5 overflow-x-auto overflow-y-auto whitespace-pre-wrap break-words max-w-full max-h-32 scrollbar-thin text-[10px]",
                             result.success ? "bg-green-50/50 dark:bg-green-950/30" : "bg-muted/40"
                           )}>
                             {result.content}
                           </pre>
                         )}
                         {!result.error && !result.content && (
-                          <pre className="rounded p-1.5 overflow-auto whitespace-pre-wrap break-all max-h-32 scrollbar-thin text-[10px] bg-muted/40">
+                          <pre className="rounded p-1.5 overflow-x-auto overflow-y-auto whitespace-pre-wrap break-words max-w-full max-h-32 scrollbar-thin text-[10px] bg-muted/40">
                             No content
                           </pre>
                         )}
@@ -1104,30 +1104,33 @@ const ToolApprovalBubble: React.FC<{
   const argsPreview = formatArgumentsPreview(approval.arguments)
 
   return (
-    <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/30 overflow-hidden">
+    <div className="min-w-0 max-w-full overflow-hidden rounded-lg border border-amber-300 bg-amber-50/50 dark:border-amber-700 dark:bg-amber-950/30">
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-amber-100/50 dark:bg-amber-900/30 border-b border-amber-200 dark:border-amber-800">
-        <Shield className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-        <span className="text-xs font-medium text-amber-800 dark:text-amber-200">
+      <div className="flex flex-wrap items-center gap-2 border-b border-amber-200 bg-amber-100/50 px-3 py-2 dark:border-amber-800 dark:bg-amber-900/30">
+        <Shield className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+        <span className="min-w-0 flex-1 text-xs font-medium text-amber-800 dark:text-amber-200">
           {isResponding ? "Processing..." : "Tool Approval Required"}
         </span>
         {isResponding && (
-          <Loader2 className="h-3 w-3 text-amber-600 dark:text-amber-400 animate-spin ml-auto" />
+          <Loader2 className="ml-auto h-3 w-3 shrink-0 animate-spin text-amber-600 dark:text-amber-400" />
         )}
       </div>
 
       {/* Content */}
-      <div ref={containerRef} className={cn("px-3 py-2", isResponding && "opacity-60")}>
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-xs text-amber-700 dark:text-amber-300">Tool:</span>
-          <code className="text-xs font-mono font-medium text-amber-900 dark:text-amber-100 bg-amber-100 dark:bg-amber-900/50 px-1.5 py-0.5 rounded">
+      <div ref={containerRef} className={cn("min-w-0 px-3 py-2", isResponding && "opacity-60")}>
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <span className="shrink-0 text-xs text-amber-700 dark:text-amber-300">Tool:</span>
+          <code className="max-w-full min-w-0 truncate rounded bg-amber-100 px-1.5 py-0.5 text-xs font-mono font-medium text-amber-900 dark:bg-amber-900/50 dark:text-amber-100">
             {approval.toolName}
           </code>
         </div>
 
         {/* Arguments preview - always visible */}
         {argsPreview && (
-          <div className="mb-2 text-xs text-amber-700/80 dark:text-amber-300/80 font-mono truncate" title={argsPreview}>
+          <div
+            className="mb-2 rounded-md border border-amber-200/70 bg-amber-100/40 px-2 py-1.5 text-[11px] font-mono leading-relaxed text-amber-700/80 dark:border-amber-800/60 dark:bg-amber-900/20 dark:text-amber-300/80 line-clamp-2 break-words [overflow-wrap:anywhere]"
+            title={argsPreview}
+          >
             {argsPreview}
           </div>
         )}
@@ -1136,58 +1139,72 @@ const ToolApprovalBubble: React.FC<{
         <div className="mb-3">
           <button
             onClick={() => setShowArgs(!showArgs)}
-            className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-200"
+            className="inline-flex max-w-full items-center gap-1 text-left text-xs text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-200"
             disabled={isResponding}
           >
             <ChevronRight className={cn("h-3 w-3 transition-transform", showArgs && "rotate-90")} />
             {showArgs ? "Hide" : "View"} full arguments
           </button>
           {showArgs && (
-            <pre className="mt-1.5 p-2 text-xs bg-amber-100/70 dark:bg-amber-900/40 rounded overflow-x-auto max-h-32 text-amber-900 dark:text-amber-100">
+            <pre className="mt-1.5 max-h-32 max-w-full overflow-x-auto rounded bg-amber-100/70 p-2 text-xs text-amber-900 whitespace-pre-wrap break-words dark:bg-amber-900/40 dark:text-amber-100">
               {JSON.stringify(approval.arguments, null, 2)}
             </pre>
           )}
         </div>
 
         {/* Action buttons with hotkey hints */}
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs border-red-300 text-red-700 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/30"
-            onClick={onDeny}
-            disabled={isResponding}
-            title="Press Shift+Space to deny"
-          >
-            <XCircle className="h-3 w-3 mr-1" />
-            Deny
-            <kbd className="ml-1.5 px-1 py-0.5 text-[10px] font-mono bg-red-100 dark:bg-red-900/50 rounded">Shift+Space</kbd>
-          </Button>
-          <Button
-            size="sm"
-            className={cn(
-              "h-7 text-xs text-white",
-              isResponding
-                ? "bg-green-500 cursor-not-allowed"
-                : "bg-green-600 hover:bg-green-700"
-            )}
-            onClick={onApprove}
-            disabled={isResponding}
-            title="Press Space to approve"
-          >
-            {isResponding ? (
-              <>
-                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                Processing...
-              </>
-            ) : (
-              <>
-                <Check className="h-3 w-3 mr-1" />
-                Approve
-                <kbd className="ml-1.5 px-1 py-0.5 text-[10px] font-mono bg-green-700 rounded">Space</kbd>
-              </>
-            )}
-          </Button>
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 min-w-[7rem] flex-1 border-red-300 text-xs text-red-700 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/30"
+              onClick={onDeny}
+              disabled={isResponding}
+              title="Press Shift+Space to deny"
+            >
+              <XCircle className="mr-1 h-3 w-3" />
+              Deny
+            </Button>
+            <Button
+              size="sm"
+              className={cn(
+                "h-7 min-w-[7rem] flex-1 text-xs text-white",
+                isResponding
+                  ? "cursor-not-allowed bg-green-500"
+                  : "bg-green-600 hover:bg-green-700"
+              )}
+              onClick={onApprove}
+              disabled={isResponding}
+              title="Press Space to approve"
+            >
+              {isResponding ? (
+                <>
+                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <Check className="mr-1 h-3 w-3" />
+                  Approve
+                </>
+              )}
+            </Button>
+          </div>
+          {!isResponding && (
+            <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-amber-700/80 dark:text-amber-300/80">
+              <span className="shrink-0 font-medium uppercase tracking-wider opacity-70">Hotkeys</span>
+              <div className="flex flex-wrap items-center gap-1">
+                <kbd className="rounded bg-green-700 px-1 py-0.5 font-mono text-[10px] text-white">Space</kbd>
+                <span>Approve</span>
+              </div>
+              <span className="opacity-40" aria-hidden="true">•</span>
+              <div className="flex flex-wrap items-center gap-1">
+                <kbd className="rounded bg-red-100 px-1 py-0.5 font-mono text-[10px] text-red-700 dark:bg-red-900/50 dark:text-red-300">Shift+Space</kbd>
+                <span>Deny</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -1233,27 +1250,27 @@ const RetryStatusBanner: React.FC<{
     : `Attempt ${retryInfo.attempt}`
 
   return (
-    <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/30 overflow-hidden">
+    <div className="min-w-0 max-w-full overflow-hidden rounded-lg border border-amber-300 bg-amber-50/50 dark:border-amber-700 dark:bg-amber-950/30">
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-amber-100/50 dark:bg-amber-900/30 border-b border-amber-200 dark:border-amber-800">
-        <Clock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-        <span className="text-xs font-medium text-amber-800 dark:text-amber-200">
+      <div className="flex flex-wrap items-center gap-2 border-b border-amber-200 bg-amber-100/50 px-3 py-2 dark:border-amber-800 dark:bg-amber-900/30">
+        <Clock className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+        <span className="min-w-0 flex-1 text-xs font-medium text-amber-800 dark:text-amber-200">
           {retryInfo.reason}
         </span>
-        <Loader2 className="h-3 w-3 text-amber-600 dark:text-amber-400 animate-spin ml-auto" />
+        <Loader2 className="ml-auto h-3 w-3 shrink-0 animate-spin text-amber-600 dark:text-amber-400" />
       </div>
 
       {/* Content */}
-      <div className="px-3 py-2">
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-amber-700 dark:text-amber-300">
+      <div className="min-w-0 px-3 py-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="shrink-0 text-xs text-amber-700 dark:text-amber-300">
             {attemptText}
           </span>
-          <span className="text-xs font-mono font-medium text-amber-900 dark:text-amber-100 bg-amber-100 dark:bg-amber-900/50 px-2 py-0.5 rounded">
+          <span className="max-w-full min-w-0 rounded bg-amber-100 px-2 py-0.5 text-xs font-mono font-medium text-amber-900 dark:bg-amber-900/50 dark:text-amber-100">
             Retrying in {countdown}s
           </span>
         </div>
-        <p className="text-xs text-amber-600 dark:text-amber-400 mt-1.5">
+        <p className="mt-1.5 text-xs text-amber-600 break-words dark:text-amber-400">
           The agent will automatically retry when the API is available.
         </p>
       </div>
@@ -1555,18 +1572,18 @@ const SubAgentConversationPanel: React.FC<{
     <div className="border border-gray-200 dark:border-gray-700 rounded-md overflow-hidden">
       {/* Collapsible Header */}
       <div
-        className="flex items-center gap-2 px-2.5 py-1.5 bg-gray-50 dark:bg-gray-800/50 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+        className="flex flex-wrap items-center gap-2 px-2.5 py-1.5 bg-gray-50 dark:bg-gray-800/50 cursor-pointer transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
         onClick={onToggle}
       >
-        <div className="min-w-0 flex-1 flex items-center gap-2">
-          <span className="text-[11px] font-medium text-gray-600 dark:text-gray-400">
+        <div className="min-w-0 flex flex-1 items-center gap-2">
+          <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-gray-600 dark:text-gray-400">
             {isOpen ? "Recent activity" : conversationPreview}
           </span>
-          <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">
+          <Badge variant="outline" className="h-4 shrink-0 px-1 py-0 text-[10px]">
             {conversation.length}
           </Badge>
         </div>
-        <div className="flex items-center gap-1 flex-shrink-0">
+        <div className="ml-auto flex flex-shrink-0 items-center gap-1">
           <button
             onClick={(e) => { e.stopPropagation(); void handleCopyAll() }}
             className="inline-flex h-6 w-6 items-center justify-center rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
@@ -1918,9 +1935,9 @@ const PastResponseItem: React.FC<{
   const preview = response.length > 80 ? response.slice(0, 80) + "…" : response
 
   return (
-    <div className="border border-green-200/60 dark:border-green-800/40 rounded-md overflow-hidden">
+    <div className="min-w-0 max-w-full overflow-hidden rounded-md border border-green-200/60 dark:border-green-800/40">
       <div
-        className="flex items-center gap-2 px-2.5 py-1.5 cursor-pointer hover:bg-green-50/50 dark:hover:bg-green-900/20 transition-colors"
+        className="flex min-w-0 items-start gap-2 cursor-pointer px-2.5 py-1.5 transition-colors hover:bg-green-50/50 dark:hover:bg-green-900/20"
         onClick={() => setIsExpanded(!isExpanded)}
       >
         {isExpanded ? (
@@ -1932,18 +1949,18 @@ const PastResponseItem: React.FC<{
           #{index + 1}
         </span>
         {!isExpanded && (
-          <span className="text-xs text-green-700/70 dark:text-green-300/60 truncate">
+          <span className="min-w-0 flex-1 text-xs text-green-700/70 dark:text-green-300/60 line-clamp-2 break-words [overflow-wrap:anywhere]">
             {preview}
           </span>
         )}
       </div>
       {isExpanded && (
-        <div className="px-2.5 pb-2 border-t border-green-200/40 dark:border-green-800/30">
+        <div className="min-w-0 border-t border-green-200/40 px-2.5 pb-2 dark:border-green-800/30">
           <div className="pt-1.5 text-sm text-green-900 dark:text-green-100 whitespace-pre-wrap break-words">
             <MarkdownRenderer content={response} />
           </div>
           {shouldShowTTSButton && (
-            <div className="mt-1.5">
+            <div className="mt-1.5 min-w-0">
               <AudioPlayer
                 text={ttsResponseText}
                 onGenerateAudio={generatePastAudio}
@@ -2111,11 +2128,11 @@ const MidTurnUserResponseBubble: React.FC<{
     (isExpanded || (variant === "overlay" && (configQuery.data?.ttsAutoPlay ?? true)))
 
   return (
-    <div className="rounded-lg border-2 border-green-400 bg-green-50/50 dark:bg-green-950/30 overflow-hidden">
+    <div className="min-w-0 max-w-full overflow-hidden rounded-lg border-2 border-green-400 bg-green-50/50 dark:bg-green-950/30">
       {/* Header */}
       <div
         className={cn(
-          "flex items-start gap-2 px-3 py-2 bg-green-100/50 dark:bg-green-900/30 cursor-pointer hover:bg-green-100/70 dark:hover:bg-green-900/40 transition-colors",
+          "flex min-w-0 flex-wrap items-start gap-2 cursor-pointer bg-green-100/50 px-3 py-2 transition-colors hover:bg-green-100/70 dark:bg-green-900/30 dark:hover:bg-green-900/40",
           isExpanded && "border-b border-green-200 dark:border-green-800",
         )}
         onClick={onToggleExpand}
@@ -2125,12 +2142,19 @@ const MidTurnUserResponseBubble: React.FC<{
         ) : (
           <ChevronRight className="h-3 w-3 text-green-600 dark:text-green-400 flex-shrink-0" />
         )}
-        <MessageSquare className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
-        <div className="min-w-0 flex-1">
+        <MessageSquare className="h-3.5 w-3.5 shrink-0 text-green-600 dark:text-green-400" />
+        <div className="min-w-0 flex-1 space-y-1 text-left">
           <div className="text-xs font-medium text-green-800 dark:text-green-200 truncate">
             {agentLabel}
           </div>
-          <div className="text-xs text-green-700/80 dark:text-green-300/70 truncate min-w-0">
+          <div
+            className={cn(
+              "min-w-0 text-xs text-green-700/80 dark:text-green-300/70",
+              isExpanded
+                ? "font-medium"
+                : "line-clamp-2 break-words [overflow-wrap:anywhere]"
+            )}
+          >
             {isExpanded ? "Latest response" : collapsedPreview}
           </div>
         </div>
@@ -2141,7 +2165,7 @@ const MidTurnUserResponseBubble: React.FC<{
               ttsManager.stopAll("agent-progress-midturn-pause")
             }}
             className={cn(
-              "ml-auto p-1 rounded hover:bg-green-200/50 dark:hover:bg-green-800/50 transition-colors",
+              "ml-auto shrink-0 self-start rounded p-1 transition-colors hover:bg-green-200/50 dark:hover:bg-green-800/50",
               isTTSPlaying && "animate-pulse"
             )}
             title={isGeneratingAudio ? "Generating audio…" : "Pause TTS"}
@@ -2158,7 +2182,7 @@ const MidTurnUserResponseBubble: React.FC<{
       {isExpanded && (
         <>
           {/* Content */}
-          <div className="px-3 py-2">
+          <div className="min-w-0 px-3 py-2">
             <div className="text-sm text-green-900 dark:text-green-100 whitespace-pre-wrap break-words">
               <MarkdownRenderer content={userResponse} />
             </div>
@@ -2167,7 +2191,7 @@ const MidTurnUserResponseBubble: React.FC<{
       )}
 
       {shouldKeepAudioPlayerMounted && (
-        <div className={cn("px-3", isExpanded ? "pb-2" : "hidden")}>
+        <div className={cn("min-w-0 px-3", isExpanded ? "pb-2" : "hidden")}>
           <AudioPlayer
             audioData={audioData || undefined}
             text={ttsSource}
@@ -2179,7 +2203,7 @@ const MidTurnUserResponseBubble: React.FC<{
             onPlayStateChange={setIsTTSPlaying}
           />
           {isExpanded && ttsError && (
-            <div className="mt-1 rounded-md bg-red-50 p-2 text-xs text-red-700 dark:bg-red-900/20 dark:text-red-300">
+            <div className="mt-1 rounded-md bg-red-50 p-2 text-xs text-red-700 break-words [overflow-wrap:anywhere] dark:bg-red-900/20 dark:text-red-300">
               <span className="font-medium">Audio generation failed:</span> {ttsError}
             </div>
           )}
@@ -2190,9 +2214,14 @@ const MidTurnUserResponseBubble: React.FC<{
         <>
           {/* Past Responses History */}
           {pastResponses && pastResponses.length > 0 && (
-            <div className="px-3 py-2 border-t border-green-200/60 dark:border-green-800/40 bg-green-50/30 dark:bg-green-950/20">
-              <div className="text-[10px] font-medium text-green-600/70 dark:text-green-400/60 uppercase tracking-wider mb-1.5">
-                Past Responses ({pastResponses.length})
+            <div className="border-t border-green-200/60 bg-green-50/30 px-3 py-2 dark:border-green-800/40 dark:bg-green-950/20">
+              <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] font-medium uppercase tracking-wider text-green-600/70 dark:text-green-400/60">
+                  Past Responses
+                </span>
+                <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700 dark:bg-green-900/50 dark:text-green-200">
+                  {pastResponses.length}
+                </span>
               </div>
               <div className="space-y-1">
                 {pastResponses.map((response, idx) => (
@@ -2538,9 +2567,24 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
       // Don't show assistant message from thinking step when streaming is active
       // to avoid duplicate content (streaming bubble already shows the text)
       const isStreaming = progress.streamingContent?.isStreaming
+      const latestAssistantHistoryMessage = [...messages]
+        .reverse()
+        .find(
+          (message) =>
+            message.role === "assistant" &&
+            !message.toolCalls?.length &&
+            !message.toolResults?.length &&
+            message.content.trim().length > 0,
+        )
+      const historyAlreadyContainsThinking = !!(
+        currentThinkingStep.llmContent &&
+        latestAssistantHistoryMessage?.content &&
+        currentThinkingStep.llmContent.endsWith(latestAssistantHistoryMessage.content)
+      )
 
       if (
         !isStreaming &&
+        !historyAlreadyContainsThinking &&
         currentThinkingStep.llmContent &&
         currentThinkingStep.llmContent.trim().length > 0
       ) {
@@ -2756,11 +2800,27 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
 
   // Add streaming content to display items if present and actively streaming
   if (progress.streamingContent && progress.streamingContent.isStreaming && progress.streamingContent.text) {
-    displayItems.push({
-      kind: "streaming",
-      id: "streaming-content",
-      data: progress.streamingContent,
-    })
+    const latestAssistantText = [...messages]
+      .reverse()
+      .find(
+        (message) =>
+          message.role === "assistant" &&
+          !message.toolCalls?.length &&
+          !message.toolResults?.length &&
+          message.content.trim().length > 0,
+      )
+    const historyAlreadyContainsStream = !!(
+      latestAssistantText?.content &&
+      progress.streamingContent.text.endsWith(latestAssistantText.content)
+    )
+
+    if (!historyAlreadyContainsStream) {
+      displayItems.push({
+        kind: "streaming",
+        id: "streaming-content",
+        data: progress.streamingContent,
+      })
+    }
   }
 
   // Add mid-turn user response to display items if present
@@ -3021,30 +3081,34 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
       >
         {/* Tile Header - clickable to toggle collapse */}
         <div
-          className="flex items-center gap-2 px-3 py-2 border-b bg-muted/30 flex-shrink-0 cursor-pointer"
+          className="flex flex-wrap items-start gap-2 px-3 py-2 border-b bg-muted/30 flex-shrink-0 cursor-pointer"
           onClick={handleToggleCollapse}
         >
-          {getStatusIndicator()}
-          <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-            <span className="truncate font-medium text-sm">
-              {getTitle()}
-            </span>
-            {/* Agent name indicator in header */}
-            {profileName && (
-              <span className="flex items-center gap-1 text-[10px] text-primary/70">
-                <Bot className="h-2.5 w-2.5 shrink-0" />
-                <span className="truncate">{profileName}</span>
+          <div className="flex min-w-0 flex-1 items-start gap-2">
+            <div className="shrink-0 pt-0.5">
+              {getStatusIndicator()}
+            </div>
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="truncate font-medium text-sm">
+                {getTitle()}
               </span>
-            )}
+              {/* Agent name indicator in header */}
+              {profileName && (
+                <span className="flex items-center gap-1 text-[10px] text-primary/70">
+                  <Bot className="h-2.5 w-2.5 shrink-0" />
+                  <span className="truncate">{profileName}</span>
+                </span>
+              )}
+            </div>
           </div>
-          {hasPendingApproval && (
-            <Badge variant="outline" className="text-amber-600 border-amber-500 text-xs">
-              Approval
-            </Badge>
-          )}
-          <div className="flex items-center gap-1">
+          <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-1">
+            {hasPendingApproval && (
+              <Badge variant="outline" className="shrink-0 border-amber-500 text-xs text-amber-600">
+                Approval
+              </Badge>
+            )}
             {/* Collapse/Expand toggle */}
-            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleToggleCollapse} title={isCollapsed ? "Expand panel" : "Collapse panel"}>
+            <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={handleToggleCollapse} title={isCollapsed ? "Expand panel" : "Collapse panel"}>
               {isCollapsed ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}
             </Button>
 
@@ -3052,7 +3116,7 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6"
+                className="h-6 w-6 shrink-0"
                 onClick={(e) => {
                   e.stopPropagation()
                   onExpand()
@@ -3064,12 +3128,12 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
             )}
 
             {!isComplete && !isSnoozed && (
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); handleSnooze(e); }} title="Minimize">
+              <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={(e) => { e.stopPropagation(); handleSnooze(e); }} title="Minimize">
                 <Minimize2 className="h-3 w-3" />
               </Button>
             )}
             {isSnoozed && (
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={async (e) => {
+              <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={async (e) => {
                 e.stopPropagation()
                 if (!progress?.sessionId) return
 
@@ -3103,11 +3167,11 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
             )}
             {/* Combined close button: stops agent if running, dismisses if complete */}
             {!isComplete ? (
-              <Button variant="ghost" size="icon" className="h-6 w-6 hover:bg-destructive/20 hover:text-destructive" onClick={(e) => { e.stopPropagation(); handleKillConfirmation(); }} title="Stop agent">
+              <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 hover:bg-destructive/20 hover:text-destructive" onClick={(e) => { e.stopPropagation(); handleKillConfirmation(); }} title="Stop agent">
                 <OctagonX className="h-3 w-3" />
               </Button>
             ) : onDismiss ? (
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); onDismiss(); }} title="Dismiss">
+              <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={(e) => { e.stopPropagation(); onDismiss(); }} title="Dismiss">
                 <X className="h-3 w-3" />
               </Button>
             ) : null}
@@ -3119,33 +3183,33 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
           <>
             {/* Tab toggle for Chat/Summary view - only show when summaries exist */}
             {(progress.stepSummaries?.length ?? 0) > 0 && (
-              <div className="flex items-center gap-1 px-3 py-1.5 border-b border-border/30 bg-muted/5" onClick={(e) => e.stopPropagation()}>
+              <div className="flex flex-wrap items-center gap-1 border-b border-border/30 bg-muted/5 px-2.5 py-1.5" onClick={(e) => e.stopPropagation()}>
                 <button
                   type="button"
                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActiveTab("chat"); }}
                   className={cn(
-                    "flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md transition-colors",
+                    "inline-flex min-w-0 max-w-full items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
                     activeTab === "chat"
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   )}
                 >
                   <MessageSquare className="h-3 w-3" />
-                  Chat
+                  <span className="truncate">Chat</span>
                 </button>
                 <button
                   type="button"
                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActiveTab("summary"); }}
                   className={cn(
-                    "flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md transition-colors",
+                    "inline-flex min-w-0 max-w-full items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
                     activeTab === "summary"
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   )}
                 >
                   <Brain className="h-3 w-3" />
-                  Summary
-                  <Badge variant="secondary" className="ml-1 text-[10px] px-1 py-0 h-4">
+                  <span className="truncate">Summary</span>
+                  <Badge variant="secondary" className="ml-1 h-4 shrink-0 px-1 py-0 text-[10px]">
                     {progress.stepSummaries?.length ?? 0}
                   </Badge>
                 </button>
@@ -3279,53 +3343,54 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
             )}
 
             {/* Footer with status info */}
-            <div className="px-3 py-2 border-t bg-muted/20 text-xs text-muted-foreground flex-shrink-0 flex items-center gap-2">
-              {profileName && (
-                <span className="text-[10px] truncate max-w-[80px] text-primary/70" title={`Profile: ${profileName}`}>
-                  {profileName}
-                </span>
-              )}
-              {(profileName && (modelInfo || acpSessionInfo) && !isComplete) && (
-                <span className="text-muted-foreground/50">•</span>
-              )}
-              {/* ACP Session info for tile variant */}
-              {acpSessionInfo && (
-                <ACPSessionBadge info={acpSessionInfo} />
-              )}
-              {/* Model info - only show for non-ACP sessions */}
-              {!isComplete && modelInfo && !acpSessionInfo && (
-                <span className="text-[10px] truncate max-w-[100px]" title={`${modelInfo.provider}: ${modelInfo.model}`}>
-                  {modelInfo.provider}/{modelInfo.model.split('/').pop()?.substring(0, 15)}
-                </span>
-              )}
-              {!isComplete && contextInfo && contextInfo.maxTokens > 0 && (
-                <div
-                  className="flex items-center gap-1"
-                  title={`Context: ${Math.round(contextInfo.estTokens / 1000)}k / ${Math.round(contextInfo.maxTokens / 1000)}k tokens (${Math.min(100, Math.round((contextInfo.estTokens / contextInfo.maxTokens) * 100))}%)`}
-                >
-                  <div className="w-8 h-1 bg-muted rounded-full overflow-hidden">
+            <div className="px-3 py-2 border-t bg-muted/20 text-xs text-muted-foreground flex-shrink-0">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+                  {profileName && (
+                    <span className="min-w-0 max-w-full truncate text-[10px] text-primary/70" title={`Profile: ${profileName}`}>
+                      {profileName}
+                    </span>
+                  )}
+                  {/* ACP Session info for tile variant */}
+                  {acpSessionInfo && (
+                    <ACPSessionBadge info={acpSessionInfo} className="min-w-0 max-w-full" />
+                  )}
+                  {/* Model info - only show for non-ACP sessions */}
+                  {!isComplete && modelInfo && !acpSessionInfo && (
+                    <span className="min-w-0 max-w-full truncate text-[10px]" title={`${modelInfo.provider}: ${modelInfo.model}`}>
+                      {modelInfo.provider}/{modelInfo.model.split('/').pop()?.substring(0, 15)}
+                    </span>
+                  )}
+                  {!isComplete && contextInfo && contextInfo.maxTokens > 0 && (
                     <div
-                      className={cn(
-                        "h-full transition-all duration-300 ease-out rounded-full",
-                        contextInfo.estTokens / contextInfo.maxTokens > 0.9
-                          ? "bg-red-500"
-                          : contextInfo.estTokens / contextInfo.maxTokens > 0.7
-                          ? "bg-amber-500"
-                          : "bg-emerald-500"
-                      )}
-                      style={{
-                        width: `${Math.min(100, (contextInfo.estTokens / contextInfo.maxTokens) * 100)}%`,
-                      }}
-                    />
-                  </div>
+                      className="flex shrink-0 items-center gap-1"
+                      title={`Context: ${Math.round(contextInfo.estTokens / 1000)}k / ${Math.round(contextInfo.maxTokens / 1000)}k tokens (${Math.min(100, Math.round((contextInfo.estTokens / contextInfo.maxTokens) * 100))}%)`}
+                    >
+                      <div className="w-8 h-1 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className={cn(
+                            "h-full transition-all duration-300 ease-out rounded-full",
+                            contextInfo.estTokens / contextInfo.maxTokens > 0.9
+                              ? "bg-red-500"
+                              : contextInfo.estTokens / contextInfo.maxTokens > 0.7
+                              ? "bg-amber-500"
+                              : "bg-emerald-500"
+                          )}
+                          style={{
+                            width: `${Math.min(100, (contextInfo.estTokens / contextInfo.maxTokens) * 100)}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
-              {!isComplete && (
-                <span>Step {currentIteration}/{isFinite(maxIterations) ? maxIterations : "∞"}</span>
-              )}
-              {isComplete && (
-                <span>{wasStopped ? "Stopped" : hasErrors ? "Failed" : "Complete"}</span>
-              )}
+                {!isComplete && (
+                  <span className="shrink-0 whitespace-nowrap">Step {currentIteration}/{isFinite(maxIterations) ? maxIterations : "∞"}</span>
+                )}
+                {isComplete && (
+                  <span className="shrink-0 whitespace-nowrap">{wasStopped ? "Stopped" : hasErrors ? "Failed" : "Complete"}</span>
+                )}
+              </div>
             </div>
           </>
         )}
@@ -3489,33 +3554,33 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
 
       {/* Tab toggle for Chat/Summary view - only show when summaries exist */}
       {(progress.stepSummaries?.length ?? 0) > 0 && (
-        <div className="flex items-center gap-1 px-3 py-1.5 border-b border-border/30 bg-muted/5" onClick={(e) => e.stopPropagation()}>
+        <div className="flex flex-wrap items-center gap-1 border-b border-border/30 bg-muted/5 px-2.5 py-1.5" onClick={(e) => e.stopPropagation()}>
           <button
             type="button"
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActiveTab("chat"); }}
             className={cn(
-              "flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md transition-colors",
+              "inline-flex min-w-0 max-w-full items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
               activeTab === "chat"
                 ? "bg-primary text-primary-foreground"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
           >
             <MessageSquare className="h-3 w-3" />
-            Chat
+            <span className="truncate">Chat</span>
           </button>
           <button
             type="button"
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActiveTab("summary"); }}
             className={cn(
-              "flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md transition-colors",
+              "inline-flex min-w-0 max-w-full items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
               activeTab === "summary"
                 ? "bg-primary text-primary-foreground"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
           >
             <Brain className="h-3 w-3" />
-            Summary
-            <Badge variant="secondary" className="ml-1 text-[10px] px-1 py-0 h-4">
+            <span className="truncate">Summary</span>
+            <Badge variant="secondary" className="ml-1 h-4 shrink-0 px-1 py-0 text-[10px]">
               {progress.stepSummaries?.length ?? 0}
             </Badge>
           </button>

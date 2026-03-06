@@ -5,7 +5,7 @@
  * This allows using agents like Claude Code as the "brain" for DotAgents.
  */
 
-import { acpService, ACPContentBlock, ACPToolCallUpdate } from "./acp-service"
+import { acpService, ACPContentBlock, ACPToolCallStatus, ACPToolCallUpdate } from "./acp-service"
 import {
   getSessionForConversation,
   setSessionForConversation,
@@ -14,9 +14,21 @@ import {
   setAcpToSpeakMcpSessionMapping,
 } from "./acp-session-state"
 import { emitAgentProgress } from "./emit-agent-progress"
-import { AgentProgressUpdate, AgentProgressStep } from "../shared/types"
+import { AgentProgressUpdate, AgentProgressStep, SessionProfileSnapshot, ACPConfigOption, ToolCall, ToolResult } from "../shared/types"
+import { BUILTIN_SERVER_NAME, MARK_WORK_COMPLETE_TOOL, RESPOND_TO_USER_TOOL } from "../shared/builtin-tool-names"
 import { logApp } from "./debug"
 import { conversationService } from "./conversation-service"
+import { buildProfileContext } from "./agent-run-utils"
+
+type ConversationHistoryMessage = NonNullable<AgentProgressUpdate["conversationHistory"]>[number]
+
+const ACP_INJECTED_BUILTIN_SERVER_NAME = "dotagents-builtin"
+const ACP_BUILTIN_TOOL_PROMPT_CONTEXT = [
+  `If the injected MCP server "${ACP_INJECTED_BUILTIN_SERVER_NAME}" is available, prefer it for DotAgents builtin user-facing communication tools.`,
+  `When "${RESPOND_TO_USER_TOOL}" is available, use it for every user-facing response instead of plain assistant text.`,
+  `When the task is fully complete and "${MARK_WORK_COMPLETE_TOOL}" is available, call "${RESPOND_TO_USER_TOOL}" first with the final user-facing answer, then call "${MARK_WORK_COMPLETE_TOOL}" with a concise completion summary.`,
+  `Only fall back to plain assistant text if those builtin tools are unavailable or fail repeatedly.`,
+].join("\n")
 
 export interface ACPMainAgentOptions {
   /** Name of the ACP agent to use */
@@ -31,6 +43,8 @@ export interface ACPMainAgentOptions {
   runId: number
   /** Callback for progress updates */
   onProgress?: (update: AgentProgressUpdate) => void
+  /** Profile snapshot used for ACP context parity + tool filtering parity */
+  profileSnapshot?: SessionProfileSnapshot
 }
 
 export interface ACPMainAgentResult {
@@ -46,6 +60,262 @@ export interface ACPMainAgentResult {
   error?: string
 }
 
+function getConfigOptionByCategory(
+  configOptions: ACPConfigOption[] | undefined,
+  category: string,
+): ACPConfigOption | undefined {
+  return configOptions?.find((option) => option.category === category)
+    || configOptions?.find((option) => option.id === category)
+}
+
+function getCurrentConfigOptionLabel(option: ACPConfigOption | undefined): string | undefined {
+  if (!option) return undefined
+  const values = Array.isArray(option.options) ? option.options : []
+  return values.find((value) => value.value === option.currentValue)?.name || option.currentValue
+}
+
+function getConfigOptionChoices(option: ACPConfigOption | undefined): Array<{ id: string; name: string; description?: string }> | undefined {
+  if (!option) return undefined
+  const values = Array.isArray(option.options) ? option.options : []
+  return values.map((value) => ({
+    id: value.value,
+    name: value.name,
+    description: value.description,
+  }))
+}
+
+function summarizeAcpContentBlock(block: ACPContentBlock): { title: string; description?: string; type: AgentProgressStep["type"] } | undefined {
+  if (block.type === "tool_result") {
+    const description = typeof block.result === "string"
+      ? block.result
+      : block.result
+        ? JSON.stringify(block.result)
+        : undefined
+    return { title: "Tool result", description: description?.slice(0, 200), type: "tool_result" }
+  }
+
+  if (block.type === "image") {
+    return { title: "Image output", description: block.mimeType || "image", type: "tool_result" }
+  }
+
+  if (block.type === "audio") {
+    return { title: "Audio output", description: block.mimeType || "audio", type: "tool_result" }
+  }
+
+  if (block.type === "resource") {
+    return {
+      title: "Embedded resource",
+      description: block.resource?.uri || block.uri || block.mimeType,
+      type: "tool_result",
+    }
+  }
+
+  if (block.type === "resource_link") {
+    return {
+      title: block.title || block.name || "Resource link",
+      description: block.uri || block.description,
+      type: "tool_result",
+    }
+  }
+
+  return undefined
+}
+
+function stringifyAcpValue(value: unknown): string | undefined {
+  if (typeof value === "string") return value
+  if (value == null) return undefined
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
+}
+
+function formatAcpToolResult(result: unknown): ToolResult {
+  if (result && typeof result === "object") {
+    const maybeError = "error" in result && typeof result.error === "string" ? result.error : undefined
+    const maybeIsError = "isError" in result && result.isError === true
+    const maybeContent = "content" in result ? stringifyAcpValue(result.content) : undefined
+    return {
+      success: !maybeError && !maybeIsError,
+      content: maybeContent || stringifyAcpValue(result) || "Tool completed",
+      error: maybeError,
+    }
+  }
+
+  return {
+    success: true,
+    content: stringifyAcpValue(result) || "Tool completed",
+  }
+}
+
+function formatAcpBlockAsAssistantMessage(block: ACPContentBlock): string | undefined {
+  if (block.type === "image") {
+    if (block.uri) {
+      return `![${block.title || "Image output"}](${block.uri})`
+    }
+    return `Image output${block.mimeType ? ` (${block.mimeType})` : ""}`
+  }
+
+  if (block.type === "audio") {
+    return block.uri
+      ? `Audio output: ${block.uri}`
+      : `Audio output${block.mimeType ? ` (${block.mimeType})` : ""}`
+  }
+
+  if (block.type === "resource") {
+    if (block.resource?.text) return block.resource.text
+    const resourceUri = block.resource?.uri || block.uri
+    return resourceUri
+      ? `Resource: ${resourceUri}`
+      : `Embedded resource${block.mimeType ? ` (${block.mimeType})` : ""}`
+  }
+
+  if (block.type === "resource_link") {
+    const label = block.title || block.name || "Resource link"
+    if (block.uri) {
+      return block.description
+        ? `[${label}](${block.uri})\n\n${block.description}`
+        : `[${label}](${block.uri})`
+    }
+    return [label, block.description].filter(Boolean).join("\n\n") || label
+  }
+
+  return undefined
+}
+
+function extractRespondToUserContentFromArgs(args: unknown): string | undefined {
+  if (!args || typeof args !== "object") return undefined
+
+  const parsedArgs = args as Record<string, unknown>
+  const text = typeof parsedArgs.text === "string" ? parsedArgs.text.trim() : ""
+  const images = Array.isArray(parsedArgs.images) ? parsedArgs.images : []
+
+  const imageMarkdown = images
+    .map((image, index) => {
+      if (!image || typeof image !== "object") return ""
+      const parsedImage = image as Record<string, unknown>
+      const alt = typeof parsedImage.alt === "string" && parsedImage.alt.trim().length > 0
+        ? parsedImage.alt.trim()
+        : `Image ${index + 1}`
+      const path = typeof parsedImage.path === "string" ? parsedImage.path.trim() : ""
+      const dataUrl = typeof parsedImage.dataUrl === "string" ? parsedImage.dataUrl.trim() : ""
+      const uri = dataUrl || path
+      if (!uri) return ""
+      return `![${alt}](${uri})`
+    })
+    .filter(Boolean)
+    .join("\n\n")
+
+  const combined = [text, imageMarkdown].filter(Boolean).join("\n\n").trim()
+  return combined.length > 0 ? combined : undefined
+}
+
+function normalizeAcpToolName(name: string | undefined): string | undefined {
+  if (!name) return undefined
+
+  const trimmed = name.trim()
+  if (!trimmed) return undefined
+
+  const withoutToolPrefix = trimmed.replace(/^tool:\s*/i, "")
+  const withoutBuiltinPrefix = withoutToolPrefix.startsWith(`${BUILTIN_SERVER_NAME}:`)
+    ? withoutToolPrefix.slice(BUILTIN_SERVER_NAME.length + 1)
+    : withoutToolPrefix
+
+  const normalized = withoutBuiltinPrefix
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+
+  if (normalized.endsWith(RESPOND_TO_USER_TOOL)) return RESPOND_TO_USER_TOOL
+  if (normalized.endsWith(MARK_WORK_COMPLETE_TOOL)) return MARK_WORK_COMPLETE_TOOL
+
+  return withoutToolPrefix
+}
+
+function deriveAcpUserResponseState(conversationHistory: ConversationHistoryMessage[]): {
+  userResponse?: string
+  userResponseHistory?: string[]
+} {
+  const responses: string[] = []
+
+  for (const message of conversationHistory) {
+    if (message.role !== "assistant" || !message.toolCalls?.length) continue
+
+    for (const toolCall of message.toolCalls) {
+      if (normalizeAcpToolName(toolCall.name) !== RESPOND_TO_USER_TOOL) continue
+      const content = extractRespondToUserContentFromArgs(toolCall.arguments)
+      if (!content) continue
+      if (responses[responses.length - 1] === content) continue
+      responses.push(content)
+    }
+  }
+
+  const userResponse = responses[responses.length - 1]
+  return {
+    userResponse,
+    userResponseHistory: responses.length > 1 ? responses.slice(0, -1) : undefined,
+  }
+}
+
+function normalizeToolArguments(input: unknown): ToolCall["arguments"] {
+  if (input && typeof input === "object" && !Array.isArray(input)) {
+    return input as ToolCall["arguments"]
+  }
+  if (input === undefined) return {}
+  return { input }
+}
+
+function formatAcpToolCallName(toolCall: ACPToolCallUpdate): string {
+  const rawInput = toolCall.rawInput
+  if (rawInput && typeof rawInput === "object" && !Array.isArray(rawInput)) {
+    const maybeName = (rawInput as Record<string, unknown>).name
+    if (typeof maybeName === "string" && maybeName.trim().length > 0) {
+      return normalizeAcpToolName(maybeName) || maybeName
+    }
+  }
+
+  const title = toolCall.title?.trim()
+  if (!title) return "Tool call"
+  return normalizeAcpToolName(title) || title
+}
+
+function formatAcpToolCallResultText(toolCall: ACPToolCallUpdate): string {
+  const outputText = stringifyAcpValue(toolCall.rawOutput)
+  if (outputText) return outputText
+
+  const contentText = toolCall.content
+    ?.map((item) => {
+      if (item.type === "text") return item.text
+      if (item.type === "diff") return item.path ? `Updated ${item.path}` : "Applied diff"
+      if (item.type === "terminal") return item.terminalId ? `Terminal ${item.terminalId}` : "Terminal output"
+      if (item.type === "location") {
+        const linePart = typeof item.line === "number" ? `:${item.line}` : ""
+        const columnPart = typeof item.column === "number" ? `:${item.column}` : ""
+        return item.path ? `Location ${item.path}${linePart}${columnPart}` : "Location"
+      }
+      return undefined
+    })
+    .filter((value): value is string => !!value && value.trim().length > 0)
+    .join("\n")
+
+  if (contentText) return contentText
+  return toolCall.status === "failed" ? "Tool failed" : "Tool completed"
+}
+
+function formatAcpToolCallResult(toolCall: ACPToolCallUpdate): ToolResult {
+  const content = formatAcpToolCallResultText(toolCall)
+  return {
+    success: toolCall.status !== "failed",
+    content,
+    error: toolCall.status === "failed" ? content : undefined,
+  }
+}
+
+function isCompletedToolCallStatus(status: ACPToolCallStatus | undefined): status is "completed" | "failed" {
+  return status === "completed" || status === "failed"
+}
+
 /**
  * Process a transcript using an ACP agent as the main agent.
  * This bypasses the normal LLM API call and routes directly to the ACP agent.
@@ -54,23 +324,22 @@ export async function processTranscriptWithACPAgent(
   transcript: string,
   options: ACPMainAgentOptions
 ): Promise<ACPMainAgentResult> {
-  const { agentName, conversationId, forceNewSession, sessionId, runId, onProgress } = options
+  const { agentName, conversationId, forceNewSession, sessionId, runId, onProgress, profileSnapshot } = options
 
   logApp(`[ACP Main] Processing transcript with agent ${agentName} for conversation ${conversationId}`)
 
   // Track accumulated text across all session updates for streaming display
   let accumulatedText = ""
+  let sawAssistantTextBlock = false
+  let lastAssistantTextMessageIndex: number | undefined
+  const trackedToolCalls = new Map<string, { assistantIndex: number; resultIndex?: number }>()
+  let fallbackToolCallIdCounter = 0
 
   // Counter for generating unique step IDs to avoid collisions in tight loops
   let stepIdCounter = 0
   const generateStepId = (prefix: string): string => `${prefix}-${Date.now()}-${++stepIdCounter}`
 
   // Load existing conversation history for UI display
-  type ConversationHistoryMessage = {
-    role: "user" | "assistant" | "tool"
-    content: string
-    timestamp?: number
-  }
   let conversationHistory: ConversationHistoryMessage[] = []
 
   try {
@@ -79,11 +348,113 @@ export async function processTranscriptWithACPAgent(
       conversationHistory = conversation.messages.map(m => ({
         role: m.role,
         content: m.content,
+        toolCalls: m.toolCalls,
+        toolResults: m.toolResults,
         timestamp: m.timestamp,
       }))
     }
   } catch (err) {
     logApp(`[ACP Main] Failed to load conversation history: ${err}`)
+  }
+
+  const appendAssistantText = (text: string, timestamp: number) => {
+    if (!text) return
+    sawAssistantTextBlock = true
+
+    if (
+      typeof lastAssistantTextMessageIndex === "number" &&
+      conversationHistory[lastAssistantTextMessageIndex]?.role === "assistant" &&
+      !(conversationHistory[lastAssistantTextMessageIndex]?.toolCalls?.length) &&
+      !(conversationHistory[lastAssistantTextMessageIndex]?.toolResults?.length)
+    ) {
+      const existing = conversationHistory[lastAssistantTextMessageIndex]
+      if (existing) {
+        existing.content += text
+        existing.timestamp = timestamp
+      }
+      return
+    }
+
+    conversationHistory.push({
+      role: "assistant",
+      content: text,
+      timestamp,
+    })
+    lastAssistantTextMessageIndex = conversationHistory.length - 1
+  }
+
+  const appendConversationEntry = (entry: ConversationHistoryMessage) => {
+    conversationHistory.push(entry)
+    lastAssistantTextMessageIndex = undefined
+  }
+
+  const appendOrMergeAssistantToolCall = (toolCall: ToolCall, timestamp: number): number => {
+    const lastEntry = conversationHistory[conversationHistory.length - 1]
+    if (
+      typeof lastAssistantTextMessageIndex === "number" &&
+      lastAssistantTextMessageIndex === conversationHistory.length - 1 &&
+      lastEntry?.role === "assistant" &&
+      !lastEntry.toolResults?.length &&
+      (!lastEntry.toolCalls || lastEntry.toolCalls.length === 0)
+    ) {
+      lastEntry.toolCalls = [toolCall]
+      lastEntry.timestamp = timestamp
+      lastAssistantTextMessageIndex = undefined
+      return conversationHistory.length - 1
+    }
+
+    appendConversationEntry({
+      role: "assistant",
+      content: "",
+      toolCalls: [toolCall],
+      timestamp,
+    })
+    return conversationHistory.length - 1
+  }
+
+  const applyAcpToolCallUpdateToConversation = (toolCallUpdate: ACPToolCallUpdate, timestamp: number) => {
+    const toolCallId = toolCallUpdate.toolCallId || `acp-tool-${timestamp}-${++fallbackToolCallIdCounter}`
+    const toolCall: ToolCall = {
+      name: formatAcpToolCallName(toolCallUpdate),
+      arguments: normalizeToolArguments(toolCallUpdate.rawInput),
+    }
+
+    let tracked = trackedToolCalls.get(toolCallId)
+
+    if (!tracked) {
+      tracked = {
+        assistantIndex: appendOrMergeAssistantToolCall(toolCall, timestamp),
+      }
+      trackedToolCalls.set(toolCallId, tracked)
+    } else {
+      const assistantEntry = conversationHistory[tracked.assistantIndex]
+      if (assistantEntry) {
+        assistantEntry.toolCalls = [toolCall]
+        assistantEntry.timestamp = timestamp
+      }
+    }
+
+    if (isCompletedToolCallStatus(toolCallUpdate.status)) {
+      const toolResult = formatAcpToolCallResult(toolCallUpdate)
+      const content = toolResult.error || toolResult.content
+
+      if (typeof tracked.resultIndex === "number") {
+        const resultEntry = conversationHistory[tracked.resultIndex]
+        if (resultEntry) {
+          resultEntry.content = content
+          resultEntry.toolResults = [toolResult]
+          resultEntry.timestamp = timestamp
+        }
+      } else {
+        appendConversationEntry({
+          role: "tool",
+          content,
+          toolResults: [toolResult],
+          timestamp,
+        })
+        tracked.resultIndex = conversationHistory.length - 1
+      }
+    }
   }
 
   // Helper to get ACP session info for progress updates (Task 3.1)
@@ -94,18 +465,23 @@ export async function processTranscriptWithACPAgent(
       agentName: agentInstance.agentInfo?.name,
       agentTitle: agentInstance.agentInfo?.title,
       agentVersion: agentInstance.agentInfo?.version,
-      currentModel: agentInstance.sessionInfo?.models?.currentModelId,
-      currentMode: agentInstance.sessionInfo?.modes?.currentModeId,
-      availableModels: agentInstance.sessionInfo?.models?.availableModels?.map(m => ({
+      currentModel: getCurrentConfigOptionLabel(getConfigOptionByCategory(agentInstance.sessionInfo?.configOptions, "model"))
+        || agentInstance.sessionInfo?.models?.currentModelId,
+      currentMode: getCurrentConfigOptionLabel(getConfigOptionByCategory(agentInstance.sessionInfo?.configOptions, "mode"))
+        || agentInstance.sessionInfo?.modes?.currentModeId,
+      availableModels: getConfigOptionChoices(getConfigOptionByCategory(agentInstance.sessionInfo?.configOptions, "model"))
+        || agentInstance.sessionInfo?.models?.availableModels?.map(m => ({
         id: m.modelId,
         name: m.name,
         description: m.description,
       })),
-      availableModes: agentInstance.sessionInfo?.modes?.availableModes?.map(m => ({
+      availableModes: getConfigOptionChoices(getConfigOptionByCategory(agentInstance.sessionInfo?.configOptions, "mode"))
+        || agentInstance.sessionInfo?.modes?.availableModes?.map(m => ({
         id: m.id,
         name: m.name,
         description: m.description,
       })),
+      configOptions: agentInstance.sessionInfo?.configOptions,
     }
   }
 
@@ -116,6 +492,7 @@ export async function processTranscriptWithACPAgent(
     finalContent?: string,
     streamingContent?: { text: string; isStreaming: boolean }
   ) => {
+    const { userResponse, userResponseHistory } = deriveAcpUserResponseState(conversationHistory)
     const update: AgentProgressUpdate = {
       sessionId,
       runId,
@@ -124,9 +501,11 @@ export async function processTranscriptWithACPAgent(
       maxIterations: 1,
       steps,
       isComplete,
-      finalContent,
+      finalContent: finalContent ?? (isComplete ? userResponse : undefined),
       streamingContent,
       conversationHistory,
+      ...(userResponse ? { userResponse } : {}),
+      ...(userResponseHistory?.length ? { userResponseHistory } : {}),
       // Include ACP session info in progress updates (Task 3.1)
       acpSessionInfo: getAcpSessionInfo(),
     }
@@ -160,7 +539,12 @@ export async function processTranscriptWithACPAgent(
       logApp(`[ACP Main] Reusing existing session ${acpSessionId}`)
     } else {
       // Create new session
-      acpSessionId = await acpService.getOrCreateSession(agentName, true)
+      acpSessionId = await acpService.getOrCreateSession(
+        agentName,
+        true,
+        undefined,
+        { appSessionId: sessionId },
+      )
       setSessionForConversation(conversationId, acpSessionId, agentName)
       logApp(`[ACP Main] Created new session ${acpSessionId}`)
     }
@@ -196,25 +580,31 @@ export async function processTranscriptWithACPAgent(
       const steps: AgentProgressStep[] = []
       if (event.content) {
         for (const block of event.content) {
+          const timestamp = Date.now()
           if (block.type === "text" && block.text) {
             // Accumulate text for streaming display
             accumulatedText += block.text
+            appendAssistantText(block.text, timestamp)
             steps.push({
               id: generateStepId("acp-text"),
               type: "thinking",
               title: "Agent response",
               description: block.text.substring(0, 200) + (block.text.length > 200 ? "..." : ""),
               status: event.isComplete ? "completed" : "in_progress",
-              timestamp: Date.now(),
+              timestamp,
               llmContent: accumulatedText, // Use accumulated text, not just this block
             })
           } else if (block.type === "tool_use" && block.name) {
+            appendOrMergeAssistantToolCall({
+              name: normalizeAcpToolName(block.name) || block.name,
+              arguments: normalizeToolArguments(block.input),
+            }, timestamp)
             const step: AgentProgressStep = {
               id: generateStepId("acp-tool"),
               type: "tool_call",
               title: `Tool: ${block.name}`,
               status: "in_progress",
-              timestamp: Date.now(),
+              timestamp,
             }
             // Attach execution stats if available from tool response
             if (event.toolResponseStats) {
@@ -229,11 +619,50 @@ export async function processTranscriptWithACPAgent(
               step.subagentId = event.toolResponseStats.agentId
             }
             steps.push(step)
+          } else if (block.type === "tool_result") {
+            appendConversationEntry({
+              role: "tool",
+              content: stringifyAcpValue(block.result) || "Tool completed",
+              toolResults: [formatAcpToolResult(block.result)],
+              timestamp,
+            })
+            const summary = summarizeAcpContentBlock(block)
+            if (summary) {
+              steps.push({
+                id: generateStepId("acp-content"),
+                type: summary.type,
+                title: summary.title,
+                description: summary.description,
+                status: event.isComplete ? "completed" : "in_progress",
+                timestamp,
+              })
+            }
+          } else {
+            const assistantMessage = formatAcpBlockAsAssistantMessage(block)
+            if (assistantMessage) {
+              appendConversationEntry({
+                role: "assistant",
+                content: assistantMessage,
+                timestamp,
+              })
+            }
+            const summary = summarizeAcpContentBlock(block)
+            if (summary) {
+              steps.push({
+                id: generateStepId("acp-content"),
+                type: summary.type,
+                title: summary.title,
+                description: summary.description,
+                status: event.isComplete ? "completed" : "in_progress",
+                timestamp,
+              })
+            }
           }
         }
       }
 
       if (event.toolCall) {
+        applyAcpToolCallUpdateToConversation(event.toolCall, Date.now())
         const toolStatus = event.toolCall.status
         steps.push({
           id: generateStepId("acp-tool-call"),
@@ -294,18 +723,18 @@ export async function processTranscriptWithACPAgent(
 
     try {
       // Send the prompt
-      const result = await acpService.sendPrompt(agentName, acpSessionId, transcript)
+      const promptContext = buildProfileContext(profileSnapshot, ACP_BUILTIN_TOOL_PROMPT_CONTEXT)
+      const result = await acpService.sendPrompt(agentName, acpSessionId, transcript, promptContext)
 
+      const { userResponse } = deriveAcpUserResponseState(conversationHistory)
       // Use accumulated text if result.response is empty but we received streaming content
-      const finalResponse = result.response || accumulatedText || undefined
+      const finalResponse = userResponse || result.response || accumulatedText || undefined
 
-      // Add assistant response to conversation history for display
-      if (finalResponse) {
-        conversationHistory.push({
-          role: "assistant",
-          content: finalResponse,
-          timestamp: Date.now(),
-        })
+      if (finalResponse && !userResponse && !sawAssistantTextBlock) {
+        appendAssistantText(finalResponse, Date.now())
+      } else if (finalResponse && !userResponse && accumulatedText && finalResponse.startsWith(accumulatedText)) {
+        appendAssistantText(finalResponse.slice(accumulatedText.length), Date.now())
+        accumulatedText = finalResponse
       }
 
       // Emit completion with final accumulated text

@@ -198,6 +198,7 @@ export const TextInputPanel = forwardRef<TextInputPanelRef, TextInputPanelProps>
               <PredefinedPromptsMenu
                 onSelectPrompt={(content) => setText(content)}
                 disabled={isProcessing}
+                className="h-6 w-6"
               />
               <Button
                 type="button"

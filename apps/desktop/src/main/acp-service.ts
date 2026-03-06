@@ -8,6 +8,7 @@
  * Both Auggie and Claude Code ACP use stdio-based JSON-RPC.
  */
 
+import { randomUUID } from "crypto"
 import { spawn, ChildProcess } from "child_process"
 import { EventEmitter } from "events"
 import { existsSync, statSync } from "fs"
@@ -15,12 +16,18 @@ import { readFile, writeFile, mkdir, realpath } from "fs/promises"
 import { homedir } from "os"
 import { dirname, isAbsolute, join, resolve } from "path"
 import { configStore } from "./config"
-import { ACPAgentConfig } from "../shared/types"
+import { ACPAgentConfig, ACPConfigOption } from "../shared/types"
 import { toolApprovalManager, agentSessionStateManager } from "./state"
 import { agentProfileService } from "./agent-profile-service"
 import { emitAgentProgress } from "./emit-agent-progress"
 import { logACP, logApp } from "./debug"
-import { getAppRunIdForAcpSession, getAppSessionForAcpSession } from "./acp-session-state"
+import {
+  clearAcpClientSessionTokenMapping,
+  getAppRunIdForAcpSession,
+  getAppSessionForAcpSession,
+  setPendingAcpClientSessionTokenMapping,
+  setAcpClientSessionTokenMapping,
+} from "./acp-session-state"
 
 // JSON-RPC types
 interface JsonRpcRequest {
@@ -77,6 +84,7 @@ export interface ACPAgentInstance {
     title: string
     version: string
   }
+  clientSessionToken?: string
   sessionInfo?: {
     models?: {
       availableModels: Array<{ modelId: string; name: string; description?: string }>
@@ -86,6 +94,7 @@ export interface ACPAgentInstance {
       availableModes: Array<{ id: string; name: string; description?: string }>
       currentModeId: string
     }
+    configOptions?: ACPConfigOption[]
   }
 }
 
@@ -120,13 +129,23 @@ export interface ACPRunResponse {
 
 // Content block from ACP session/update notifications
 export interface ACPContentBlock {
-  type: "text" | "tool_use" | "tool_result" | "image" | "resource"
+  type: "text" | "tool_use" | "tool_result" | "image" | "audio" | "resource" | "resource_link"
   text?: string
   name?: string  // for tool_use
   input?: unknown  // for tool_use
   result?: unknown  // for tool_result
   mimeType?: string  // for image/resource
   data?: string  // for image (base64)
+  uri?: string
+  title?: string
+  description?: string
+  size?: number
+  resource?: {
+    uri?: string
+    mimeType?: string
+    text?: string
+    blob?: string
+  }
 }
 
 // Session output tracking
@@ -379,7 +398,11 @@ class ACPService extends EventEmitter {
       content?: ACPContentBlock | ACPContentBlock[]
       stopReason?: string
       toolCall?: ACPToolCallUpdate
+      configOptions?: ACPConfigOption[]
+      config_options?: ACPConfigOption[]
     }
+    configOptions?: ACPConfigOption[]
+    config_options?: ACPConfigOption[]
     // Claude Code metadata (Task 2.3) - updated to match actual structure from Claude Code agent
     _meta?: {
       claudeCode?: {
@@ -415,6 +438,21 @@ class ACPService extends EventEmitter {
         isComplete: false,
       }
       this.sessionOutputs.set(sessionId, output)
+    }
+
+    const configOptions =
+      params.configOptions ||
+      params.config_options ||
+      params.update?.configOptions ||
+      params.update?.config_options
+    if (Array.isArray(configOptions)) {
+      const instance = this.agents.get(agentName)
+      if (instance) {
+        instance.sessionInfo = {
+          ...instance.sessionInfo,
+          configOptions,
+        }
+      }
     }
 
     // Extract content from various possible payload shapes.
@@ -1678,7 +1716,10 @@ class ACPService extends EventEmitter {
   /**
    * Create a new ACP session for the agent.
    */
-  private async createSession(agentName: string): Promise<string | undefined> {
+  private async createSession(
+    agentName: string,
+    pendingInjectedMcpContext?: { appSessionId: string },
+  ): Promise<string | undefined> {
     const instance = this.agents.get(agentName)
     if (!instance) {
       return undefined
@@ -1699,23 +1740,29 @@ class ACPService extends EventEmitter {
         url?: string
         headers?: Array<{ name: string; value: string }>
       }> = []
+      instance.clientSessionToken = undefined
 
       // Check if we should inject DotAgents builtin tools
       const config = configStore.get()
       if (config.acpInjectBuiltinTools !== false && config.remoteServerEnabled) {
         const port = config.remoteServerPort || 3210
         const apiKey = config.remoteServerApiKey
+        const clientSessionToken = randomUUID()
 
         if (apiKey) {
           // Add DotAgents' MCP server as an HTTP endpoint
           mcpServers.push({
             type: "http",
             name: "dotagents-builtin",
-            url: `http://127.0.0.1:${port}/mcp`,
+            url: `http://127.0.0.1:${port}/mcp/${encodeURIComponent(clientSessionToken)}`,
             headers: [
               { name: "Authorization", value: `Bearer ${apiKey}` },
             ],
           })
+          instance.clientSessionToken = clientSessionToken
+          if (pendingInjectedMcpContext?.appSessionId) {
+            setPendingAcpClientSessionTokenMapping(clientSessionToken, pendingInjectedMcpContext.appSessionId)
+          }
           logACP("REQUEST", agentName, "session/new", `Injecting DotAgents builtin tools on port ${port}`)
         }
       }
@@ -1735,11 +1782,19 @@ class ACPService extends EventEmitter {
           availableModes: Array<{ id: string; name: string; description?: string }>
           currentModeId: string
         }
+        configOptions?: ACPConfigOption[]
+        config_options?: ACPConfigOption[]
       }
 
       const sessionId = result?.sessionId
       if (sessionId) {
         instance.sessionId = sessionId
+        if (instance.clientSessionToken) {
+          setAcpClientSessionTokenMapping(instance.clientSessionToken, sessionId)
+        }
+      } else if (instance.clientSessionToken) {
+        clearAcpClientSessionTokenMapping(instance.clientSessionToken)
+        instance.clientSessionToken = undefined
       }
 
       // Store models from session/new response (Task 2.2)
@@ -1758,8 +1813,25 @@ class ACPService extends EventEmitter {
         }
       }
 
+      const sessionConfigOptions = Array.isArray(result?.configOptions)
+        ? result.configOptions
+        : Array.isArray(result?.config_options)
+          ? result.config_options
+          : undefined
+
+      if (sessionConfigOptions) {
+        instance.sessionInfo = {
+          ...instance.sessionInfo,
+          configOptions: sessionConfigOptions,
+        }
+      }
+
       return sessionId
     } catch {
+      if (instance.clientSessionToken) {
+        clearAcpClientSessionTokenMapping(instance.clientSessionToken)
+        instance.clientSessionToken = undefined
+      }
       return undefined
     }
   }
@@ -1934,7 +2006,12 @@ class ACPService extends EventEmitter {
    *
    * Throws with a descriptive error if the agent cannot be started or no session can be created.
    */
-  async getOrCreateSession(agentName: string, forceNew?: boolean, workingDirectory?: string): Promise<string> {
+  async getOrCreateSession(
+    agentName: string,
+    forceNew?: boolean,
+    workingDirectory?: string,
+    pendingInjectedMcpContext?: { appSessionId: string },
+  ): Promise<string> {
     // Ensure agent is spawned, ready, and reconciled with the latest working-directory config.
     let instance = this.agents.get(agentName)
     try {
@@ -1961,7 +2038,7 @@ class ACPService extends EventEmitter {
     }
 
     // Create or reuse session
-    const sessionId = await this.createSession(agentName)
+    const sessionId = await this.createSession(agentName, pendingInjectedMcpContext)
     if (!sessionId) {
       throw new Error(
         `Failed to create ACP session for agent ${agentName}. ` +
@@ -1978,7 +2055,8 @@ class ACPService extends EventEmitter {
   async sendPrompt(
     agentName: string,
     sessionId: string,
-    prompt: string
+    prompt: string,
+    context?: string,
   ): Promise<{
     success: boolean
     response?: string
@@ -2000,7 +2078,8 @@ class ACPService extends EventEmitter {
 
     try {
       // Format prompt as content blocks per ACP spec
-      const promptContent = [{ type: "text", text: prompt }]
+      const promptText = context ? `Context: ${context}\n\nTask: ${prompt}` : prompt
+      const promptContent = [{ type: "text", text: promptText }]
 
       const result = await this.sendRequest(agentName, "session/prompt", {
         sessionId,

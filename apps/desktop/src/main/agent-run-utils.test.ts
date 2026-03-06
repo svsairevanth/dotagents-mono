@@ -3,6 +3,7 @@ import {
   AGENT_STOP_NOTE,
   DEFAULT_UNLIMITED_GUARDRAIL_ITERATION_BUDGET,
   appendAgentStopNote,
+  buildProfileContext,
   getPreferredDelegationOutput,
   resolveAgentIterationLimits,
 } from "./agent-run-utils"
@@ -45,6 +46,33 @@ describe("agent-run-utils", () => {
 
     it("returns only the stop note when no content exists", () => {
       expect(appendAgentStopNote("")).toBe(AGENT_STOP_NOTE)
+    })
+  })
+
+  describe("buildProfileContext", () => {
+    it("prefers a non-empty displayName and falls back to profileName", () => {
+      expect(buildProfileContext({
+        displayName: "Friendly Agent",
+        profileName: "fallback-agent",
+        guidelines: "Stay helpful",
+      })).toContain("[Acting as: Friendly Agent]")
+
+      expect(buildProfileContext({
+        displayName: "   ",
+        profileName: "fallback-agent",
+        guidelines: "Stay helpful",
+      })).toContain("[Acting as: fallback-agent]")
+
+      expect(buildProfileContext({
+        displayName: undefined,
+        profileName: "fallback-agent",
+        guidelines: "Stay helpful",
+      } as any)).toContain("[Acting as: fallback-agent]")
+
+      expect(buildProfileContext({
+        displayName: "",
+        profileName: "  trimmed-agent  ",
+      })).toContain("[Acting as: trimmed-agent]")
     })
   })
 

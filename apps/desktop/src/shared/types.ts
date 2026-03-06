@@ -264,6 +264,7 @@ export interface AgentProgressUpdate {
     currentMode?: string
     availableModels?: Array<{ id: string; name: string; description?: string }>
     availableModes?: Array<{ id: string; name: string; description?: string }>
+    configOptions?: ACPConfigOption[]
   }
   // Dual-model summarization data
   stepSummaries?: AgentStepSummary[]
@@ -1110,6 +1111,22 @@ export interface EnhancedModelInfo extends ModelInfo {
 
 // ACP Agent Configuration Types
 export type ACPConnectionType = "stdio" | "remote" | "internal"
+
+export interface ACPConfigOptionValue {
+  value: string
+  name: string
+  description?: string
+}
+
+export interface ACPConfigOption {
+  id: string
+  name: string
+  description?: string
+  category?: string
+  type: string
+  currentValue: string
+  options: ACPConfigOptionValue[]
+}
 
 export interface ACPAgentConfig {
   // Unique identifier for the agent
