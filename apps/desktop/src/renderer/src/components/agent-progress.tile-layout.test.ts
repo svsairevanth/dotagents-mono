@@ -49,4 +49,18 @@ describe("agent progress tile layout", () => {
     )
     expect(acpSessionBadgeSource).toContain('className="truncate"')
   })
+
+  it("keeps tile message-stream tool execution rows readable at narrow widths and zoom", () => {
+    expect(agentProgressSource).toContain(
+      '"flex min-w-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-[11px] cursor-pointer hover:bg-muted/30"'
+    )
+    expect(agentProgressSource).toContain(
+      '"flex min-w-0 items-center gap-1.5 rounded px-1 py-0.5 text-[11px] cursor-pointer hover:bg-muted/30"'
+    )
+    expect(agentProgressSource).toContain('className="min-w-0 shrink truncate font-mono font-medium"')
+    expect(agentProgressSource).toContain('className="min-w-0 flex-1 truncate text-[10px] font-mono opacity-50"')
+    expect(agentProgressSource).toContain('className="mb-1 flex flex-wrap items-center gap-2"')
+    expect(agentProgressSource).toContain('className="ml-auto flex shrink-0 flex-wrap items-center gap-2"')
+    expect(agentProgressSource).toContain('className="ml-auto shrink-0 whitespace-nowrap opacity-50 text-[10px]"')
+  })
 })

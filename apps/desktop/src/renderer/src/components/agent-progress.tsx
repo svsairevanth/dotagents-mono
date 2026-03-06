@@ -463,11 +463,11 @@ const CompactMessage: React.FC<{
                       key={index}
                       className="rounded-lg border border-border/30 bg-muted/20 p-2 text-xs"
                     >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-mono font-semibold text-primary">
+                      <div className="mb-1 flex flex-wrap items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate font-mono font-semibold text-primary" title={toolCall.name}>
                           {toolCall.name}
                         </span>
-                        <Badge variant="outline" className="text-xs">
+                        <Badge variant="outline" className="shrink-0 whitespace-nowrap text-xs">
                           Tool {index + 1}
                         </Badge>
                       </div>
@@ -498,9 +498,9 @@ const CompactMessage: React.FC<{
                           : "border-red-200/50 bg-red-50/30 text-red-800 dark:border-red-700/50 dark:bg-red-950/40 dark:text-red-200",
                       )}
                     >
-                      <div className="flex items-center justify-between mb-1">
+                      <div className="mb-1 flex flex-wrap items-center gap-2">
                         <span className={cn(
-                          "font-semibold flex items-center gap-1",
+                          "flex min-w-0 flex-1 items-center gap-1 font-semibold",
                           result.success ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
                         )}>
                           {result.success ? (
@@ -509,11 +509,11 @@ const CompactMessage: React.FC<{
                             <><XCircle className="h-3 w-3" /> Error</>
                           )}
                         </span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] opacity-60 font-mono">
+                        <div className="ml-auto flex shrink-0 flex-wrap items-center gap-2">
+                          <span className="whitespace-nowrap font-mono text-[10px] opacity-60">
                             {(result.content?.length || 0).toLocaleString()} chars
                           </span>
-                          <Badge variant="outline" className="text-xs">
+                          <Badge variant="outline" className="shrink-0 whitespace-nowrap text-xs">
                             Result {index + 1}
                           </Badge>
                         </div>
@@ -714,7 +714,7 @@ const ToolExecutionBubble: React.FC<{
             {/* Single line tool header */}
             <div
               className={cn(
-                "flex items-center gap-1.5 py-0.5 px-1.5 rounded text-[11px] cursor-pointer hover:bg-muted/30",
+                "flex min-w-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-[11px] cursor-pointer hover:bg-muted/30",
                 callIsPending
                   ? "text-blue-600 dark:text-blue-400"
                   : callSuccess
@@ -725,8 +725,8 @@ const ToolExecutionBubble: React.FC<{
             >
               {execCmdDisplay ? (
                 <>
-                  <span className="font-mono font-medium truncate" title={call.arguments?.command}>{execCmdDisplay.displayCommand}</span>
-                  <span className="text-[10px]">
+                  <span className="min-w-0 shrink truncate font-mono font-medium" title={call.arguments?.command}>{execCmdDisplay.displayCommand}</span>
+                  <span className="shrink-0 text-[10px] opacity-60">
                     {callIsPending ? (
                       <Loader2 className="h-2.5 w-2.5 animate-spin" />
                     ) : callSuccess ? (
@@ -736,13 +736,13 @@ const ToolExecutionBubble: React.FC<{
                     )}
                   </span>
                   {!isToolExpanded && execCmdDisplay.outputPreview && (
-                    <span className="text-[10px] opacity-50 truncate flex-1 font-mono">→ {execCmdDisplay.outputPreview}</span>
+                    <span className="min-w-0 flex-1 truncate text-[10px] font-mono opacity-50">→ {execCmdDisplay.outputPreview}</span>
                   )}
                 </>
               ) : (
                 <>
-                  <span className="font-mono font-medium truncate">{call.name}</span>
-                  <span className="text-[10px]">
+                  <span className="min-w-0 shrink truncate font-mono font-medium" title={call.name}>{call.name}</span>
+                  <span className="shrink-0 text-[10px] opacity-60">
                     {callIsPending ? (
                       <Loader2 className="h-2.5 w-2.5 animate-spin" />
                     ) : callSuccess ? (
@@ -752,7 +752,7 @@ const ToolExecutionBubble: React.FC<{
                     )}
                   </span>
                   {!isToolExpanded && callResultSummary && (
-                    <span className="text-[10px] opacity-50 truncate flex-1">{callResultSummary}</span>
+                    <span className="min-w-0 flex-1 truncate text-[10px] opacity-50">{callResultSummary}</span>
                   )}
                 </>
               )}
@@ -767,9 +767,9 @@ const ToolExecutionBubble: React.FC<{
               <div className="ml-4 mt-0.5 mb-1 border-l border-border/50 pl-2 space-y-1 text-[10px]">
                 {call.arguments && (
                   <>
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="font-medium opacity-70">Parameters</span>
-                      <Button size="sm" variant="ghost" className="h-4 px-1 text-[10px]" onClick={(e) => handleCopy(e, JSON.stringify(call.arguments, null, 2))}>
+                      <Button size="sm" variant="ghost" className="ml-auto h-4 shrink-0 px-1 text-[10px]" onClick={(e) => handleCopy(e, JSON.stringify(call.arguments, null, 2))}>
                         <Copy className="h-2 w-2 mr-0.5" /> Copy
                       </Button>
                     </div>
@@ -780,14 +780,14 @@ const ToolExecutionBubble: React.FC<{
                 )}
                 {result && (
                   <>
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className={cn(
-                        "font-medium",
+                        "min-w-0 flex-1 font-medium",
                         result.success ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
                       )}>
                         {result.success ? "Result" : "Error"}
                       </span>
-                      <span className="opacity-50 text-[10px]">{(result.content?.length || 0).toLocaleString()} chars</span>
+                      <span className="ml-auto shrink-0 whitespace-nowrap opacity-50 text-[10px]">{(result.content?.length || 0).toLocaleString()} chars</span>
                     </div>
                     {result.error && (
                       <pre className="rounded p-1.5 overflow-auto whitespace-pre-wrap break-all max-h-32 scrollbar-thin text-[10px] bg-red-50/50 dark:bg-red-950/30 text-red-700 dark:text-red-300">
@@ -918,7 +918,7 @@ const AssistantWithToolsBubble: React.FC<{
                 <div
                   key={idx}
                   className={cn(
-                    "flex items-center gap-1.5 py-0.5 px-1 rounded text-[11px] cursor-pointer hover:bg-muted/30",
+                    "flex min-w-0 items-center gap-1.5 rounded px-1 py-0.5 text-[11px] cursor-pointer hover:bg-muted/30",
                     callIsPending
                       ? "text-blue-600 dark:text-blue-400"
                       : callSuccess
@@ -929,8 +929,8 @@ const AssistantWithToolsBubble: React.FC<{
                 >
                   {execCmdDisplay ? (
                     <>
-                      <span className="font-mono font-medium truncate" title={call.arguments?.command}>{execCmdDisplay.displayCommand}</span>
-                      <span className="text-[10px] opacity-60">
+                      <span className="min-w-0 shrink truncate font-mono font-medium" title={call.arguments?.command}>{execCmdDisplay.displayCommand}</span>
+                      <span className="shrink-0 text-[10px] opacity-60">
                         {callIsPending ? (
                           <Loader2 className="h-2.5 w-2.5 animate-spin" />
                         ) : callSuccess ? (
@@ -940,13 +940,13 @@ const AssistantWithToolsBubble: React.FC<{
                         )}
                       </span>
                       {!showToolDetails && execCmdDisplay.outputPreview && (
-                        <span className="text-[10px] opacity-50 truncate flex-1 font-mono">→ {execCmdDisplay.outputPreview}</span>
+                        <span className="min-w-0 flex-1 truncate text-[10px] font-mono opacity-50">→ {execCmdDisplay.outputPreview}</span>
                       )}
                     </>
                   ) : (
                     <>
-                      <span className="font-mono font-medium truncate">{call.name}</span>
-                      <span className="text-[10px] opacity-60">
+                      <span className="min-w-0 shrink truncate font-mono font-medium" title={call.name}>{call.name}</span>
+                      <span className="shrink-0 text-[10px] opacity-60">
                         {callIsPending ? (
                           <Loader2 className="h-2.5 w-2.5 animate-spin" />
                         ) : callSuccess ? (
@@ -956,7 +956,7 @@ const AssistantWithToolsBubble: React.FC<{
                         )}
                       </span>
                       {!showToolDetails && callResultSummary && (
-                        <span className="text-[10px] opacity-50 truncate flex-1">{callResultSummary}</span>
+                        <span className="min-w-0 flex-1 truncate text-[10px] opacity-50">{callResultSummary}</span>
                       )}
                     </>
                   )}

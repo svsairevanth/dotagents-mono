@@ -1,5 +1,49 @@
 ## UI Audit Log
 
+### 2026-03-06 — Chunk 13: Sessions tile message-stream tool execution rows at narrow widths / zoom
+
+- Area selected: desktop sessions tile chat/message stream tool execution rows inside `apps/desktop/src/renderer/src/components/agent-progress.tsx`
+- Why this chunk: chunk 12 intentionally stopped after the tile body control chrome. The next highest-value, not-yet-audited hotspot inside the same surface was the message stream itself—especially the compact tool execution rows and their expanded detail headers once tiles compress toward the sessions grid minimum width.
+- Audit method:
+  - reviewed `apps/desktop/DEBUGGING.md`
+  - launched the desktop app with remote debugging enabled via `REMOTE_DEBUGGING_PORT=9343 ELECTRON_EXTRA_LAUNCH_ARGS="--inspect=9349" pnpm dev -- -d`
+  - inspected the shared message-stream tool execution code paths in `agent-progress.tsx` (`ToolExecutionBubble`, `AssistantWithToolsBubble`, and the fallback expanded tool/result cards inside `CompactMessage`)
+  - cross-checked `apps/mobile/src/screens/ChatScreen.tsx`; mobile already uses `numberOfLines={1}`, `flexShrink: 1`, and device-independent font sizing for its equivalent compact tool rows, so no matching mobile change was needed
+
+#### Findings
+
+- The sessions tile message stream still had several compact tool execution rows that could crowd or clip once the tile narrows or font zoom increases:
+  - standalone `ToolExecutionBubble` rows
+  - unified `AssistantWithToolsBubble` rows
+- In both row types, the primary tool label / execute-command text relied on `truncate` without the surrounding `min-w-0` / shrink contract needed for very narrow flex layouts, which risks pushing the status icon, result preview, or chevron into a cramped edge state.
+- The expanded detail headers under those rows also used single-line `justify-between` layouts for:
+  - `Parameters` + `Copy`
+  - `Result` / `Error` + char count
+- The fallback expanded tool/result cards in `CompactMessage` had the same header issue: long tool names, count badges, and char counts all shared rigid one-line header rows.
+
+#### Changes made
+
+- Updated the standalone and unified tool execution rows in `agent-progress.tsx` to behave better inside narrow sessions tiles:
+  - added `min-w-0` to the outer row
+  - changed tool/command labels to `min-w-0 shrink truncate`
+  - made status icons `shrink-0`
+  - made result previews `min-w-0 flex-1 truncate`
+- Updated the expanded tool detail headers to wrap cleanly under zoomed text:
+  - `flex-wrap` on `Parameters` / `Copy` and `Result` / char-count rows
+  - `ml-auto shrink-0` on the copy button and char count so controls stay readable
+- Updated the fallback `CompactMessage` tool call / result headers to wrap and truncate instead of leaking width pressure into the tile.
+- Extended `apps/desktop/src/renderer/src/components/agent-progress.tile-layout.test.ts` so the responsive class contract now also covers message-stream tool execution rows.
+
+#### Verification
+
+- Targeted test: `pnpm --filter @dotagents/desktop exec vitest run src/renderer/src/components/agent-progress.tile-layout.test.ts`
+- Targeted web typecheck: `pnpm --filter @dotagents/desktop exec tsc --noEmit -p tsconfig.web.json --composite false`
+
+#### Notes
+
+- As in earlier sessions chunks, Electron-native renderer automation attached to a shell document rather than the hydrated React tree for this surface, so the audit relied on documented live app startup plus direct inspection of the concrete tile message-stream layout code.
+- Best next UI audit chunk after this one: a focused pass on markdown/code-block density inside the sessions tile message stream (large fenced blocks, tables, and long inline code) at high zoom, now that the tool execution row chrome itself is more resilient.
+
 ### 2026-03-06 — Chunk 12: Sessions tile body controls at narrow widths / zoom
 
 - Area selected: desktop sessions tile body controls inside `apps/desktop/src/renderer/src/components/agent-progress.tsx`
