@@ -2,6 +2,85 @@
 
 ---
 
+## 2026-03-06 — chunk 9: agent-summary-view accessibility + message-queue-panel header overflow + session-input right-side overflow
+
+### Sources consulted
+- `apps/desktop/src/renderer/src/components/agent-summary-view.tsx`
+- `apps/desktop/src/renderer/src/components/message-queue-panel.tsx`
+- `apps/desktop/src/renderer/src/components/session-input.tsx`
+- `apps/desktop/src/renderer/src/components/past-sessions-dialog.tsx` — reviewed, clean
+- `apps/desktop/src/renderer/src/components/active-agents-sidebar.tsx` — reviewed, clean
+- `apps/desktop/src/renderer/src/components/app-layout.tsx` — reviewed, no new issues
+- `apps/desktop/src/renderer/src/components/markdown-renderer.tsx` — reviewed, clean
+- `apps/desktop/src/renderer/src/components/agent-processing-view.tsx` — reviewed, clean
+- `apps/desktop/src/renderer/src/components/tile-follow-up-input.tsx` — reviewed, clean
+- `apps/desktop/src/renderer/src/components/tool-execution-stats.tsx` — reviewed, clean
+- `apps/desktop/src/renderer/src/pages/settings-models.tsx` — stub (returns null), no issues
+
+### Issues found
+
+**agent-summary-view.tsx — SummaryCard header accessibility + metadata row wrap**
+- Lines 102–113: The card header was a `div` with `onClick` that contained a nested `button` (the chevron) and a sibling `Button` (Save). Using a `div` as an interactive element is an accessibility violation:
+  - Screen readers won't announce it as a button/interactive region.
+  - There is no keyboard handler on the outer `div` — users navigating via keyboard can only focus the inner chevron `button`, but clicking it focuses the inner button, not the outer "row" toggle. Pressing Tab lands on the nested buttons, but pressing Enter/Space on the row div itself does nothing.
+- The `flex items-center gap-2 mb-1` row on line 113 contained time + step + `ImportanceBadge` with no `flex-wrap`. At narrow card widths (< 320px), the three items could overflow.
+
+**message-queue-panel.tsx — header overflow (full panel mode)**
+- Lines 378–399: The header flex row `flex items-center justify-between` had no layout protection:
+  - Left side `div.flex.items-center.gap-2` had no `min-w-0` or `flex-1` — at narrow widths, the label "Queued Messages (10)" could push the right-side action buttons off screen.
+  - Icon (Clock/Pause) had no `shrink-0` — could be compressed at very narrow widths.
+  - Title `span` had no `truncate` — long text (many queued messages) could overflow.
+  - Right side `div.flex.items-center.gap-1` had no `shrink-0` — could be compressed.
+
+**message-queue-panel.tsx — compact mode (used in tile follow-up area)**
+- Lines 306–323: Icon lacked `shrink-0`; status text span lacked `truncate min-w-0 flex-1` — at very narrow tiles the text could overflow the badge container.
+
+**session-input.tsx — right-side "Start a new agent session" text**
+- Lines 171–179 (default/collapsed mode): The right-side container `div.flex.items-center.gap-2` had no `min-w-0`. The "Start a new agent session" text `div.text-sm.text-muted-foreground` had no `truncate` or `min-w-0`. At narrow windows the text could push the `AgentSelector` off screen or overflow.
+
+### Cleared as clean (no changes needed)
+- `past-sessions-dialog.tsx`: Dialog correctly sized with `max-w-sm w-[calc(100%-2rem)]`. Session rows use `min-w-0 flex-1 overflow-hidden` + `truncate`. Timestamp/delete toggle pattern correct.
+- `active-agents-sidebar.tsx`: Good use of `truncate`, `min-w-0`, `shrink-0` throughout.
+- `app-layout.tsx`: `scrollbar-none` confirmed defined in `css/tailwind.css`. Sidebar is correct. `scrollbar-none` on the expanded sidebar scroll container is valid.
+- `markdown-renderer.tsx`: `ThinkSection` button is `w-full` so it can't overflow its container. Image uses `max-h-[28rem] w-full object-contain` — correct. Code blocks have `overflow-x-auto`.
+- `agent-processing-view.tsx`: Kill confirmation `max-w-sm mx-4` acceptable. `pointer-events-none` on overlay spinner is correct.
+- `tile-follow-up-input.tsx`: Button row with `flex-1` input + 5 icon buttons is fine at minimum tile widths. Agent name indicator already at `text-[10px]`.
+- `tool-execution-stats.tsx`: Compact mode `inline-flex` is constrained by parent context; no overflow.
+- `settings-models.tsx`: Stub file (`return null`).
+
+### Changes made
+
+**agent-summary-view.tsx**
+- Changed outer `div` to `div` with `role="button"`, `tabIndex={0}`, `onKeyDown` handler for Enter/Space, and `aria-expanded={isExpanded}`.
+- Changed inner chevron from `button` element to `span` with `aria-hidden="true"` — the outer div is now the semantic interactive element; the inner span is purely decorative.
+- Changed `flex items-center gap-2 mb-1` → `flex flex-wrap items-center gap-2 mb-1` on the metadata row.
+
+**message-queue-panel.tsx (full panel mode header)**
+- Added `gap-2` to outer header flex container.
+- Changed left `div.flex.items-center.gap-2` → `div.flex.min-w-0.flex-1.items-center.gap-2`.
+- Added `shrink-0` to Clock and Pause icons.
+- Changed title `span` to add `truncate` class.
+- Changed right `div.flex.items-center.gap-1` → `div.flex.shrink-0.items-center.gap-1`.
+
+**message-queue-panel.tsx (compact mode)**
+- Added `shrink-0` to Clock and Pause icons.
+- Changed status text span to add `truncate min-w-0 flex-1`.
+
+**session-input.tsx**
+- Changed right-side container to `div.flex.min-w-0.items-center.gap-2`.
+- Changed "Start a new agent session" from `div` to `span.truncate.text-sm.text-muted-foreground`.
+
+### Verified not broken
+- TypeScript typecheck: `pnpm --filter @dotagents/desktop typecheck` → exit 0.
+
+### Coverage summary — all renderer files reviewed
+After 9 chunks, every renderer component and page has been reviewed:
+- All `text-[9px]`/`text-[8px]` occurrences eliminated (chunk 4–8).
+- All major flex rows lacking `flex-wrap`, `min-w-0`, or `shrink-0` in settings, sessions, onboarding, memories, panel, agent-progress, sidebar, dialogs, and queue components have been fixed.
+- Accessibility: SummaryCard header now has proper keyboard support.
+
+---
+
 ## 2026-03-06 — chunk 8: global text-[9px] sweep + mcp-tools + capabilities + multi-agent + overflow-auto sweep
 
 ### Sources consulted

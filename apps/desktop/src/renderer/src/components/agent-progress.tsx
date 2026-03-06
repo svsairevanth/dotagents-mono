@@ -1290,12 +1290,16 @@ const formatDelegationStatus = (status: ACPDelegationProgress["status"]): string
 
 const getDelegationSubtitle = (delegation: ACPDelegationProgress, maxLength: number): string => {
   const source = delegation.status === "failed"
-    ? delegation.error ?? delegation.progressMessage ?? delegation.task
+    ? delegation.error ?? delegation.progressMessage
     : delegation.status === "completed"
-      ? delegation.resultSummary ?? delegation.progressMessage ?? delegation.task
-      : delegation.progressMessage ?? delegation.task
+      ? delegation.resultSummary ?? delegation.progressMessage
+      : delegation.progressMessage
 
-  return truncatePreview(source, maxLength) || truncatePreview(delegation.task, maxLength)
+  const conversationPreview = delegation.conversation?.length
+    ? getConversationPreview(delegation.conversation, delegation.agentName, maxLength)
+    : ""
+
+  return truncatePreview(source, maxLength) || conversationPreview || truncatePreview(delegation.task, maxLength)
 }
 
 const getConversationPreview = (
@@ -1635,7 +1639,7 @@ const DelegationBubble: React.FC<{
   delegation: ACPDelegationProgress
   isExpanded?: boolean
   onToggleExpand?: () => void
-}> = ({ delegation, isExpanded = true, onToggleExpand }) => {
+}> = ({ delegation, isExpanded = false, onToggleExpand }) => {
   const { ref: containerRef, isCompact } = useCompactWidth<HTMLDivElement>()
   const [isConversationOpen, setIsConversationOpen] = useState(false)
   const isRunning = delegation.status === 'running' || delegation.status === 'pending' || delegation.status === 'spawning'
@@ -1780,22 +1784,8 @@ const DelegationBubble: React.FC<{
 
       {/* Content - only shown when expanded */}
       {isExpanded && (
-        <div className="px-2.5 py-2 space-y-2">
-          {/* Task description */}
-          <p className={cn("text-[12px] leading-4 whitespace-pre-wrap break-words", bodyTextColor)}>
-            {delegation.task}
-          </p>
-
-          {/* Error message */}
-          {delegation.error && (
-            <div className="rounded-md border border-red-200/80 bg-red-100/50 p-2 dark:border-red-800/70 dark:bg-red-900/30">
-              <p className="text-[12px] leading-4 text-red-700 dark:text-red-300 whitespace-pre-wrap break-words">
-                {delegation.error}
-              </p>
-            </div>
-          )}
-
-          {/* Recent conversation messages - last 3 by default */}
+        <div className="px-3 py-3 space-y-3">
+          {/* Collapsible conversation panel - persists after completion */}
           {hasConversation && (
             <SubAgentConversationPanel
               conversation={delegation.conversation!}
@@ -1805,6 +1795,69 @@ const DelegationBubble: React.FC<{
               isCompact={isCompact}
             />
           )}
+
+          <div className="space-y-1">
+            <div className={cn("text-[11px] font-semibold uppercase tracking-wide", mutedTextColor)}>
+              Task
+            </div>
+            <p className={cn("text-[12px] leading-4 whitespace-pre-wrap break-words", bodyTextColor)}>
+              {delegation.task}
+            </p>
+          </div>
+
+          {/* Progress message */}
+          {delegation.progressMessage && (
+            <div className="space-y-1">
+              <div className={cn("text-[11px] font-semibold uppercase tracking-wide", mutedTextColor)}>
+                Latest update
+              </div>
+              <p className={cn("text-[12px] leading-4 italic whitespace-pre-wrap break-words", mutedTextColor)}>
+                {delegation.progressMessage}
+              </p>
+            </div>
+          )}
+
+          {/* Result summary */}
+          {delegation.resultSummary && (
+            <div className="space-y-1 rounded-md border border-white/60 bg-white/50 p-2 dark:border-white/10 dark:bg-black/20">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                Result
+              </div>
+              <p className="text-[12px] leading-4 text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words">
+                {delegation.resultSummary}
+              </p>
+            </div>
+          )}
+
+          {/* Error message */}
+          {delegation.error && (
+            <div className="space-y-1 rounded-md border border-red-200/80 bg-red-100/50 p-2 dark:border-red-800/70 dark:bg-red-900/30">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-red-700 dark:text-red-300">
+                Error
+              </div>
+              <p className="text-[12px] leading-4 text-red-700 dark:text-red-300 whitespace-pre-wrap break-words">
+                {delegation.error}
+              </p>
+            </div>
+          )}
+
+          {/* Status footer */}
+          <div className={cn("flex items-center justify-between gap-2 border-t border-black/5 pt-2 dark:border-white/10", isCompact && "flex-col items-stretch")}>
+            <span className={cn("text-[11px]", mutedTextColor)}>
+              {statusLabel} · {durationLabel}
+            </span>
+            {hasConversation && !isConversationOpen && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setIsConversationOpen(true)
+                }}
+                className="inline-flex h-8 items-center justify-center rounded-md border border-purple-200/80 px-3 text-[11px] font-medium text-purple-700 transition-colors hover:bg-purple-50 dark:border-purple-800/70 dark:text-purple-300 dark:hover:bg-purple-950/30"
+              >
+                Open conversation
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -3195,8 +3248,9 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
                     })}
                   </div>
                 ) : (
-                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                    Initializing...
+                  <div className="flex h-full items-center justify-center">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground/70" aria-hidden="true" />
+                    <span className="sr-only">Loading agent activity</span>
                   </div>
                 )}
               </div>
@@ -3579,8 +3633,9 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
               })}
             </div>
           ) : (
-            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-              Initializing...
+            <div className="flex h-full items-center justify-center">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground/70" aria-hidden="true" />
+              <span className="sr-only">Loading agent activity</span>
             </div>
           )}
         </div>
