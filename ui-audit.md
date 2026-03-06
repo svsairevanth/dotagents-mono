@@ -89,3 +89,62 @@
 - Audit the panel overlay views (`panel.tsx`, `overlay-follow-up-input.tsx`) for button/input overflow on narrow floating windows.
 - Audit the memories page and agent config list for long-name/description truncation.
 - Check font scaling edge cases (system font size 125–200%) in agent-progress messages/tool outputs.
+
+---
+
+## 2026-03-06 — chunk 3: memories page layout + settings-agents toolbar + agent-progress overlay header
+
+### Sources consulted
+- `apps/desktop/src/renderer/src/pages/memories.tsx`
+- `apps/desktop/src/renderer/src/pages/settings-agents.tsx`
+- `apps/desktop/src/renderer/src/components/agent-progress.tsx` (overlay/default variant header, lines ~3333-3434)
+- `apps/desktop/src/renderer/src/pages/panel.tsx` (min-width constants, waveform layout)
+- `apps/desktop/src/renderer/src/components/overlay-follow-up-input.tsx`
+
+### Issues found
+
+**memories.tsx — search + filter row**
+- `flex items-center gap-3` outer row had no `flex-wrap` — at windows narrower than the combined width of the search box + 5 filter buttons (~650px), the filter row would overflow the container and become partially hidden under the scroll boundary.
+- Filter button container `flex items-center gap-2` also lacked `flex-wrap`, so the 5 buttons (all/critical/high/medium/low) had no fallback to a second line.
+- The `max-w-md` search input had `flex-1` without `min-w-0`, so at very narrow widths the input could force the layout rather than shrinking.
+
+**memories.tsx — header action buttons**
+- The `flex items-start justify-between gap-4` header row had `<div className="flex gap-2">` for the action buttons without `flex-wrap` — at ≤ 480px window widths the "Open Folder" / "Workspace" buttons could overflow.
+- The title div lacked `min-w-0`, preventing proper truncation behavior.
+
+**settings-agents.tsx — toolbar row**
+- `flex items-center justify-end gap-2 mb-4` contained 5 action buttons (Import Bundle, Export Bundle, Export for Hub, Rescan Files, Add Agent) without `flex-wrap`. At settings panel widths below ~680px these would overflow or clip.
+
+**agent-progress.tsx — overlay/default variant header (lines ~3334)**
+- The outer header div had `flex items-center justify-between` with no `overflow-hidden`. The right-side metadata cluster `flex items-center gap-3` contained up to 6 elements simultaneously (profile name, ACP badge, model info, context fill bar, iteration counter, 2 icon buttons). At the panel's minimum width (~312px), all 6 elements at `gap-3` spacing would overflow by ~80–90px with no fallback.
+- The iteration counter and action buttons had no `shrink-0`, so they would compress with the rest of the cluster making them inaccessible at narrow widths.
+
+### Changes made
+
+**memories.tsx**
+- Changed outer search+filter row to `flex flex-wrap items-center gap-3`.
+- Changed search `div` to `relative min-w-0 flex-1 max-w-md` (added `min-w-0`).
+- Changed filter button container to `flex flex-wrap items-center gap-1.5` (was `gap-2`).
+- Changed header outer `div` to `flex flex-wrap items-start justify-between gap-4`.
+- Changed title child `div` to `min-w-0`.
+- Changed header action button container to `flex flex-wrap gap-2 shrink-0`.
+
+**settings-agents.tsx**
+- Changed toolbar row to `flex flex-wrap items-center justify-end gap-2 mb-4` — buttons now reflow to a second line at narrow settings panel widths.
+
+**agent-progress.tsx (overlay variant)**
+- Changed outer header `div` to add `gap-2 overflow-hidden`.
+- Changed left status `div` to `flex items-center gap-2 shrink-0` so status text is never compressed.
+- Changed right metadata `div` from `flex items-center gap-3` to `flex min-w-0 items-center gap-1.5 overflow-hidden` so items can shrink.
+- Added `shrink-0 tabular-nums` to iteration counter span.
+- Added `shrink-0` to minimize button, kill button, and close button so action buttons are never hidden by compression.
+
+### Verified not broken
+- TypeScript typecheck passes (`pnpm --filter @dotagents/desktop typecheck`): exit 0.
+- `overlay-follow-up-input.tsx`: Already uses compact `px-3 py-2 gap-2` row. Icon-only buttons with fixed `h-7 w-7` — at the panel minimum width the input row gracefully fills remaining space. No changes needed.
+- `panel.tsx` waveform UI: Uses `ResizeObserver`-driven dynamic bar count + pixel-perfect sizing. Not affected by these changes.
+
+### Follow-up areas for next chunk
+- Font scale audit (125%–200% system font scale) on agent-progress message content and tool output `pre` blocks — verify `text-[9px]`/`text-[10px]`/`text-[11px]` sizes remain readable.
+- Check `active-agents-sidebar.tsx` and `app-layout.tsx` for sidebar collapse/expand responsiveness.
+- Audit `past-sessions-dialog.tsx` for long session title truncation and narrow dialog layout.
