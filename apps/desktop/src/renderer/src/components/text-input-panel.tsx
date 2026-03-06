@@ -183,14 +183,17 @@ export const TextInputPanel = forwardRef<TextInputPanelRef, TextInputPanelProps>
               />
             </div>
             {continueConversationTitle && (
-              <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-blue-500/10 dark:bg-blue-400/10 text-blue-600 dark:text-blue-400 text-xs">
+              <div className="flex items-center gap-1 rounded bg-blue-500/10 px-2 py-0.5 text-xs text-blue-600 dark:bg-blue-400/10 dark:text-blue-400">
                 <span className="opacity-70">Continuing:</span>
-                <span className="font-medium truncate max-w-[200px]">{continueConversationTitle}</span>
+                <span className="max-w-[200px] truncate font-medium">{continueConversationTitle}</span>
               </div>
             )}
           </div>
-          <div className="modern-text-muted flex items-center justify-between text-xs">
-            <span>Type your message • Enter to send • Shift+Enter for new line • Esc to cancel</span>
+          <div className="modern-text-muted flex items-center justify-between gap-2 text-xs">
+            <span className="min-w-0 truncate">
+              <span className="hidden sm:inline">Type your message • Enter to send • Shift+Enter for new line • Esc to cancel</span>
+              <span className="sm:hidden">Enter to send • Esc to cancel</span>
+            </span>
             <div className="flex items-center gap-1">
               <PredefinedPromptsMenu
                 onSelectPrompt={(content) => setText(content)}

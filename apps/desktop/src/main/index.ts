@@ -36,6 +36,8 @@ import { initModelsDevService } from "./models-dev-service"
 import { loopService } from "./loop-service"
 import { setHeadlessMode } from "./state"
 import { stopRemoteServer } from "./remote-server"
+import { findHubBundleHandoffFilePath } from "./bundle-service"
+import { downloadHubBundleToTempFile, findHubBundleInstallBundleUrl } from "./hub-install"
 
 // Check for --qr flag (headless mode with QR code)
 const isQRMode = process.argv.includes("--qr")
@@ -63,9 +65,100 @@ if (process.platform === 'linux') {
 
 registerServeSchema()
 
+let pendingHubBundleHandoffPath = findHubBundleHandoffFilePath(process.argv)
+const startupHubBundleInstallUrl = pendingHubBundleHandoffPath
+  ? null
+  : findHubBundleInstallBundleUrl(process.argv)
+
+function buildHubBundleInstallUrl(filePath: string): string {
+  return `/settings/agents?installBundle=${encodeURIComponent(filePath)}`
+}
+
+function openPendingHubBundleInstall(): boolean {
+  if (!pendingHubBundleHandoffPath) return false
+  if (!isAccessibilityGranted()) {
+    logApp("[hub-install] Accessibility not granted; deferring bundle install handoff", {
+      filePath: pendingHubBundleHandoffPath,
+    })
+    return false
+  }
+
+  const installUrl = buildHubBundleInstallUrl(pendingHubBundleHandoffPath)
+  pendingHubBundleHandoffPath = null
+  showMainWindow(installUrl)
+  return true
+}
+
+function queueHubBundleInstall(
+  filePath: string | null | undefined,
+  options: { openIfReady?: boolean } = {},
+): boolean {
+  const { openIfReady = true } = options
+  const resolvedPath = filePath ? findHubBundleHandoffFilePath([filePath]) : null
+  if (!resolvedPath) return false
+
+  pendingHubBundleHandoffPath = resolvedPath
+  logApp("[hub-install] Queued Hub bundle install handoff", { filePath: resolvedPath })
+
+  if (openIfReady && app.isReady()) {
+    openPendingHubBundleInstall()
+  }
+
+  return true
+}
+
+async function queueHubBundleInstallFromUrl(
+  bundleUrl: string,
+  options: { openIfReady?: boolean } = {},
+): Promise<boolean> {
+  try {
+    logApp("[hub-install] Downloading Hub bundle", { bundleUrl })
+    const downloadedPath = await downloadHubBundleToTempFile(bundleUrl)
+    return queueHubBundleInstall(downloadedPath, options)
+  } catch (error) {
+    logApp("[hub-install] Failed to download Hub bundle", {
+      bundleUrl,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return false
+  }
+}
+
+function handleHubBundleInstallCandidates(candidates: readonly string[]): Promise<boolean> {
+  const bundlePath = findHubBundleHandoffFilePath(candidates)
+  if (bundlePath) {
+    return Promise.resolve(queueHubBundleInstall(bundlePath))
+  }
+
+  const bundleUrl = findHubBundleInstallBundleUrl(candidates)
+  if (!bundleUrl) {
+    return Promise.resolve(false)
+  }
+
+  return queueHubBundleInstallFromUrl(bundleUrl)
+}
+
+app.on("open-file", (event, filePath) => {
+  event.preventDefault()
+  queueHubBundleInstall(filePath)
+})
+
+app.on("open-url", (event, url) => {
+  event.preventDefault()
+  void handleHubBundleInstallCandidates([url])
+})
+
+app.on("second-instance", (_event, commandLine) => {
+  void handleHubBundleInstallCandidates(commandLine)
+})
+
 app.whenReady().then(async () => {
   initDebugFlags(process.argv)
   logApp("DotAgents starting up...")
+
+  if (startupHubBundleInstallUrl) {
+    await queueHubBundleInstallFromUrl(startupHubBundleInstallUrl, { openIfReady: false })
+  }
 
   // Handle --qr mode: start remote server, start tunnel, print QR code, run headlessly
   if (isQRMode) {
@@ -300,8 +393,18 @@ app.whenReady().then(async () => {
       createMainWindow({ url: "/onboarding" })
       logApp("Main window created (showing onboarding)")
     } else {
-      createMainWindow()
-      logApp("Main window created")
+      const initialUrl = pendingHubBundleHandoffPath
+        ? buildHubBundleInstallUrl(pendingHubBundleHandoffPath)
+        : undefined
+      createMainWindow(initialUrl ? { url: initialUrl } : undefined)
+      if (initialUrl) {
+        logApp("Main window created (opening Hub bundle install)", {
+          filePath: pendingHubBundleHandoffPath,
+        })
+        pendingHubBundleHandoffPath = null
+      } else {
+        logApp("Main window created")
+      }
     }
   } else {
     createSetupWindow()
@@ -464,8 +567,11 @@ app.whenReady().then(async () => {
 
     if (accessibilityGranted) {
       if (mainWin) {
-        // Window exists (may be hidden/minimized/behind another app) — restore and focus it
-        showMainWindow()
+        // Window exists (may be hidden/minimized/behind another app).
+        // Prefer opening any queued Hub install; otherwise restore and focus the main window.
+        if (!openPendingHubBundleInstall()) {
+          showMainWindow()
+        }
       } else {
         // Check if onboarding has been completed
         // Skip for existing users who have already configured models (pre-onboarding installs)
@@ -476,7 +582,13 @@ app.whenReady().then(async () => {
         if (needsOnboarding) {
           createMainWindow({ url: "/onboarding" })
         } else {
-          createMainWindow()
+          const initialUrl = pendingHubBundleHandoffPath
+            ? buildHubBundleInstallUrl(pendingHubBundleHandoffPath)
+            : undefined
+          createMainWindow(initialUrl ? { url: initialUrl } : undefined)
+          if (initialUrl) {
+            pendingHubBundleHandoffPath = null
+          }
         }
       }
     } else {

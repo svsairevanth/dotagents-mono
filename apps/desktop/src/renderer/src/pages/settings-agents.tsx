@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@renderer/components/ui/card"
 import { Badge } from "@renderer/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@renderer/components/ui/tabs"
-import { Trash2, Plus, Edit2, Save, X, Server, Sparkles, Brain, Settings2, ChevronDown, ChevronRight, Wrench, RefreshCw, ExternalLink, Download, Upload } from "lucide-react"
+import { Trash2, Plus, Edit2, Save, X, Server, Sparkles, Brain, Settings2, ChevronDown, ChevronRight, Wrench, RefreshCw, ExternalLink, Download, Upload, Globe } from "lucide-react"
 import { Facehash } from "facehash"
 import { toast } from "sonner"
 
@@ -29,6 +29,8 @@ function agentColors(seed: string): string[] {
 import { tipcClient } from "@renderer/lib/tipc-client"
 import { ModelSelector } from "@renderer/components/model-selector"
 import { BundleImportDialog } from "@renderer/components/bundle-import-dialog"
+import { BundleExportDialog } from "@renderer/components/bundle-export-dialog"
+import { BundlePublishDialog } from "@renderer/components/bundle-publish-dialog"
 import {
   AgentProfile, AgentProfileConnectionType, AgentProfileConnection,
   ProfileModelConfig, AgentProfileToolConfig, ProfileSkillsConfig, AgentSkill,
@@ -97,6 +99,9 @@ export function SettingsAgents() {
   const [showSystemPrompt, setShowSystemPrompt] = useState(false)
   const [defaultSystemPrompt, setDefaultSystemPrompt] = useState("")
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
+  const [prefilledImportFilePath, setPrefilledImportFilePath] = useState<string | null>(null)
+  const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false)
   const avatarFileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -104,6 +109,20 @@ export function SettingsAgents() {
     tipcClient.getDefaultSystemPrompt().then(setDefaultSystemPrompt).catch(console.error)
   }, [])
   useEffect(() => { if (editing) { loadServers(); loadSkills(); loadAllTools() } }, [!!editing])
+
+  useEffect(() => {
+    const installBundlePath = searchParams.get("installBundle")
+    if (!installBundlePath) return
+
+    setEditing(null)
+    setIsCreating(false)
+    setPrefilledImportFilePath(installBundlePath)
+    setIsImportDialogOpen(true)
+
+    const nextParams = new URLSearchParams(searchParams)
+    nextParams.delete("installBundle")
+    setSearchParams(nextParams, { replace: true })
+  }, [searchParams, setSearchParams])
 
   // Handle URL-driven navigation: ?edit=<agentId> opens edit, ?view=list returns to list
   useEffect(() => {
@@ -375,24 +394,6 @@ export function SettingsAgents() {
     e.target.value = ""
   }
 
-  const handleExportBundle = async () => {
-    try {
-      const result = await tipcClient.exportBundle()
-      if (result.success) {
-        toast.success("Bundle exported successfully")
-        return
-      }
-      if (result.canceled) {
-        toast.message("Bundle export canceled")
-        return
-      }
-      toast.error(result.error || "Failed to export bundle")
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      toast.error(`Failed to export bundle: ${errorMessage}`)
-    }
-  }
-
   const handleImportComplete = () => {
     void loadAgents()
     void loadSkills()
@@ -412,15 +413,25 @@ export function SettingsAgents() {
     queryClient.invalidateQueries({ queryKey: ["config"] })
   }
 
+  const handleImportDialogOpenChange = (open: boolean) => {
+    setIsImportDialogOpen(open)
+    if (!open) {
+      setPrefilledImportFilePath(null)
+    }
+  }
+
   return (
     <div className="modern-panel h-full overflow-y-auto overflow-x-hidden px-6 py-4">
       {!editing && (
-        <div className="flex items-center justify-end gap-2 mb-4">
-          <Button variant="outline" className="gap-2" onClick={() => setIsImportDialogOpen(true)}>
+        <div className="flex flex-wrap items-center justify-end gap-2 mb-4">
+          <Button variant="outline" className="gap-2" onClick={() => handleImportDialogOpenChange(true)}>
             <Upload className="h-4 w-4" />Import Bundle
           </Button>
-          <Button variant="outline" className="gap-2" onClick={handleExportBundle}>
+          <Button variant="outline" className="gap-2" onClick={() => setIsExportDialogOpen(true)}>
             <Download className="h-4 w-4" />Export Bundle
+          </Button>
+          <Button variant="outline" className="gap-2" onClick={() => setIsPublishDialogOpen(true)}>
+            <Globe className="h-4 w-4" />Export for Hub
           </Button>
           <Button variant="outline" className="gap-2" onClick={async () => { await tipcClient.reloadAgentProfiles(); loadAgents(); queryClient.invalidateQueries({ queryKey: ["agentProfilesSidebar"] }) }}>
             <RefreshCw className="h-4 w-4" />Rescan Files
@@ -431,8 +442,21 @@ export function SettingsAgents() {
       {editing ? renderEditForm() : renderAgentList()}
       <BundleImportDialog
         open={isImportDialogOpen}
-        onOpenChange={setIsImportDialogOpen}
+        onOpenChange={handleImportDialogOpenChange}
         onImportComplete={handleImportComplete}
+        initialFilePath={prefilledImportFilePath || undefined}
+        title={prefilledImportFilePath ? "Install Hub Bundle" : undefined}
+        description={prefilledImportFilePath
+          ? "Preview and import the downloaded Hub .dotagents bundle using the existing conflict-aware flow."
+          : undefined}
+      />
+      <BundleExportDialog
+        open={isExportDialogOpen}
+        onOpenChange={setIsExportDialogOpen}
+      />
+      <BundlePublishDialog
+        open={isPublishDialogOpen}
+        onOpenChange={setIsPublishDialogOpen}
       />
     </div>
   )
@@ -460,21 +484,21 @@ export function SettingsAgents() {
             </CardHeader>
             <CardContent className="flex-grow flex flex-col justify-end pt-1 pb-2 px-3">
               <div className="flex gap-1 flex-wrap mb-2.5">
-                {agent.isBuiltIn && <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5 shadow-sm font-medium">Built-in</Badge>}
-                {agent.isDefault && <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5 shadow-sm font-medium">Default</Badge>}
-                {!agent.enabled && <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 bg-background/50 shadow-sm font-medium">Disabled</Badge>}
-                <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 bg-muted/30 font-normal">{agent.connection.type}</Badge>
+                {agent.isBuiltIn && <Badge variant="secondary" className="text-[10px] px-1 py-0 h-3.5 shadow-sm font-medium">Built-in</Badge>}
+                {agent.isDefault && <Badge variant="secondary" className="text-[10px] px-1 py-0 h-3.5 shadow-sm font-medium">Default</Badge>}
+                {!agent.enabled && <Badge variant="outline" className="text-[10px] px-1 py-0 h-3.5 bg-background/50 shadow-sm font-medium">Disabled</Badge>}
+                <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 bg-muted/30 font-normal">{agent.connection.type}</Badge>
                 {agent.modelConfig?.mcpToolsProviderId && (
-                  <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 truncate max-w-[80px] bg-muted/30 font-normal" title={agent.modelConfig.mcpToolsProviderId}>{agent.modelConfig.mcpToolsProviderId}</Badge>
+                  <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 truncate max-w-[80px] bg-muted/30 font-normal" title={agent.modelConfig.mcpToolsProviderId}>{agent.modelConfig.mcpToolsProviderId}</Badge>
                 )}
                 {(agent.toolConfig?.enabledServers?.length ?? 0) > 0 && (
-                  <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 bg-muted/30 font-normal"><Server className="h-2.5 w-2.5 mr-0.5 text-muted-foreground" />{agent.toolConfig!.enabledServers!.length}</Badge>
+                  <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 bg-muted/30 font-normal"><Server className="h-2.5 w-2.5 mr-0.5 text-muted-foreground" />{agent.toolConfig!.enabledServers!.length}</Badge>
                 )}
                 {skills.length > 0 && (
-                  <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 bg-muted/30 font-normal"><Sparkles className="h-2.5 w-2.5 mr-0.5 text-muted-foreground" />{(!agent.skillsConfig || !agent.skillsConfig.allSkillsDisabledByDefault) ? skills.length : (agent.skillsConfig.enabledSkillIds?.length ?? 0)}</Badge>
+                  <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 bg-muted/30 font-normal"><Sparkles className="h-2.5 w-2.5 mr-0.5 text-muted-foreground" />{(!agent.skillsConfig || !agent.skillsConfig.allSkillsDisabledByDefault) ? skills.length : (agent.skillsConfig.enabledSkillIds?.length ?? 0)}</Badge>
                 )}
                 {agent.properties && Object.keys(agent.properties).length > 0 && (
-                  <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 bg-muted/30 font-normal">{Object.keys(agent.properties).length} props</Badge>
+                  <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 bg-muted/30 font-normal">{Object.keys(agent.properties).length} props</Badge>
                 )}
               </div>
               <div className="flex items-center gap-1 pt-2 border-t mt-auto">
@@ -871,7 +895,7 @@ export function SettingsAgents() {
                   {Object.entries(editing.properties).map(([key, val]) => (
                     <div key={key} className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-card">
                       <code className="text-sm font-mono bg-muted px-1.5 py-0.5 rounded">{key}</code>
-                      <span className="text-sm flex-1 truncate">{val}</span>
+                      <span className="text-sm flex-1 truncate">{String(val)}</span>
                       <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => removeProperty(key)}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>

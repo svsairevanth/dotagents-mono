@@ -18,6 +18,14 @@ import type {
   AgentProfileConnectionType,
   AgentProfileRole,
 } from "@shared/types"
+import {
+  buildHubBundleArtifactUrl,
+  buildHubBundleInstallUrl,
+  slugifyHubCatalogId,
+  type HubCatalogAuthor,
+  type HubCatalogCompatibility,
+  type HubPublishPayload,
+} from "@dotagents/shared"
 import { getAgentsLayerPaths, type AgentsLayerPaths } from "./agents-files/modular-config"
 import { loadAgentProfilesLayer, writeAgentsProfileFiles } from "./agents-files/agent-profiles"
 import { loadAgentsSkillsLayer, writeAgentsSkillFile, skillIdToDirPath } from "./agents-files/skills"
@@ -30,12 +38,24 @@ import { logApp } from "./debug"
 // Types
 // ============================================================================
 
+export type BundlePublicMetadataAuthor = HubCatalogAuthor
+
+export type BundlePublicMetadataCompatibility = HubCatalogCompatibility
+
+export interface BundlePublicMetadata {
+  summary: string
+  author: BundlePublicMetadataAuthor
+  tags: string[]
+  compatibility?: BundlePublicMetadataCompatibility
+}
+
 export interface BundleManifest {
   version: 1
   name: string
   description?: string
   createdAt: string
   exportedFrom: string
+  publicMetadata?: BundlePublicMetadata
   components: {
     agentProfiles: number
     mcpServers: number
@@ -132,11 +152,68 @@ export interface BundleComponentSelection {
   memories?: boolean
 }
 
-export interface ExportBundleOptions {
+export interface BundleItemSelectionOptions {
+  agentProfileIds?: string[]
+  mcpServerNames?: string[]
+  skillIds?: string[]
+  repeatTaskIds?: string[]
+  memoryIds?: string[]
+}
+
+export interface ExportableBundleAgentProfile {
+  id: string
+  name: string
+  displayName?: string
+  enabled: boolean
+  role?: AgentProfileRole
+  referencedMcpServerNames: string[]
+  referencedSkillIds: string[]
+}
+
+export interface ExportableBundleMCPServer {
+  name: string
+  transport?: string
+  enabled?: boolean
+}
+
+export interface ExportableBundleSkill {
+  id: string
+  name: string
+  description?: string
+}
+
+export interface ExportableBundleRepeatTask {
+  id: string
+  name: string
+  intervalMinutes: number
+  enabled: boolean
+}
+
+export interface ExportableBundleMemory {
+  id: string
+  title: string
+  importance: AgentMemory["importance"]
+}
+
+export interface ExportableBundleItems {
+  agentProfiles: ExportableBundleAgentProfile[]
+  mcpServers: ExportableBundleMCPServer[]
+  skills: ExportableBundleSkill[]
+  repeatTasks: ExportableBundleRepeatTask[]
+  memories: ExportableBundleMemory[]
+}
+
+export interface ExportBundleOptions extends BundleItemSelectionOptions {
   name?: string
   description?: string
+  publicMetadata?: BundlePublicMetadata
   components?: BundleComponentSelection
-  skillIds?: string[]
+}
+
+export interface GeneratePublishPayloadOptions extends ExportBundleOptions {
+  publicMetadata: BundlePublicMetadata
+  catalogId?: string
+  artifactUrl?: string
 }
 
 // ============================================================================
@@ -215,6 +292,7 @@ const SECRET_PATTERNS = [
 ]
 
 const BUNDLE_FILE_EXTENSIONS = new Set([".dotagents", ".json"])
+const HUB_BUNDLE_FILE_EXTENSION = ".dotagents"
 const TOP_LEVEL_MCP_CONFIG_KEYS = [
   "mcpDisabledTools",
   "mcpRuntimeDisabledServers",
@@ -242,6 +320,92 @@ function isReservedTopLevelMcpKey(key: string): boolean {
 
 function isRecordObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function normalizeOptionalString(value: string | undefined): string | undefined {
+  if (typeof value !== "string") return undefined
+  const normalized = value.trim()
+  return normalized.length > 0 ? normalized : undefined
+}
+
+function normalizeStringArray(values: string[] | undefined): string[] {
+  if (!Array.isArray(values)) return []
+
+  const normalized = new Set<string>()
+  for (const value of values) {
+    if (typeof value !== "string") continue
+    const trimmed = value.trim()
+    if (trimmed.length === 0) continue
+    normalized.add(trimmed)
+  }
+
+  return Array.from(normalized)
+}
+
+function sanitizeBundlePublicMetadata(
+  publicMetadata: BundlePublicMetadata | undefined
+): BundlePublicMetadata | undefined {
+  if (!publicMetadata) return undefined
+
+  const summary = normalizeOptionalString(publicMetadata.summary)
+  if (!summary) {
+    throw new Error("Bundle public metadata requires a non-empty summary")
+  }
+
+  const displayName = normalizeOptionalString(publicMetadata.author?.displayName)
+  if (!displayName) {
+    throw new Error("Bundle public metadata requires author.displayName")
+  }
+
+  const handle = normalizeOptionalString(publicMetadata.author.handle)
+  const url = normalizeOptionalString(publicMetadata.author.url)
+  const minDesktopVersion = normalizeOptionalString(publicMetadata.compatibility?.minDesktopVersion)
+  const notes = normalizeStringArray(publicMetadata.compatibility?.notes)
+
+  return {
+    summary,
+    author: {
+      displayName,
+      ...(handle ? { handle } : {}),
+      ...(url ? { url } : {}),
+    },
+    tags: normalizeStringArray(publicMetadata.tags),
+    ...((minDesktopVersion || notes.length > 0)
+      ? {
+          compatibility: {
+            ...(minDesktopVersion ? { minDesktopVersion } : {}),
+            ...(notes.length > 0 ? { notes } : {}),
+          },
+        }
+      : {}),
+  }
+}
+
+function normalizePublishCatalogId(catalogId: string | undefined, bundleName: string): string {
+  const normalized = normalizeOptionalString(catalogId)
+  return slugifyHubCatalogId(normalized || bundleName)
+}
+
+function normalizePublishArtifactUrl(artifactUrl: string | undefined, catalogId: string): string {
+  const normalized = normalizeOptionalString(artifactUrl)
+  if (!normalized) {
+    return buildHubBundleArtifactUrl(catalogId)
+  }
+
+  try {
+    const parsedUrl = new URL(normalized)
+    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+      throw new Error("unsupported protocol")
+    }
+    return parsedUrl.toString()
+  } catch {
+    throw new Error("Publish payload requires artifactUrl to be a valid http(s) URL")
+  }
+}
+
+function buildPublishArtifactFileName(bundleName: string, catalogId: string): string {
+  const safeName = bundleName.replace(/[^a-zA-Z0-9-_ ]/g, "").trim()
+  return `${safeName || catalogId}.dotagents`
 }
 
 function isSecretKey(key: string): boolean {
@@ -395,16 +559,52 @@ function sanitizeAgentProfile(profile: AgentProfile): BundleAgentProfile {
   return sanitized
 }
 
-function loadMCPServersForBundle(layer: AgentsLayerPaths): BundleMCPServer[] {
+function toSelectionSet(values?: string[]): Set<string> | null {
+  const normalized = (values ?? [])
+    .map((value) => value.trim())
+    .filter(Boolean)
+
+  return normalized.length > 0 ? new Set(normalized) : null
+}
+
+function summarizeAgentProfileForExport(profile: AgentProfile): ExportableBundleAgentProfile {
+  return {
+    id: profile.id,
+    name: profile.name,
+    displayName: profile.displayName,
+    enabled: profile.enabled,
+    role: profile.role,
+    referencedMcpServerNames: (profile.toolConfig?.enabledServers ?? []).filter(isNonEmptyString),
+    referencedSkillIds: (profile.skillsConfig?.enabledSkillIds ?? []).filter(isNonEmptyString),
+  }
+}
+
+function loadAgentProfilesForBundle(
+  layer: AgentsLayerPaths,
+  options?: BundleItemSelectionOptions
+): BundleAgentProfile[] {
+  const selectedAgentProfileIds = toSelectionSet(options?.agentProfileIds)
+
+  return loadAgentProfilesLayer(layer).profiles
+    .filter((profile) => !selectedAgentProfileIds || selectedAgentProfileIds.has(profile.id))
+    .map(sanitizeAgentProfile)
+}
+
+function loadMCPServersForBundle(
+  layer: AgentsLayerPaths,
+  options?: BundleItemSelectionOptions
+): BundleMCPServer[] {
   const mcpConfig = safeReadJsonFileSync<Record<string, unknown>>(layer.mcpJsonPath, {
     defaultValue: {},
   })
+  const selectedMcpServerNames = toSelectionSet(options?.mcpServerNames)
 
   const servers: BundleMCPServer[] = []
   const mcpServers = readMcpServersFromConfig(mcpConfig)
 
   if (typeof mcpServers === "object" && mcpServers !== null) {
     for (const [name, config] of Object.entries(mcpServers)) {
+      if (selectedMcpServerNames && !selectedMcpServerNames.has(name)) continue
       if (typeof config !== "object" || config === null) continue
       const serverConfig = config as Record<string, unknown>
 
@@ -432,9 +632,17 @@ const DEFAULT_EXPORT_COMPONENTS: Required<BundleComponentSelection> = {
   memories: true,
 }
 
-function loadSkillsForBundle(layer: AgentsLayerPaths, options?: { skillIds?: string[] }): BundleSkill[] {
+const DEFAULT_PUBLISH_COMPONENTS: Required<BundleComponentSelection> = {
+  agentProfiles: true,
+  mcpServers: true,
+  skills: true,
+  repeatTasks: false,
+  memories: false,
+}
+
+function loadSkillsForBundle(layer: AgentsLayerPaths, options?: BundleItemSelectionOptions): BundleSkill[] {
   const skillsResult = loadAgentsSkillsLayer(layer)
-  const selectedSkillIds = options?.skillIds?.length ? new Set(options.skillIds) : null
+  const selectedSkillIds = toSelectionSet(options?.skillIds)
 
   return skillsResult.skills
     .filter(skill => !selectedSkillIds || selectedSkillIds.has(skill.id))
@@ -447,30 +655,121 @@ function loadSkillsForBundle(layer: AgentsLayerPaths, options?: { skillIds?: str
     }))
 }
 
-function loadRepeatTasksForBundle(layer: AgentsLayerPaths): BundleRepeatTask[] {
+function loadRepeatTasksForBundle(layer: AgentsLayerPaths, options?: BundleItemSelectionOptions): BundleRepeatTask[] {
   const tasksResult = loadTasksLayer(layer)
-  return tasksResult.tasks.map((task): BundleRepeatTask => ({
-    id: task.id,
-    name: task.name,
-    prompt: task.prompt,
-    intervalMinutes: task.intervalMinutes,
-    enabled: task.enabled,
-    runOnStartup: task.runOnStartup,
-    // profileId intentionally omitted — may not exist in target environment
-  }))
+  const selectedRepeatTaskIds = toSelectionSet(options?.repeatTaskIds)
+
+  return tasksResult.tasks
+    .filter((task) => !selectedRepeatTaskIds || selectedRepeatTaskIds.has(task.id))
+    .map((task): BundleRepeatTask => ({
+      id: task.id,
+      name: task.name,
+      prompt: task.prompt,
+      intervalMinutes: task.intervalMinutes,
+      enabled: task.enabled,
+      runOnStartup: task.runOnStartup,
+      // profileId intentionally omitted — may not exist in target environment
+    }))
 }
 
-function loadMemoriesForBundle(layer: AgentsLayerPaths): BundleMemory[] {
+function loadMemoriesForBundle(layer: AgentsLayerPaths, options?: BundleItemSelectionOptions): BundleMemory[] {
   const memoriesResult = loadAgentsMemoriesLayer(layer)
-  return memoriesResult.memories.map((memory): BundleMemory => ({
-    id: memory.id,
-    title: memory.title,
-    content: memory.content,
-    importance: memory.importance,
-    tags: memory.tags,
-    keyFindings: memory.keyFindings,
-    userNotes: memory.userNotes,
-  }))
+  const selectedMemoryIds = toSelectionSet(options?.memoryIds)
+
+  return memoriesResult.memories
+    .filter((memory) => !selectedMemoryIds || selectedMemoryIds.has(memory.id))
+    .map((memory): BundleMemory => ({
+      id: memory.id,
+      title: memory.title,
+      content: memory.content,
+      importance: memory.importance,
+      tags: memory.tags,
+      keyFindings: memory.keyFindings,
+      userNotes: memory.userNotes,
+    }))
+}
+
+function listExportableBundleItemsForLayer(layer: AgentsLayerPaths): ExportableBundleItems {
+  return {
+    agentProfiles: loadAgentProfilesLayer(layer).profiles.map(summarizeAgentProfileForExport),
+    mcpServers: loadMCPServersForBundle(layer).map((server) => ({
+      name: server.name,
+      transport: server.transport,
+      enabled: server.enabled,
+    })),
+    skills: loadAgentsSkillsLayer(layer).skills.map((skill) => ({
+      id: skill.id,
+      name: skill.name,
+      description: skill.description,
+    })),
+    repeatTasks: loadTasksLayer(layer).tasks.map((task) => ({
+      id: task.id,
+      name: task.name,
+      intervalMinutes: task.intervalMinutes,
+      enabled: task.enabled,
+    })),
+    memories: loadAgentsMemoriesLayer(layer).memories.map((memory) => ({
+      id: memory.id,
+      title: memory.title,
+      importance: memory.importance,
+    })),
+  }
+}
+
+function sortExportableBundleItems(items: ExportableBundleItems): ExportableBundleItems {
+  return {
+    agentProfiles: [...items.agentProfiles].sort((a, b) =>
+      (a.displayName || a.name).localeCompare(b.displayName || b.name)
+    ),
+    mcpServers: [...items.mcpServers].sort((a, b) => a.name.localeCompare(b.name)),
+    skills: [...items.skills].sort((a, b) => a.name.localeCompare(b.name)),
+    repeatTasks: [...items.repeatTasks].sort((a, b) => a.name.localeCompare(b.name)),
+    memories: [...items.memories].sort((a, b) => a.title.localeCompare(b.title)),
+  }
+}
+
+export function getBundleExportableItems(agentsDir: string): ExportableBundleItems {
+  const layer = getAgentsLayerPaths(agentsDir)
+  return sortExportableBundleItems(listExportableBundleItemsForLayer(layer))
+}
+
+export function getBundleExportableItemsFromLayers(agentsDirs: string[]): ExportableBundleItems {
+  const normalizedDirs = Array.from(
+    new Set(agentsDirs.map((dir) => path.resolve(dir)).filter((dir) => dir.length > 0))
+  )
+
+  if (normalizedDirs.length === 0) {
+    throw new Error("No agents directories provided for exportable item listing")
+  }
+
+  if (normalizedDirs.length === 1) {
+    return getBundleExportableItems(normalizedDirs[0])
+  }
+
+  const layerItems = normalizedDirs.map((dir) => getBundleExportableItems(dir))
+
+  return sortExportableBundleItems({
+    agentProfiles: mergeByKey(
+      layerItems.flatMap((items) => items.agentProfiles),
+      (profile) => profile.id
+    ),
+    mcpServers: mergeByKey(
+      layerItems.flatMap((items) => items.mcpServers),
+      (server) => server.name
+    ),
+    skills: mergeByKey(
+      layerItems.flatMap((items) => items.skills),
+      (skill) => skill.id
+    ),
+    repeatTasks: mergeByKey(
+      layerItems.flatMap((items) => items.repeatTasks),
+      (task) => task.id
+    ),
+    memories: mergeByKey(
+      layerItems.flatMap((items) => items.memories),
+      (memory) => memory.id
+    ),
+  })
 }
 
 function buildBundle(
@@ -483,6 +782,8 @@ function buildBundle(
     memories: BundleMemory[]
   }
 ): DotAgentsBundle {
+  const publicMetadata = sanitizeBundlePublicMetadata(options?.publicMetadata)
+
   return {
     manifest: {
       version: 1,
@@ -490,6 +791,7 @@ function buildBundle(
       description: options?.description,
       createdAt: new Date().toISOString(),
       exportedFrom: "dotagents-desktop",
+      ...(publicMetadata ? { publicMetadata } : {}),
       components: {
         agentProfiles: data.agentProfiles.length,
         mcpServers: data.mcpServers.length,
@@ -525,12 +827,12 @@ export async function exportBundle(
   const components = { ...DEFAULT_EXPORT_COMPONENTS, ...options?.components }
 
   const profiles = components.agentProfiles
-    ? loadAgentProfilesLayer(layer).profiles.map(sanitizeAgentProfile)
+    ? loadAgentProfilesForBundle(layer, options)
     : []
-  const mcpServers = components.mcpServers ? loadMCPServersForBundle(layer) : []
-  const skills = components.skills ? loadSkillsForBundle(layer, { skillIds: options?.skillIds }) : []
-  const repeatTasks = components.repeatTasks ? loadRepeatTasksForBundle(layer) : []
-  const memories = components.memories ? loadMemoriesForBundle(layer) : []
+  const mcpServers = components.mcpServers ? loadMCPServersForBundle(layer, options) : []
+  const skills = components.skills ? loadSkillsForBundle(layer, options) : []
+  const repeatTasks = components.repeatTasks ? loadRepeatTasksForBundle(layer, options) : []
+  const memories = components.memories ? loadMemoriesForBundle(layer, options) : []
 
   const bundle = buildBundle(options, {
     agentProfiles: profiles,
@@ -698,6 +1000,28 @@ function isSupportedBundleFile(filePath: string): boolean {
   return BUNDLE_FILE_EXTENSIONS.has(extension)
 }
 
+export function findHubBundleHandoffFilePath(candidates: readonly string[]): string | null {
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string" || candidate.trim().length === 0) continue
+
+    const normalizedPath = path.resolve(candidate)
+    if (path.extname(normalizedPath).toLowerCase() !== HUB_BUNDLE_FILE_EXTENSION) {
+      continue
+    }
+
+    try {
+      const stats = fs.statSync(normalizedPath)
+      if (stats.isFile()) {
+        return normalizedPath
+      }
+    } catch {
+      // Ignore missing/inaccessible candidates while scanning argv or OS handoff inputs.
+    }
+  }
+
+  return null
+}
+
 type LegacyBundleManifestComponents = Omit<BundleManifest["components"], "repeatTasks" | "memories"> & {
   repeatTasks?: number
   memories?: number
@@ -725,6 +1049,27 @@ function isNonNegativeFiniteNumber(value: unknown): value is number {
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string")
+}
+
+function isBundlePublicMetadataAuthor(value: unknown): value is BundlePublicMetadataAuthor {
+  if (!isRecordObject(value)) return false
+  if (!isNonEmptyString(value.displayName)) return false
+  if (!isOptionalString(value.handle)) return false
+  return isOptionalString(value.url)
+}
+
+function isBundlePublicMetadataCompatibility(value: unknown): value is BundlePublicMetadataCompatibility {
+  if (!isRecordObject(value)) return false
+  if (!isOptionalString(value.minDesktopVersion)) return false
+  return value.notes === undefined || isStringArray(value.notes)
+}
+
+function isBundlePublicMetadata(value: unknown): value is BundlePublicMetadata {
+  if (!isRecordObject(value)) return false
+  if (!isNonEmptyString(value.summary)) return false
+  if (!isBundlePublicMetadataAuthor(value.author)) return false
+  if (!isStringArray(value.tags)) return false
+  return value.compatibility === undefined || isBundlePublicMetadataCompatibility(value.compatibility)
 }
 
 function isAgentProfileConnectionType(value: unknown): value is AgentProfileConnectionType {
@@ -813,6 +1158,7 @@ function validateBundle(bundle: unknown): bundle is LegacyDotAgentsBundle {
   if (!isOptionalString(m.description)) return false
   if (typeof m.createdAt !== "string" || Number.isNaN(Date.parse(m.createdAt))) return false
   if (!isNonEmptyString(m.exportedFrom)) return false
+  if (m.publicMetadata !== undefined && !isBundlePublicMetadata(m.publicMetadata)) return false
   if (!hasValidManifestComponents(m.components)) return false
   if (!Array.isArray(b.agentProfiles) || !b.agentProfiles.every(isBundleAgentProfile)) return false
   if (!Array.isArray(b.mcpServers) || !b.mcpServers.every(isBundleMcpServer)) return false
@@ -1404,4 +1750,79 @@ export async function importBundleFromDialog(
   const importResult = await importBundle(selectedPath, targetAgentsDir, options)
 
   return { filePath: selectedPath, result: importResult }
+}
+
+// ============================================================================
+// Publish Payload Generation
+// ============================================================================
+
+/**
+ * Generate a publish-ready payload from the local .agents layer(s).
+ *
+ * Returns both:
+ * 1. A HubCatalogItemV1-shaped metadata object for Hub listing
+ * 2. The serialized .dotagents bundle JSON for artifact upload/download
+ *
+ * Requires publicMetadata with at least summary and author.displayName.
+ */
+export async function generatePublishPayload(
+  agentsDirs: string[],
+  options: GeneratePublishPayloadOptions
+): Promise<HubPublishPayload> {
+  if (!options.publicMetadata?.summary) {
+    throw new Error("Publish payload requires a summary in publicMetadata")
+  }
+  if (!options.publicMetadata?.author?.displayName) {
+    throw new Error("Publish payload requires author.displayName in publicMetadata")
+  }
+
+  const {
+    catalogId: requestedCatalogId,
+    artifactUrl: requestedArtifactUrl,
+    ...exportOptions
+  } = options
+
+  const publishOptions: ExportBundleOptions = {
+    ...exportOptions,
+    components: {
+      ...DEFAULT_PUBLISH_COMPONENTS,
+      ...options.components,
+    },
+  }
+
+  const bundle = agentsDirs.length === 1
+    ? await exportBundle(agentsDirs[0], publishOptions)
+    : await exportBundleFromLayers(agentsDirs, publishOptions)
+
+  const bundleJson = JSON.stringify(bundle, null, 2)
+  const now = new Date().toISOString()
+  const catalogId = normalizePublishCatalogId(requestedCatalogId, bundle.manifest.name)
+  const artifactUrl = normalizePublishArtifactUrl(requestedArtifactUrl, catalogId)
+  const artifactFileName = buildPublishArtifactFileName(bundle.manifest.name, catalogId)
+  const publicMetadata = bundle.manifest.publicMetadata!
+
+  return {
+    catalogItem: {
+      id: catalogId,
+      name: bundle.manifest.name,
+      summary: publicMetadata.summary,
+      description: bundle.manifest.description,
+      author: publicMetadata.author,
+      tags: publicMetadata.tags,
+      bundleVersion: 1,
+      publishedAt: now,
+      updatedAt: now,
+      componentCounts: bundle.manifest.components,
+      artifact: {
+        url: artifactUrl,
+        fileName: artifactFileName,
+        sizeBytes: Buffer.byteLength(bundleJson, "utf-8"),
+      },
+      ...(publicMetadata.compatibility
+        ? { compatibility: publicMetadata.compatibility }
+        : {}),
+    },
+    bundleJson,
+    installUrl: buildHubBundleInstallUrl(artifactUrl),
+  }
 }

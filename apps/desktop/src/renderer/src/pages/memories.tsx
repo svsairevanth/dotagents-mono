@@ -416,18 +416,18 @@ Optional notes go here (saved as userNotes).
 `
 
   return (
-    <div className="modern-panel h-full overflow-auto px-6 py-4">
+    <div className="modern-panel h-full overflow-y-auto overflow-x-hidden px-6 py-4">
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-start justify-between gap-4">
-          <div>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-bold">Memories</h1>
             </div>
             <p className="text-sm text-muted-foreground mt-1">Saved insights and findings from agent sessions</p>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2 shrink-0">
             <Button
               variant="outline"
               size="sm"
@@ -498,8 +498,8 @@ Optional notes go here (saved as userNotes).
         )}
 
         {/* Search and Filters */}
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1 max-w-md">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative min-w-0 flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search memories..."
@@ -519,7 +519,7 @@ Optional notes go here (saved as userNotes).
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             {["all", "critical", "high", "medium", "low"].map((level) => (
               <Button
                 key={level}

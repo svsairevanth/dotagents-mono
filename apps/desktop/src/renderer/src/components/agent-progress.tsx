@@ -419,6 +419,8 @@ const CompactMessage: React.FC<{
           : "border-l-2 border-gray-400 bg-gray-400/5"
       case "tool":
         return "border-l-2 border-orange-400 bg-orange-400/5"
+      default:
+        return "border-l-2 border-gray-400 bg-gray-400/5"
     }
   }
 
@@ -767,11 +769,11 @@ const ToolExecutionBubble: React.FC<{
                   <>
                     <div className="flex items-center justify-between">
                       <span className="font-medium opacity-70">Parameters</span>
-                      <Button size="sm" variant="ghost" className="h-4 px-1 text-[9px]" onClick={(e) => handleCopy(e, JSON.stringify(call.arguments, null, 2))}>
+                      <Button size="sm" variant="ghost" className="h-4 px-1 text-[10px]" onClick={(e) => handleCopy(e, JSON.stringify(call.arguments, null, 2))}>
                         <Copy className="h-2 w-2 mr-0.5" /> Copy
                       </Button>
                     </div>
-                    <pre className="rounded bg-muted/40 p-1.5 overflow-auto whitespace-pre-wrap max-h-32 scrollbar-thin">
+                    <pre className="rounded bg-muted/40 p-1.5 overflow-auto whitespace-pre-wrap max-h-32 scrollbar-thin text-[10px]">
                       {JSON.stringify(call.arguments, null, 2)}
                     </pre>
                   </>
@@ -785,23 +787,23 @@ const ToolExecutionBubble: React.FC<{
                       )}>
                         {result.success ? "Result" : "Error"}
                       </span>
-                      <span className="opacity-50 text-[9px]">{(result.content?.length || 0).toLocaleString()} chars</span>
+                      <span className="opacity-50 text-[10px]">{(result.content?.length || 0).toLocaleString()} chars</span>
                     </div>
                     {result.error && (
-                      <pre className="rounded p-1.5 overflow-auto whitespace-pre-wrap break-all max-h-32 scrollbar-thin bg-red-50/50 dark:bg-red-950/30 text-red-700 dark:text-red-300">
+                      <pre className="rounded p-1.5 overflow-auto whitespace-pre-wrap break-all max-h-32 scrollbar-thin text-[10px] bg-red-50/50 dark:bg-red-950/30 text-red-700 dark:text-red-300">
                         {result.error}
                       </pre>
                     )}
                     {result.content && (
                       <pre className={cn(
-                        "rounded p-1.5 overflow-auto whitespace-pre-wrap break-all max-h-32 scrollbar-thin",
+                        "rounded p-1.5 overflow-auto whitespace-pre-wrap break-all max-h-32 scrollbar-thin text-[10px]",
                         result.success ? "bg-green-50/50 dark:bg-green-950/30" : "bg-muted/40"
                       )}>
                         {result.content}
                       </pre>
                     )}
                     {!result.error && !result.content && (
-                      <pre className="rounded p-1.5 overflow-auto whitespace-pre-wrap break-all max-h-32 scrollbar-thin bg-muted/40">
+                      <pre className="rounded p-1.5 overflow-auto whitespace-pre-wrap break-all max-h-32 scrollbar-thin text-[10px] bg-muted/40">
                         No content
                       </pre>
                     )}
@@ -985,7 +987,7 @@ const AssistantWithToolsBubble: React.FC<{
                         <div className="font-medium opacity-70 flex items-center gap-1">
                           Result:
                           <span className={cn(
-                            "text-[9px] font-semibold",
+                            "text-[10px] font-semibold",
                             result.success ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
                           )}>
                             {result.success ? "OK" : "ERR"}
@@ -1159,7 +1161,7 @@ const ToolApprovalBubble: React.FC<{
           >
             <XCircle className="h-3 w-3 mr-1" />
             Deny
-            <kbd className="ml-1.5 px-1 py-0.5 text-[9px] font-mono bg-red-100 dark:bg-red-900/50 rounded">Shift+Space</kbd>
+            <kbd className="ml-1.5 px-1 py-0.5 text-[10px] font-mono bg-red-100 dark:bg-red-900/50 rounded">Shift+Space</kbd>
           </Button>
           <Button
             size="sm"
@@ -1182,7 +1184,7 @@ const ToolApprovalBubble: React.FC<{
               <>
                 <Check className="h-3 w-3 mr-1" />
                 Approve
-                <kbd className="ml-1.5 px-1 py-0.5 text-[9px] font-mono bg-green-700 rounded">Space</kbd>
+                <kbd className="ml-1.5 px-1 py-0.5 text-[10px] font-mono bg-green-700 rounded">Space</kbd>
               </>
             )}
           </Button>
@@ -1478,6 +1480,8 @@ const SubAgentConversationMessage: React.FC<{
 }
 
 // Collapsible Subagent Conversation Panel
+const RECENT_MESSAGES_LIMIT = 3
+
 const SubAgentConversationPanel: React.FC<{
   conversation: ACPSubAgentMessage[]
   agentName: string
@@ -1486,6 +1490,7 @@ const SubAgentConversationPanel: React.FC<{
   isCompact?: boolean
 }> = ({ conversation, agentName, isOpen, onToggle, isCompact = false }) => {
   const [expandedMessages, setExpandedMessages] = useState<Record<number, boolean>>({})
+  const [showAll, setShowAll] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [isPinnedToBottom, setIsPinnedToBottom] = useState(true)
   const previousConversationLengthRef = useRef(conversation.length)
@@ -1541,42 +1546,39 @@ const SubAgentConversationPanel: React.FC<{
     requestAnimationFrame(() => scrollToBottom("smooth"))
   }, [conversation.length, isOpen, isPinnedToBottom])
 
+  const visibleMessages = showAll
+    ? conversation
+    : conversation.slice(-RECENT_MESSAGES_LIMIT)
+  const hiddenCount = conversation.length - visibleMessages.length
+
   return (
-    <div className="mt-3 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+    <div className="border border-gray-200 dark:border-gray-700 rounded-md overflow-hidden">
       {/* Collapsible Header */}
       <div
-        className="flex items-start gap-2 px-3 py-2.5 bg-gray-50 dark:bg-gray-800/50 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+        className="flex items-center gap-2 px-2.5 py-1.5 bg-gray-50 dark:bg-gray-800/50 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
         onClick={onToggle}
       >
-        <Bot className="mt-0.5 h-3.5 w-3.5 text-purple-500 dark:text-purple-400 flex-shrink-0" />
-        <div className="min-w-0 flex-1">
-          <div className={cn("flex gap-2", isCompact ? "flex-col items-start" : "flex-wrap items-center")}>
-            <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
-              Conversation
-            </span>
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-              {conversation.length} messages
-            </Badge>
-          </div>
-          <div className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400 line-clamp-2">
-            {isOpen ? "Live transcript and tool activity" : conversationPreview}
-          </div>
+        <div className="min-w-0 flex-1 flex items-center gap-2">
+          <span className="text-[11px] font-medium text-gray-600 dark:text-gray-400">
+            {isOpen ? "Recent activity" : conversationPreview}
+          </span>
+          <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">
+            {conversation.length}
+          </Badge>
         </div>
-        <div className="ml-auto flex items-center gap-1 flex-shrink-0 self-start">
+        <div className="flex items-center gap-1 flex-shrink-0">
           <button
-            onClick={(e) => {
-              e.stopPropagation()
-              void handleCopyAll()
-            }}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-            title="Copy entire conversation"
+            onClick={(e) => { e.stopPropagation(); void handleCopyAll() }}
+            className="inline-flex h-6 w-6 items-center justify-center rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+            title="Copy conversation"
+            aria-label="Copy conversation"
           >
-            <Copy className="h-3.5 w-3.5 opacity-60 hover:opacity-100" />
+            <Copy className="h-3 w-3 opacity-60 hover:opacity-100" />
           </button>
           {isOpen ? (
-            <ChevronUp className="h-4 w-4 text-gray-500" />
+            <ChevronUp className="h-3.5 w-3.5 text-gray-400" />
           ) : (
-            <ChevronDown className="h-4 w-4 text-gray-500" />
+            <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
           )}
         </div>
       </div>
@@ -1584,22 +1586,33 @@ const SubAgentConversationPanel: React.FC<{
       {/* Collapsible Content */}
       {isOpen && (
         <div className="relative bg-white/50 dark:bg-black/20">
+          {hiddenCount > 0 && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowAll(true) }}
+              className="w-full px-2.5 py-1 text-[11px] text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors text-center border-b border-gray-100 dark:border-gray-800"
+            >
+              Show {hiddenCount} earlier message{hiddenCount > 1 ? "s" : ""}
+            </button>
+          )}
           <div
             ref={scrollRef}
             onScroll={handleScroll}
-            className="overflow-y-auto p-2 space-y-2"
-            style={{ maxHeight: isCompact ? "min(45vh, 320px)" : "min(50vh, 400px)" }}
+            className="overflow-y-auto p-1.5 space-y-1.5"
+            style={{ maxHeight: isCompact ? "min(35vh, 240px)" : "min(40vh, 300px)" }}
           >
-            {conversation.map((msg, idx) => (
-              <SubAgentConversationMessage
-                key={idx}
-                message={msg}
-                agentName={agentName}
-                isExpanded={expandedMessages[idx] ?? false}
-                onToggleExpand={() => toggleMessage(idx)}
-                isCompact={isCompact}
-              />
-            ))}
+            {visibleMessages.map((msg, idx) => {
+              const originalIdx = showAll ? idx : conversation.length - RECENT_MESSAGES_LIMIT + idx
+              return (
+                <SubAgentConversationMessage
+                  key={originalIdx}
+                  message={msg}
+                  agentName={agentName}
+                  isExpanded={expandedMessages[originalIdx] ?? false}
+                  onToggleExpand={() => toggleMessage(originalIdx)}
+                  isCompact={isCompact}
+                />
+              )
+            })}
           </div>
           {!isPinnedToBottom && (
             <button
@@ -1608,10 +1621,10 @@ const SubAgentConversationPanel: React.FC<{
                 setIsPinnedToBottom(true)
                 scrollToBottom("smooth")
               }}
-              className="absolute bottom-3 right-3 inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white/90 px-2.5 py-1 text-[11px] font-medium text-gray-700 shadow-sm backdrop-blur transition-colors hover:bg-white dark:border-gray-700 dark:bg-gray-900/90 dark:text-gray-200 dark:hover:bg-gray-900"
+              className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white/90 px-2 py-0.5 text-[11px] font-medium text-gray-700 shadow-sm backdrop-blur transition-colors hover:bg-white dark:border-gray-700 dark:bg-gray-900/90 dark:text-gray-200 dark:hover:bg-gray-900"
             >
               <ChevronDown className="h-3 w-3" />
-              Jump to latest
+              Latest
             </button>
           )}
         </div>
@@ -1787,7 +1800,7 @@ const DelegationBubble: React.FC<{
             <div className={cn("text-[11px] font-semibold uppercase tracking-wide", mutedTextColor)}>
               Task
             </div>
-            <p className={cn("text-[13px] leading-5 whitespace-pre-wrap break-words", bodyTextColor)}>
+            <p className={cn("text-[12px] leading-4 whitespace-pre-wrap break-words", bodyTextColor)}>
               {delegation.task}
             </p>
           </div>
@@ -1798,19 +1811,19 @@ const DelegationBubble: React.FC<{
               <div className={cn("text-[11px] font-semibold uppercase tracking-wide", mutedTextColor)}>
                 Latest update
               </div>
-              <p className={cn("text-[13px] leading-5 italic whitespace-pre-wrap break-words", mutedTextColor)}>
+              <p className={cn("text-[12px] leading-4 italic whitespace-pre-wrap break-words", mutedTextColor)}>
                 {delegation.progressMessage}
               </p>
             </div>
           )}
 
-          {/* Result summary (when conversation is collapsed) */}
+          {/* Result summary */}
           {delegation.resultSummary && (
-            <div className="space-y-1 rounded-md border border-white/60 bg-white/50 p-2.5 dark:border-white/10 dark:bg-black/20">
+            <div className="space-y-1 rounded-md border border-white/60 bg-white/50 p-2 dark:border-white/10 dark:bg-black/20">
               <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                 Result
               </div>
-              <p className="text-[13px] leading-5 text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words">
+              <p className="text-[12px] leading-4 text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words">
                 {delegation.resultSummary}
               </p>
             </div>
@@ -1818,11 +1831,11 @@ const DelegationBubble: React.FC<{
 
           {/* Error message */}
           {delegation.error && (
-            <div className="space-y-1 rounded-md border border-red-200/80 bg-red-100/50 p-2.5 dark:border-red-800/70 dark:bg-red-900/30">
+            <div className="space-y-1 rounded-md border border-red-200/80 bg-red-100/50 p-2 dark:border-red-800/70 dark:bg-red-900/30">
               <div className="text-[11px] font-semibold uppercase tracking-wide text-red-700 dark:text-red-300">
                 Error
               </div>
-              <p className="text-[13px] leading-5 text-red-700 dark:text-red-300 whitespace-pre-wrap break-words">
+              <p className="text-[12px] leading-4 text-red-700 dark:text-red-300 whitespace-pre-wrap break-words">
                 {delegation.error}
               </p>
             </div>
@@ -1835,7 +1848,10 @@ const DelegationBubble: React.FC<{
             </span>
             {hasConversation && !isConversationOpen && (
               <button
-                onClick={(e) => { e.stopPropagation(); setIsConversationOpen(true) }}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setIsConversationOpen(true)
+                }}
                 className="inline-flex h-8 items-center justify-center rounded-md border border-purple-200/80 px-3 text-[11px] font-medium text-purple-700 transition-colors hover:bg-purple-50 dark:border-purple-800/70 dark:text-purple-300 dark:hover:bg-purple-950/30"
               >
                 Open conversation
@@ -3369,8 +3385,8 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
       style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
     >
       {/* Unified Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border/30 bg-muted/10 backdrop-blur-sm">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border/30 bg-muted/10 backdrop-blur-sm overflow-hidden">
+        <div className="flex items-center gap-2 shrink-0">
           <span className={cn(
             "text-xs font-medium",
             wasStopped && "text-red-600 dark:text-red-400"
@@ -3386,7 +3402,7 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
             </Badge>
           )}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
           {/* Profile/agent name - more prominent with icon */}
           {profileName && (
             <span className="flex items-center gap-1 text-[10px] text-primary/70" title={`Agent: ${profileName}`}>
@@ -3431,7 +3447,7 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
             </div>
           )}
           {!isComplete && (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
               {`${currentIteration}/${isFinite(maxIterations) ? maxIterations : "∞"}`}
             </span>
           )}
@@ -3439,7 +3455,7 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
             <Button
               variant="ghost"
               size="sm"
-              className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground hover:bg-muted"
+              className="h-6 w-6 p-0 shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted"
               onClick={handleSnooze}
               title="Minimize - run in background without showing progress"
             >
@@ -3450,7 +3466,7 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
             <Button
               variant="ghost"
               size="sm"
-              className="h-6 w-6 p-0 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
+              className="h-6 w-6 p-0 shrink-0 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
               onClick={handleKillConfirmation}
               disabled={isKilling}
               title="Stop agent execution"
@@ -3461,7 +3477,7 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
             <Button
               variant="ghost"
               size="sm"
-              className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground hover:bg-muted"
+              className="h-6 w-6 p-0 shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted"
               onClick={handleClose}
               title="Close"
             >

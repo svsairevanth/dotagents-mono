@@ -14,3 +14,4 @@ export * from './session';
 export * from './shell-parse';
 export * from './connection-recovery';
 export * from './api-types';
+export * from './hub';

@@ -199,7 +199,12 @@ export const Component = () => {
     "/settings/skills": "/settings/capabilities",
     "/settings/remote-server": "/settings",
     "/settings/loops": "/settings/repeat-tasks",
+    "/settings/agents": "/settings/agents",
   }
+
+  const isAgentsActive =
+    location.pathname === "/settings/agents" ||
+    location.pathname.startsWith("/settings/agents")
 
   // Check if current path matches the nav link (including aliases)
   const isNavLinkActive = (linkHref: string): boolean => {
@@ -429,13 +434,28 @@ export const Component = () => {
                   <div className="relative flex items-center justify-center">
                     <span className="i-mingcute-chat-3-line"></span>
                     {collapsedActiveSessions.length > 0 && (
-                      <span className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-500 px-1 text-[9px] font-semibold text-white">
+                      <span className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-500 px-1 text-[10px] font-semibold text-white">
                         {collapsedActiveSessions.length > 9
                           ? "9+"
                           : collapsedActiveSessions.length}
                       </span>
                     )}
                   </div>
+                </NavLink>
+
+                <NavLink
+                  to="/settings/agents?view=list"
+                  className={cn(
+                    "flex h-8 w-full items-center justify-center rounded-md transition-all duration-200",
+                    isAgentsActive
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                  )}
+                  title="Agents"
+                  aria-label="Agents"
+                  aria-current={isAgentsActive ? "page" : undefined}
+                >
+                  <span className="i-mingcute-group-line h-4 w-4"></span>
                 </NavLink>
 
                 {collapsedPreviewSessions.map((session) => {
