@@ -1,36 +1,31 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { useQuery } from "@tanstack/react-query"
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@renderer/components/ui/dialog"
 import { Button } from "@renderer/components/ui/button"
 import { Input } from "@renderer/components/ui/input"
 import { Label } from "@renderer/components/ui/label"
-import { Switch } from "@renderer/components/ui/switch"
 import { Textarea } from "@renderer/components/ui/textarea"
 import { Badge } from "@renderer/components/ui/badge"
 import { Loader2, Copy, Download, Globe, User, Tag, Info, AlertTriangle, FileJson } from "lucide-react"
 import { tipcClient } from "@renderer/lib/tipc-client"
 import { buildHubBundleArtifactUrl, slugifyHubCatalogId, type HubPublishSubmission } from "@dotagents/shared"
 import { toast } from "sonner"
+import {
+  BundleDetailedSelectionCard,
+  EMPTY_BUNDLE_SELECTION,
+  createDetailedBundleSelection,
+  type BundleComponentSelectionState,
+  type BundleDetailedSelectionState,
+} from "@renderer/components/bundle-selection"
 
 interface PublishDialogProps { open: boolean; onOpenChange: (open: boolean) => void }
 interface PublishForm { name: string; catalogId: string; artifactUrl: string; description: string; summary: string; authorName: string; authorHandle: string; authorUrl: string; tags: string }
-interface PublishComponents { agentProfiles: boolean; mcpServers: boolean; skills: boolean; repeatTasks: boolean; memories: boolean }
+interface PublishComponents extends BundleComponentSelectionState {}
 interface PublishPreviewState { payloadJson: string; bundleJson: string; installUrl: string; submissionJson: string; catalogId: string }
 const EMPTY: PublishForm = { name: "", catalogId: "", artifactUrl: "", description: "", summary: "", authorName: "", authorHandle: "", authorUrl: "", tags: "" }
 const DEFAULT_PUBLISH_COMPONENTS: PublishComponents = { agentProfiles: true, mcpServers: true, skills: true, repeatTasks: false, memories: false }
-
-const COMPONENT_FIELDS: Array<{
-  key: keyof PublishComponents
-  label: string
-  description: string
-}> = [
-  { key: "agentProfiles", label: "Agents", description: "Agent definitions and their non-secret configuration." },
-  { key: "mcpServers", label: "MCP servers", description: "Server connections and non-secret settings with secrets stripped." },
-  { key: "skills", label: "Skills", description: "Skill instructions and metadata." },
-  { key: "repeatTasks", label: "Repeat tasks", description: "Scheduled task prompts and cadence. Public if enabled." },
-  { key: "memories", label: "Memories", description: "Memory content and notes. Public if enabled." },
-]
 
 function buildMeta(f: PublishForm) {
   return {
@@ -52,18 +47,34 @@ export function BundlePublishDialog({ open, onOpenChange }: PublishDialogProps) 
   const [step, setStep] = useState<"metadata" | "preview">("metadata")
   const [form, setForm] = useState<PublishForm>({ ...EMPTY })
   const [components, setComponents] = useState<PublishComponents>({ ...DEFAULT_PUBLISH_COMPONENTS })
+  const [selection, setSelection] = useState<BundleDetailedSelectionState>({ ...EMPTY_BUNDLE_SELECTION })
+  const [selectionInitialized, setSelectionInitialized] = useState(false)
   const [loading, setLoading] = useState(false)
   const [preview, setPreview] = useState<PublishPreviewState | null>(null)
+  const exportableItemsQuery = useQuery({
+    queryKey: ["bundle-exportable-items"],
+    queryFn: () => tipcClient.getBundleExportableItems(),
+    enabled: open,
+  })
+
+  useEffect(() => {
+    if (!open || !exportableItemsQuery.data || selectionInitialized) return
+    setSelection(createDetailedBundleSelection(exportableItemsQuery.data))
+    setSelectionInitialized(true)
+  }, [open, exportableItemsQuery.data, selectionInitialized])
+
   const close = (v: boolean) => {
     if (!v) {
       setStep("metadata")
       setForm({ ...EMPTY })
       setComponents({ ...DEFAULT_PUBLISH_COMPONENTS })
+      setSelection({ ...EMPTY_BUNDLE_SELECTION })
+      setSelectionInitialized(false)
       setPreview(null)
     }
     onOpenChange(v)
   }
-  const ok = !!(form.name.trim() && form.summary.trim() && form.authorName.trim())
+  const ok = !!(form.name.trim() && form.summary.trim() && form.authorName.trim() && exportableItemsQuery.data)
   const copy = async (t: string, l: string) => { try { await navigator.clipboard.writeText(t); toast.success(`${l} copied`) } catch { toast.error("Copy failed") } }
   const generate = async () => {
     setLoading(true)
@@ -75,6 +86,11 @@ export function BundlePublishDialog({ open, onOpenChange }: PublishDialogProps) 
         description: form.description.trim() || undefined,
         publicMetadata: buildMeta(form),
         components,
+        agentProfileIds: selection.agentProfileIds,
+        mcpServerNames: selection.mcpServerNames,
+        skillIds: selection.skillIds,
+        repeatTaskIds: selection.repeatTaskIds,
+        memoryIds: selection.memoryIds,
       })
       const submission: HubPublishSubmission = {
         source: "dotagents-desktop",
@@ -92,7 +108,17 @@ export function BundlePublishDialog({ open, onOpenChange }: PublishDialogProps) 
   }
   const saveFile = async () => {
     try {
-      const r = await tipcClient.exportBundle({ name: form.name.trim(), description: form.description.trim() || undefined, publicMetadata: buildMeta(form), components })
+      const r = await tipcClient.exportBundle({
+        name: form.name.trim(),
+        description: form.description.trim() || undefined,
+        publicMetadata: buildMeta(form),
+        components,
+        agentProfileIds: selection.agentProfileIds,
+        mcpServerNames: selection.mcpServerNames,
+        skillIds: selection.skillIds,
+        repeatTaskIds: selection.repeatTaskIds,
+        memoryIds: selection.memoryIds,
+      })
       if (r.success) toast.success("Bundle saved"); else if (r.canceled) toast.message("Canceled"); else toast.error(r.error || "Failed")
     } catch (e) { toast.error(`Save failed: ${e instanceof Error ? e.message : String(e)}`) }
   }
@@ -112,7 +138,7 @@ export function BundlePublishDialog({ open, onOpenChange }: PublishDialogProps) 
     <Dialog open={open} onOpenChange={close}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><Globe className="h-5 w-5" />{step === "metadata" ? "Publish to Hub" : "Publish Payload Preview"}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2"><Globe className="h-5 w-5" />{step === "metadata" ? "Export for Hub" : "Hub Export Preview"}</DialogTitle>
           <DialogDescription>{step === "metadata" ? "Choose what goes into the public artifact, then add listing metadata. Enabled content is public." : "Review the generated payload, artifact URL, install link, and submission package. Saving here prepares files for Hub submission but does not upload them yet."}</DialogDescription>
         </DialogHeader>
         {step === "metadata" ? (
@@ -127,11 +153,21 @@ export function BundlePublishDialog({ open, onOpenChange }: PublishDialogProps) 
                 <p className="text-xs text-amber-700 dark:text-amber-300">DotAgents does not upload to the Hub yet. This flow prepares a sanitized bundle and submission metadata. Before sharing the install link, make sure the final <code>.dotagents</code> file is actually hosted at the artifact URL you plan to publish.</p>
               </div>
               <Fields form={form} set={setForm} />
-              <ComponentSelection components={components} setComponents={setComponents} />
+              <BundleDetailedSelectionCard
+                items={exportableItemsQuery.data}
+                loading={exportableItemsQuery.isLoading}
+                loadError={exportableItemsQuery.error instanceof Error ? exportableItemsQuery.error.message : null}
+                components={components}
+                setComponents={setComponents}
+                selection={selection}
+                setSelection={setSelection}
+                title="Public artifact contents"
+                description="Choose exactly which public items are included in the shared artifact and handoff metadata."
+              />
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => close(false)}>Cancel</Button>
-              <Button onClick={generate} disabled={!ok || loading} className="gap-2">{loading && <Loader2 className="h-4 w-4 animate-spin" />}Generate Payload</Button>
+              <Button onClick={generate} disabled={!ok || loading || exportableItemsQuery.isLoading || !!exportableItemsQuery.error} className="gap-2">{loading && <Loader2 className="h-4 w-4 animate-spin" />}Generate Payload</Button>
             </DialogFooter>
           </>
         ) : (
@@ -264,32 +300,3 @@ function Fields({ form, set }: { form: PublishForm; set: (f: PublishForm) => voi
     </div>
   )
 }
-
-function ComponentSelection(
-  { components, setComponents }: { components: PublishComponents; setComponents: (components: PublishComponents) => void }
-) {
-  return (
-    <div className="space-y-3 rounded-lg border p-3">
-      <div className="space-y-1">
-        <Label className="text-sm font-medium">Public artifact contents</Label>
-        <p className="text-xs text-muted-foreground">Choose which component groups are included in the shared artifact and handoff metadata.</p>
-      </div>
-      <div className="space-y-3">
-        {COMPONENT_FIELDS.map((field) => (
-          <div key={field.key} className="flex items-start justify-between gap-3 rounded-md border p-3">
-            <div className="space-y-1 pr-4">
-              <div className="text-sm font-medium">{field.label}</div>
-              <p className="text-xs text-muted-foreground">{field.description}</p>
-            </div>
-            <Switch
-              checked={components[field.key]}
-              onCheckedChange={(checked) => setComponents({ ...components, [field.key]: checked })}
-              aria-label={`Include ${field.label} in public bundle`}
-            />
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-

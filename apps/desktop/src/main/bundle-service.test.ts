@@ -10,6 +10,7 @@ import os from "os"
 import {
   exportBundle,
   findHubBundleHandoffFilePath,
+  getBundleExportableItems,
   previewBundle,
   previewBundleWithConflicts,
   importBundle,
@@ -323,6 +324,88 @@ describe("bundle-service", () => {
       expect(bundle.mcpServers[0]).not.toHaveProperty("oauth")
       expect(bundle.mcpServers[0]).not.toHaveProperty("timeout")
       expect(bundle.mcpServers[1]).not.toHaveProperty("url")
+    })
+
+    it("supports per-item export selection across all bundle component types", async () => {
+      const layer = getAgentsLayerPaths(agentsDir)
+
+      const selectedAgent = createTestProfile("agent-selected", "Selected Agent")
+      const skippedAgent = createTestProfile("agent-skipped", "Skipped Agent")
+      writeAgentsProfileFiles(layer, selectedAgent)
+      writeAgentsProfileFiles(layer, skippedAgent)
+
+      writeAgentsSkillFile(layer, createTestSkill("skill-selected", "Selected Skill"))
+      writeAgentsSkillFile(layer, createTestSkill("skill-skipped", "Skipped Skill"))
+      writeTaskFile(layer, createTestTask("task-selected", "Selected Task"))
+      writeTaskFile(layer, createTestTask("task-skipped", "Skipped Task"))
+      writeAgentsMemoryFile(layer, createTestMemory("memory-selected", "Selected Memory"))
+      writeAgentsMemoryFile(layer, createTestMemory("memory-skipped", "Skipped Memory"))
+
+      writeTestMcpJson(agentsDir, {
+        mcpConfig: {
+          mcpServers: {
+            github: {
+              transport: "stdio",
+              command: "npx",
+              args: ["-y", "@modelcontextprotocol/server-github"],
+            },
+            exa: {
+              transport: "streamableHttp",
+              url: "https://mcp.exa.ai/mcp",
+            },
+          },
+        },
+      })
+
+      const bundle = await exportBundle(agentsDir, {
+        agentProfileIds: ["agent-selected"],
+        mcpServerNames: ["exa"],
+        skillIds: ["skill-selected"],
+        repeatTaskIds: ["task-selected"],
+        memoryIds: ["memory-selected"],
+      })
+
+      expect(bundle.agentProfiles.map((item) => item.id)).toEqual(["agent-selected"])
+      expect(bundle.mcpServers.map((item) => item.name)).toEqual(["exa"])
+      expect(bundle.skills.map((item) => item.id)).toEqual(["skill-selected"])
+      expect(bundle.repeatTasks.map((item) => item.id)).toEqual(["task-selected"])
+      expect(bundle.memories.map((item) => item.id)).toEqual(["memory-selected"])
+    })
+  })
+
+  describe("getBundleExportableItems", () => {
+    it("lists exportable items with agent dependency metadata", () => {
+      const layer = getAgentsLayerPaths(agentsDir)
+      const profile = createTestProfile("agent-deps", "Agent With Dependencies")
+      profile.toolConfig = { enabledServers: ["github"] }
+      profile.skillsConfig = { enabledSkillIds: ["skill-deps"] }
+      writeAgentsProfileFiles(layer, profile)
+      writeAgentsSkillFile(layer, createTestSkill("skill-deps", "Dependency Skill"))
+      writeTaskFile(layer, createTestTask("task-deps", "Dependency Task"))
+      writeAgentsMemoryFile(layer, createTestMemory("memory-deps", "Dependency Memory"))
+      writeTestMcpJson(agentsDir, {
+        mcpConfig: {
+          mcpServers: {
+            github: {
+              transport: "stdio",
+              command: "npx",
+              args: ["-y", "@modelcontextprotocol/server-github"],
+            },
+          },
+        },
+      })
+
+      const exportableItems = getBundleExportableItems(agentsDir)
+
+      expect(exportableItems.agentProfiles[0]).toMatchObject({
+        id: "agent-deps",
+        referencedMcpServerNames: ["github"],
+        referencedSkillIds: ["skill-deps"],
+      })
+      expect(exportableItems.mcpServers.map((item) => item.name)).toEqual(["github"])
+      expect(exportableItems.skills.map((item) => item.id)).toEqual(["skill-deps"])
+      expect(exportableItems.repeatTasks.map((item) => item.id)).toEqual(["task-deps"])
+      expect(exportableItems.memories.map((item) => item.id)).toEqual(["memory-deps"])
     })
   })
 
@@ -1715,6 +1798,62 @@ describe("generatePublishPayload", () => {
     expect(bundle.repeatTasks[0].id).toBe("task-pub-1")
     expect(bundle.memories).toHaveLength(1)
     expect(bundle.memories[0].id).toBe("memory-pub-1")
+  })
+
+  it("applies item-level filters to the generated publish bundle", async () => {
+    const layer = getAgentsLayerPaths(tempDir)
+    writeAgentsProfileFiles(layer, createTestProfile("agent-pub-2", "Publish Agent Two"))
+    writeAgentsSkillFile(layer, createTestSkill("skill-pub-2", "Pub Skill Two"))
+    writeAgentsMemoryFile(layer, createTestMemory("memory-pub-2", "Publish Memory Two"))
+    writeTaskFile(layer, createTestTask("task-pub-2", "Publish Task Two"))
+    writeTestMcpJson(tempDir, {
+      mcpConfig: {
+        mcpServers: {
+          github: {
+            transport: "stdio",
+            command: "npx",
+            args: ["-y", "@modelcontextprotocol/server-github"],
+          },
+          exa: {
+            transport: "streamableHttp",
+            url: "https://mcp.exa.ai/mcp",
+          },
+        },
+      },
+    })
+
+    const result = await generatePublishPayload([tempDir], {
+      name: "Filtered Publish Bundle",
+      publicMetadata: {
+        summary: "With filtered items",
+        author: { displayName: "Test Author" },
+        tags: ["test"],
+      },
+      components: {
+        repeatTasks: true,
+        memories: true,
+      },
+      agentProfileIds: ["agent-pub-2"],
+      mcpServerNames: ["exa"],
+      skillIds: ["skill-pub-2"],
+      repeatTaskIds: ["task-pub-2"],
+      memoryIds: ["memory-pub-2"],
+    })
+
+    expect(result.catalogItem.componentCounts).toMatchObject({
+      agentProfiles: 1,
+      mcpServers: 1,
+      skills: 1,
+      repeatTasks: 1,
+      memories: 1,
+    })
+
+    const bundle = JSON.parse(result.bundleJson)
+    expect(bundle.agentProfiles.map((item: { id: string }) => item.id)).toEqual(["agent-pub-2"])
+    expect(bundle.mcpServers.map((item: { name: string }) => item.name)).toEqual(["exa"])
+    expect(bundle.skills.map((item: { id: string }) => item.id)).toEqual(["skill-pub-2"])
+    expect(bundle.repeatTasks.map((item: { id: string }) => item.id)).toEqual(["task-pub-2"])
+    expect(bundle.memories.map((item: { id: string }) => item.id)).toEqual(["memory-pub-2"])
   })
 
   it("accepts explicit catalog ids and artifact urls for Hub catalog alignment", async () => {

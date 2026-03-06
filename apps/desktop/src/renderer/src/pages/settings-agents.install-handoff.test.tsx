@@ -31,9 +31,19 @@ async function flushPromises() { await Promise.resolve(); await Promise.resolve(
 async function loadSettingsAgents(runtime: ReturnType<typeof createHookRuntime>, installBundlePath: string) {
   vi.resetModules()
   const Null = () => null
-  let currentSearchParams = new URLSearchParams([["installBundle", installBundlePath]])
+  let currentSearchParams = installBundlePath
+    ? new URLSearchParams([["installBundle", installBundlePath]])
+    : new URLSearchParams()
   const setSearchParams = vi.fn((next: URLSearchParams) => { currentSearchParams = new URLSearchParams(next) })
   const dialogProps = { current: null as any }
+  const exportDialogProps = { current: null as any }
+  const publishDialogProps = { current: null as any }
+  const buttonProps = new Map<string, any>()
+  const collectText = (children: any): string => {
+    if (typeof children === "string" || typeof children === "number") return String(children)
+    if (Array.isArray(children)) return children.map(collectText).join("")
+    return ""
+  }
   runtime.reactMock.default = runtime.reactMock
   vi.doMock("react", () => runtime.reactMock)
   vi.doMock("react/jsx-runtime", () => runtime.jsxRuntimeMock)
@@ -44,9 +54,12 @@ async function loadSettingsAgents(runtime: ReturnType<typeof createHookRuntime>,
   vi.doMock("../lib/tipc-client", () => settingsTipcMock)
   vi.doMock("@renderer/lib/tipc-client", () => settingsTipcMock)
   vi.doMock("../components/bundle-import-dialog", () => ({ BundleImportDialog: (props: any) => { dialogProps.current = props; return null } }))
-  vi.doMock("../components/bundle-publish-dialog", () => ({ BundlePublishDialog: Null }))
+  vi.doMock("../components/bundle-export-dialog", () => ({ BundleExportDialog: (props: any) => { exportDialogProps.current = props; return null } }))
+  vi.doMock("@renderer/components/bundle-export-dialog", () => ({ BundleExportDialog: (props: any) => { exportDialogProps.current = props; return null } }))
+  vi.doMock("../components/bundle-publish-dialog", () => ({ BundlePublishDialog: (props: any) => { publishDialogProps.current = props; return null } }))
+  vi.doMock("@renderer/components/bundle-publish-dialog", () => ({ BundlePublishDialog: (props: any) => { publishDialogProps.current = props; return null } }))
   vi.doMock("../components/model-selector", () => ({ ModelSelector: Null }))
-  vi.doMock("../components/ui/button", () => ({ Button: Null }))
+  vi.doMock("../components/ui/button", () => ({ Button: (props: any) => { const label = collectText(props.children).trim(); if (label) buttonProps.set(label, props); return null } }))
   vi.doMock("../components/ui/input", () => ({ Input: Null }))
   vi.doMock("../components/ui/label", () => ({ Label: Null }))
   vi.doMock("../components/ui/textarea", () => ({ Textarea: Null }))
@@ -59,7 +72,7 @@ async function loadSettingsAgents(runtime: ReturnType<typeof createHookRuntime>,
   vi.doMock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
   vi.doMock("lucide-react", () => { const Icon = () => null; return { Trash2: Icon, Plus: Icon, Edit2: Icon, Save: Icon, X: Icon, Server: Icon, Sparkles: Icon, Brain: Icon, Settings2: Icon, ChevronDown: Icon, ChevronRight: Icon, Wrench: Icon, RefreshCw: Icon, ExternalLink: Icon, Download: Icon, Upload: Icon, Globe: Icon } })
   const mod = await import("./settings-agents")
-  return { SettingsAgents: mod.SettingsAgents, dialogProps, setSearchParams }
+  return { SettingsAgents: mod.SettingsAgents, dialogProps, exportDialogProps, publishDialogProps, buttonProps, setSearchParams }
 }
 
 async function loadBundleImportDialogHelper() {
@@ -102,6 +115,33 @@ describe("settings-agents Hub install handoff", () => {
     expect(dialogProps.current.title).toBe("Install Hub Bundle")
     expect(setSearchParams).toHaveBeenCalled()
     expect(setSearchParams.mock.calls[0][0].get("installBundle")).toBeNull()
+  })
+
+  it("keeps Export Bundle and Export for Hub as separate configurable flows", async () => {
+    const runtime = createHookRuntime()
+    const {
+      SettingsAgents,
+      exportDialogProps,
+      publishDialogProps,
+      buttonProps,
+    } = await loadSettingsAgents(runtime, "")
+
+    runtime.render(SettingsAgents, {})
+    runtime.commitEffects()
+    await flushPromises()
+    runtime.render(SettingsAgents, {})
+
+    expect(exportDialogProps.current.open).toBe(false)
+    expect(publishDialogProps.current.open).toBe(false)
+
+    buttonProps.get("Export Bundle").onClick()
+    runtime.render(SettingsAgents, {})
+    expect(exportDialogProps.current.open).toBe(true)
+    expect(publishDialogProps.current.open).toBe(false)
+
+    buttonProps.get("Export for Hub").onClick()
+    runtime.render(SettingsAgents, {})
+    expect(publishDialogProps.current.open).toBe(true)
   })
 
   it("previews a provided Hub bundle path through the existing conflict-aware dialog flow", async () => {

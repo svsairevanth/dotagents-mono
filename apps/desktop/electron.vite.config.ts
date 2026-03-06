@@ -37,6 +37,21 @@ export default defineConfig({
   },
   renderer: {
     define,
-    plugins: [tsconfigPaths(), react()],
+    plugins: [react()],
+    resolve: {
+      alias: {
+        "@renderer": resolve(__dirname, "src/renderer/src"),
+        "~": resolve(__dirname, "src/renderer/src"),
+        "@shared": resolve(__dirname, "src/shared"),
+      },
+      dedupe: ["react", "react-dom"],
+      preserveSymlinks: true,
+    },
+    optimizeDeps: {
+      include: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime"],
+      esbuildOptions: {
+        preserveSymlinks: true,
+      },
+    },
   },
 })

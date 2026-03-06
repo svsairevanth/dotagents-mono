@@ -29,6 +29,7 @@ function agentColors(seed: string): string[] {
 import { tipcClient } from "@renderer/lib/tipc-client"
 import { ModelSelector } from "@renderer/components/model-selector"
 import { BundleImportDialog } from "@renderer/components/bundle-import-dialog"
+import { BundleExportDialog } from "@renderer/components/bundle-export-dialog"
 import { BundlePublishDialog } from "@renderer/components/bundle-publish-dialog"
 import {
   AgentProfile, AgentProfileConnectionType, AgentProfileConnection,
@@ -98,6 +99,7 @@ export function SettingsAgents() {
   const [showSystemPrompt, setShowSystemPrompt] = useState(false)
   const [defaultSystemPrompt, setDefaultSystemPrompt] = useState("")
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
   const [prefilledImportFilePath, setPrefilledImportFilePath] = useState<string | null>(null)
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false)
   const avatarFileInputRef = useRef<HTMLInputElement>(null)
@@ -392,24 +394,6 @@ export function SettingsAgents() {
     e.target.value = ""
   }
 
-  const handleExportBundle = async () => {
-    try {
-      const result = await tipcClient.exportBundle()
-      if (result.success) {
-        toast.success("Bundle exported successfully")
-        return
-      }
-      if (result.canceled) {
-        toast.message("Bundle export canceled")
-        return
-      }
-      toast.error(result.error || "Failed to export bundle")
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      toast.error(`Failed to export bundle: ${errorMessage}`)
-    }
-  }
-
   const handleImportComplete = () => {
     void loadAgents()
     void loadSkills()
@@ -443,11 +427,11 @@ export function SettingsAgents() {
           <Button variant="outline" className="gap-2" onClick={() => handleImportDialogOpenChange(true)}>
             <Upload className="h-4 w-4" />Import Bundle
           </Button>
-          <Button variant="outline" className="gap-2" onClick={handleExportBundle}>
+          <Button variant="outline" className="gap-2" onClick={() => setIsExportDialogOpen(true)}>
             <Download className="h-4 w-4" />Export Bundle
           </Button>
           <Button variant="outline" className="gap-2" onClick={() => setIsPublishDialogOpen(true)}>
-            <Globe className="h-4 w-4" />Publish to Hub
+            <Globe className="h-4 w-4" />Export for Hub
           </Button>
           <Button variant="outline" className="gap-2" onClick={async () => { await tipcClient.reloadAgentProfiles(); loadAgents(); queryClient.invalidateQueries({ queryKey: ["agentProfilesSidebar"] }) }}>
             <RefreshCw className="h-4 w-4" />Rescan Files
@@ -465,6 +449,10 @@ export function SettingsAgents() {
         description={prefilledImportFilePath
           ? "Preview and import the downloaded Hub .dotagents bundle using the existing conflict-aware flow."
           : undefined}
+      />
+      <BundleExportDialog
+        open={isExportDialogOpen}
+        onOpenChange={setIsExportDialogOpen}
       />
       <BundlePublishDialog
         open={isPublishDialogOpen}

@@ -2370,6 +2370,25 @@ export const router = {
       // Persist merged config (ensures partial updates don't lose existing settings)
       configStore.save(merged)
 
+      try {
+        const { globalAgentsFolder, resolveWorkspaceAgentsFolder } = await import("./config")
+        const { getAgentsLayerPaths } = await import("./agents-files/modular-config")
+        const { cleanupInvalidMcpServerReferencesInLayers } = await import("./agent-profile-mcp-cleanup")
+
+        const workspaceAgentsFolder = resolveWorkspaceAgentsFolder()
+        const layers = workspaceAgentsFolder
+          ? [getAgentsLayerPaths(globalAgentsFolder), getAgentsLayerPaths(workspaceAgentsFolder)]
+          : [getAgentsLayerPaths(globalAgentsFolder)]
+
+        const validServerNames = Object.keys(merged.mcpConfig?.mcpServers || {})
+        const cleanupResult = cleanupInvalidMcpServerReferencesInLayers(layers, validServerNames)
+        if (cleanupResult.updatedProfileIds.length > 0) {
+          agentProfileService.reload()
+        }
+      } catch (_e) {
+        // best-effort cleanup only
+      }
+
       // Clear models cache if provider endpoints or API keys changed
       try {
         const providerConfigChanged =
@@ -4153,7 +4172,21 @@ export const router = {
     .input<{ id: string }>()
     .action(async ({ input }) => {
       const { skillsService } = await import("./skills-service")
-      return skillsService.deleteSkill(input.id)
+      const success = skillsService.deleteSkill(input.id)
+      if (!success) return false
+
+      const { globalAgentsFolder, resolveWorkspaceAgentsFolder } = await import("./config")
+      const { getAgentsLayerPaths } = await import("./agents-files/modular-config")
+      const { cleanupInvalidSkillReferencesInLayers } = await import("./agent-profile-skill-cleanup")
+
+      const workspaceAgentsFolder = resolveWorkspaceAgentsFolder()
+      const layers = workspaceAgentsFolder
+        ? [getAgentsLayerPaths(globalAgentsFolder), getAgentsLayerPaths(workspaceAgentsFolder)]
+        : [getAgentsLayerPaths(globalAgentsFolder)]
+
+      cleanupInvalidSkillReferencesInLayers(layers, skillsService.getSkills().map(skill => skill.id))
+      agentProfileService.reload()
+      return true
     }),
 
   deleteSkills: t.procedure
@@ -4165,8 +4198,59 @@ export const router = {
         const success = skillsService.deleteSkill(id)
         results.push({ id, success })
       }
+
+      if (results.some(result => result.success)) {
+        const { globalAgentsFolder, resolveWorkspaceAgentsFolder } = await import("./config")
+        const { getAgentsLayerPaths } = await import("./agents-files/modular-config")
+        const { cleanupInvalidSkillReferencesInLayers } = await import("./agent-profile-skill-cleanup")
+
+        const workspaceAgentsFolder = resolveWorkspaceAgentsFolder()
+        const layers = workspaceAgentsFolder
+          ? [getAgentsLayerPaths(globalAgentsFolder), getAgentsLayerPaths(workspaceAgentsFolder)]
+          : [getAgentsLayerPaths(globalAgentsFolder)]
+
+        cleanupInvalidSkillReferencesInLayers(layers, skillsService.getSkills().map(skill => skill.id))
+        agentProfileService.reload()
+      }
+
       return results
     }),
+
+  cleanupStaleSkillReferences: t.procedure.action(async () => {
+    const { skillsService } = await import("./skills-service")
+    const { globalAgentsFolder, resolveWorkspaceAgentsFolder } = await import("./config")
+    const { getAgentsLayerPaths } = await import("./agents-files/modular-config")
+    const { cleanupInvalidSkillReferencesInLayers } = await import("./agent-profile-skill-cleanup")
+
+    const workspaceAgentsFolder = resolveWorkspaceAgentsFolder()
+    const layers = workspaceAgentsFolder
+      ? [getAgentsLayerPaths(globalAgentsFolder), getAgentsLayerPaths(workspaceAgentsFolder)]
+      : [getAgentsLayerPaths(globalAgentsFolder)]
+
+    const result = cleanupInvalidSkillReferencesInLayers(layers, skillsService.getSkills().map(skill => skill.id))
+    if (result.updatedProfileIds.length > 0) {
+      agentProfileService.reload()
+    }
+    return result
+  }),
+
+  cleanupStaleMcpServerReferences: t.procedure.action(async () => {
+    const { globalAgentsFolder, resolveWorkspaceAgentsFolder } = await import("./config")
+    const { getAgentsLayerPaths } = await import("./agents-files/modular-config")
+    const { cleanupInvalidMcpServerReferencesInLayers } = await import("./agent-profile-mcp-cleanup")
+
+    const workspaceAgentsFolder = resolveWorkspaceAgentsFolder()
+    const layers = workspaceAgentsFolder
+      ? [getAgentsLayerPaths(globalAgentsFolder), getAgentsLayerPaths(workspaceAgentsFolder)]
+      : [getAgentsLayerPaths(globalAgentsFolder)]
+
+    const validServerNames = Object.keys(configStore.get().mcpConfig?.mcpServers || {})
+    const result = cleanupInvalidMcpServerReferencesInLayers(layers, validServerNames)
+    if (result.updatedProfileIds.length > 0) {
+      agentProfileService.reload()
+    }
+    return result
+  }),
 
   importSkillFromMarkdown: t.procedure
     .input<{ content: string }>()
@@ -4419,6 +4503,18 @@ export const router = {
   // Bundle Export/Import (Issue #25: .dotagents bundles)
   // ============================================================================
 
+  getBundleExportableItems: t.procedure.action(async () => {
+    const { globalAgentsFolder, resolveWorkspaceAgentsFolder } = await import("./config")
+    const { getBundleExportableItemsFromLayers } = await import("./bundle-service")
+    const workspaceAgentsFolder = resolveWorkspaceAgentsFolder()
+
+    return getBundleExportableItemsFromLayers(
+      workspaceAgentsFolder
+        ? [globalAgentsFolder, workspaceAgentsFolder]
+        : [globalAgentsFolder]
+    )
+  }),
+
   exportBundle: t.procedure
     .input<{
       name?: string
@@ -4436,7 +4532,11 @@ export const router = {
           notes?: string[]
         }
       }
+      agentProfileIds?: string[]
+      mcpServerNames?: string[]
       skillIds?: string[]
+      repeatTaskIds?: string[]
+      memoryIds?: string[]
       components?: {
         agentProfiles?: boolean
         mcpServers?: boolean
@@ -4453,7 +4553,11 @@ export const router = {
         name: input?.name,
         description: input?.description,
         publicMetadata: input?.publicMetadata,
+        agentProfileIds: input?.agentProfileIds,
+        mcpServerNames: input?.mcpServerNames,
         skillIds: input?.skillIds,
+        repeatTaskIds: input?.repeatTaskIds,
+        memoryIds: input?.memoryIds,
         components: input?.components,
       }
 
@@ -4491,7 +4595,11 @@ export const router = {
         repeatTasks?: boolean
         memories?: boolean
       }
+      agentProfileIds?: string[]
+      mcpServerNames?: string[]
       skillIds?: string[]
+      repeatTaskIds?: string[]
+      memoryIds?: string[]
     }>()
     .action(async ({ input }) => {
       const { globalAgentsFolder, resolveWorkspaceAgentsFolder } = await import("./config")
@@ -4506,8 +4614,12 @@ export const router = {
         artifactUrl: input.artifactUrl,
         description: input.description,
         publicMetadata: input.publicMetadata,
+        agentProfileIds: input.agentProfileIds,
+        mcpServerNames: input.mcpServerNames,
         components: input.components,
         skillIds: input.skillIds,
+        repeatTaskIds: input.repeatTaskIds,
+        memoryIds: input.memoryIds,
       })
     }),
 

@@ -152,12 +152,62 @@ export interface BundleComponentSelection {
   memories?: boolean
 }
 
-export interface ExportBundleOptions {
+export interface BundleItemSelectionOptions {
+  agentProfileIds?: string[]
+  mcpServerNames?: string[]
+  skillIds?: string[]
+  repeatTaskIds?: string[]
+  memoryIds?: string[]
+}
+
+export interface ExportableBundleAgentProfile {
+  id: string
+  name: string
+  displayName?: string
+  enabled: boolean
+  role?: AgentProfileRole
+  referencedMcpServerNames: string[]
+  referencedSkillIds: string[]
+}
+
+export interface ExportableBundleMCPServer {
+  name: string
+  transport?: string
+  enabled?: boolean
+}
+
+export interface ExportableBundleSkill {
+  id: string
+  name: string
+  description?: string
+}
+
+export interface ExportableBundleRepeatTask {
+  id: string
+  name: string
+  intervalMinutes: number
+  enabled: boolean
+}
+
+export interface ExportableBundleMemory {
+  id: string
+  title: string
+  importance: AgentMemory["importance"]
+}
+
+export interface ExportableBundleItems {
+  agentProfiles: ExportableBundleAgentProfile[]
+  mcpServers: ExportableBundleMCPServer[]
+  skills: ExportableBundleSkill[]
+  repeatTasks: ExportableBundleRepeatTask[]
+  memories: ExportableBundleMemory[]
+}
+
+export interface ExportBundleOptions extends BundleItemSelectionOptions {
   name?: string
   description?: string
   publicMetadata?: BundlePublicMetadata
   components?: BundleComponentSelection
-  skillIds?: string[]
 }
 
 export interface GeneratePublishPayloadOptions extends ExportBundleOptions {
@@ -509,16 +559,52 @@ function sanitizeAgentProfile(profile: AgentProfile): BundleAgentProfile {
   return sanitized
 }
 
-function loadMCPServersForBundle(layer: AgentsLayerPaths): BundleMCPServer[] {
+function toSelectionSet(values?: string[]): Set<string> | null {
+  const normalized = (values ?? [])
+    .map((value) => value.trim())
+    .filter(Boolean)
+
+  return normalized.length > 0 ? new Set(normalized) : null
+}
+
+function summarizeAgentProfileForExport(profile: AgentProfile): ExportableBundleAgentProfile {
+  return {
+    id: profile.id,
+    name: profile.name,
+    displayName: profile.displayName,
+    enabled: profile.enabled,
+    role: profile.role,
+    referencedMcpServerNames: (profile.toolConfig?.enabledServers ?? []).filter(isNonEmptyString),
+    referencedSkillIds: (profile.skillsConfig?.enabledSkillIds ?? []).filter(isNonEmptyString),
+  }
+}
+
+function loadAgentProfilesForBundle(
+  layer: AgentsLayerPaths,
+  options?: BundleItemSelectionOptions
+): BundleAgentProfile[] {
+  const selectedAgentProfileIds = toSelectionSet(options?.agentProfileIds)
+
+  return loadAgentProfilesLayer(layer).profiles
+    .filter((profile) => !selectedAgentProfileIds || selectedAgentProfileIds.has(profile.id))
+    .map(sanitizeAgentProfile)
+}
+
+function loadMCPServersForBundle(
+  layer: AgentsLayerPaths,
+  options?: BundleItemSelectionOptions
+): BundleMCPServer[] {
   const mcpConfig = safeReadJsonFileSync<Record<string, unknown>>(layer.mcpJsonPath, {
     defaultValue: {},
   })
+  const selectedMcpServerNames = toSelectionSet(options?.mcpServerNames)
 
   const servers: BundleMCPServer[] = []
   const mcpServers = readMcpServersFromConfig(mcpConfig)
 
   if (typeof mcpServers === "object" && mcpServers !== null) {
     for (const [name, config] of Object.entries(mcpServers)) {
+      if (selectedMcpServerNames && !selectedMcpServerNames.has(name)) continue
       if (typeof config !== "object" || config === null) continue
       const serverConfig = config as Record<string, unknown>
 
@@ -554,9 +640,9 @@ const DEFAULT_PUBLISH_COMPONENTS: Required<BundleComponentSelection> = {
   memories: false,
 }
 
-function loadSkillsForBundle(layer: AgentsLayerPaths, options?: { skillIds?: string[] }): BundleSkill[] {
+function loadSkillsForBundle(layer: AgentsLayerPaths, options?: BundleItemSelectionOptions): BundleSkill[] {
   const skillsResult = loadAgentsSkillsLayer(layer)
-  const selectedSkillIds = options?.skillIds?.length ? new Set(options.skillIds) : null
+  const selectedSkillIds = toSelectionSet(options?.skillIds)
 
   return skillsResult.skills
     .filter(skill => !selectedSkillIds || selectedSkillIds.has(skill.id))
@@ -569,30 +655,121 @@ function loadSkillsForBundle(layer: AgentsLayerPaths, options?: { skillIds?: str
     }))
 }
 
-function loadRepeatTasksForBundle(layer: AgentsLayerPaths): BundleRepeatTask[] {
+function loadRepeatTasksForBundle(layer: AgentsLayerPaths, options?: BundleItemSelectionOptions): BundleRepeatTask[] {
   const tasksResult = loadTasksLayer(layer)
-  return tasksResult.tasks.map((task): BundleRepeatTask => ({
-    id: task.id,
-    name: task.name,
-    prompt: task.prompt,
-    intervalMinutes: task.intervalMinutes,
-    enabled: task.enabled,
-    runOnStartup: task.runOnStartup,
-    // profileId intentionally omitted — may not exist in target environment
-  }))
+  const selectedRepeatTaskIds = toSelectionSet(options?.repeatTaskIds)
+
+  return tasksResult.tasks
+    .filter((task) => !selectedRepeatTaskIds || selectedRepeatTaskIds.has(task.id))
+    .map((task): BundleRepeatTask => ({
+      id: task.id,
+      name: task.name,
+      prompt: task.prompt,
+      intervalMinutes: task.intervalMinutes,
+      enabled: task.enabled,
+      runOnStartup: task.runOnStartup,
+      // profileId intentionally omitted — may not exist in target environment
+    }))
 }
 
-function loadMemoriesForBundle(layer: AgentsLayerPaths): BundleMemory[] {
+function loadMemoriesForBundle(layer: AgentsLayerPaths, options?: BundleItemSelectionOptions): BundleMemory[] {
   const memoriesResult = loadAgentsMemoriesLayer(layer)
-  return memoriesResult.memories.map((memory): BundleMemory => ({
-    id: memory.id,
-    title: memory.title,
-    content: memory.content,
-    importance: memory.importance,
-    tags: memory.tags,
-    keyFindings: memory.keyFindings,
-    userNotes: memory.userNotes,
-  }))
+  const selectedMemoryIds = toSelectionSet(options?.memoryIds)
+
+  return memoriesResult.memories
+    .filter((memory) => !selectedMemoryIds || selectedMemoryIds.has(memory.id))
+    .map((memory): BundleMemory => ({
+      id: memory.id,
+      title: memory.title,
+      content: memory.content,
+      importance: memory.importance,
+      tags: memory.tags,
+      keyFindings: memory.keyFindings,
+      userNotes: memory.userNotes,
+    }))
+}
+
+function listExportableBundleItemsForLayer(layer: AgentsLayerPaths): ExportableBundleItems {
+  return {
+    agentProfiles: loadAgentProfilesLayer(layer).profiles.map(summarizeAgentProfileForExport),
+    mcpServers: loadMCPServersForBundle(layer).map((server) => ({
+      name: server.name,
+      transport: server.transport,
+      enabled: server.enabled,
+    })),
+    skills: loadAgentsSkillsLayer(layer).skills.map((skill) => ({
+      id: skill.id,
+      name: skill.name,
+      description: skill.description,
+    })),
+    repeatTasks: loadTasksLayer(layer).tasks.map((task) => ({
+      id: task.id,
+      name: task.name,
+      intervalMinutes: task.intervalMinutes,
+      enabled: task.enabled,
+    })),
+    memories: loadAgentsMemoriesLayer(layer).memories.map((memory) => ({
+      id: memory.id,
+      title: memory.title,
+      importance: memory.importance,
+    })),
+  }
+}
+
+function sortExportableBundleItems(items: ExportableBundleItems): ExportableBundleItems {
+  return {
+    agentProfiles: [...items.agentProfiles].sort((a, b) =>
+      (a.displayName || a.name).localeCompare(b.displayName || b.name)
+    ),
+    mcpServers: [...items.mcpServers].sort((a, b) => a.name.localeCompare(b.name)),
+    skills: [...items.skills].sort((a, b) => a.name.localeCompare(b.name)),
+    repeatTasks: [...items.repeatTasks].sort((a, b) => a.name.localeCompare(b.name)),
+    memories: [...items.memories].sort((a, b) => a.title.localeCompare(b.title)),
+  }
+}
+
+export function getBundleExportableItems(agentsDir: string): ExportableBundleItems {
+  const layer = getAgentsLayerPaths(agentsDir)
+  return sortExportableBundleItems(listExportableBundleItemsForLayer(layer))
+}
+
+export function getBundleExportableItemsFromLayers(agentsDirs: string[]): ExportableBundleItems {
+  const normalizedDirs = Array.from(
+    new Set(agentsDirs.map((dir) => path.resolve(dir)).filter((dir) => dir.length > 0))
+  )
+
+  if (normalizedDirs.length === 0) {
+    throw new Error("No agents directories provided for exportable item listing")
+  }
+
+  if (normalizedDirs.length === 1) {
+    return getBundleExportableItems(normalizedDirs[0])
+  }
+
+  const layerItems = normalizedDirs.map((dir) => getBundleExportableItems(dir))
+
+  return sortExportableBundleItems({
+    agentProfiles: mergeByKey(
+      layerItems.flatMap((items) => items.agentProfiles),
+      (profile) => profile.id
+    ),
+    mcpServers: mergeByKey(
+      layerItems.flatMap((items) => items.mcpServers),
+      (server) => server.name
+    ),
+    skills: mergeByKey(
+      layerItems.flatMap((items) => items.skills),
+      (skill) => skill.id
+    ),
+    repeatTasks: mergeByKey(
+      layerItems.flatMap((items) => items.repeatTasks),
+      (task) => task.id
+    ),
+    memories: mergeByKey(
+      layerItems.flatMap((items) => items.memories),
+      (memory) => memory.id
+    ),
+  })
 }
 
 function buildBundle(
@@ -650,12 +827,12 @@ export async function exportBundle(
   const components = { ...DEFAULT_EXPORT_COMPONENTS, ...options?.components }
 
   const profiles = components.agentProfiles
-    ? loadAgentProfilesLayer(layer).profiles.map(sanitizeAgentProfile)
+    ? loadAgentProfilesForBundle(layer, options)
     : []
-  const mcpServers = components.mcpServers ? loadMCPServersForBundle(layer) : []
-  const skills = components.skills ? loadSkillsForBundle(layer, { skillIds: options?.skillIds }) : []
-  const repeatTasks = components.repeatTasks ? loadRepeatTasksForBundle(layer) : []
-  const memories = components.memories ? loadMemoriesForBundle(layer) : []
+  const mcpServers = components.mcpServers ? loadMCPServersForBundle(layer, options) : []
+  const skills = components.skills ? loadSkillsForBundle(layer, options) : []
+  const repeatTasks = components.repeatTasks ? loadRepeatTasksForBundle(layer, options) : []
+  const memories = components.memories ? loadMemoriesForBundle(layer, options) : []
 
   const bundle = buildBundle(options, {
     agentProfiles: profiles,
