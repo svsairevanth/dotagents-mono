@@ -423,7 +423,7 @@ export function SettingsAgents() {
   return (
     <div className="modern-panel h-full overflow-y-auto overflow-x-hidden px-6 py-4">
       {!editing && (
-        <div className="flex items-center justify-end gap-2 mb-4">
+        <div className="flex flex-wrap items-center justify-end gap-2 mb-4">
           <Button variant="outline" className="gap-2" onClick={() => handleImportDialogOpenChange(true)}>
             <Upload className="h-4 w-4" />Import Bundle
           </Button>
