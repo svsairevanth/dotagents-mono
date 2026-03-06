@@ -78,4 +78,24 @@ describe("agent progress tile layout", () => {
       'overflow-x-auto overflow-y-auto whitespace-pre-wrap break-words max-w-full max-h-32 scrollbar-thin text-[10px]'
     )
   })
+
+  it("keeps inline tool approval cards readable in narrow tiles and under zoom", () => {
+    expect(agentProgressSource).toContain(
+      'className="min-w-0 max-w-full overflow-hidden rounded-lg border border-amber-300 bg-amber-50/50 dark:border-amber-700 dark:bg-amber-950/30"'
+    )
+    expect(agentProgressSource).toContain(
+      'className="flex flex-wrap items-center gap-2 border-b border-amber-200 bg-amber-100/50 px-3 py-2 dark:border-amber-800 dark:bg-amber-900/30"'
+    )
+    expect(agentProgressSource).toContain('className="mb-2 flex flex-wrap items-center gap-2"')
+    expect(agentProgressSource).toContain(
+      'className="max-w-full min-w-0 truncate rounded bg-amber-100 px-1.5 py-0.5 text-xs font-mono font-medium text-amber-900 dark:bg-amber-900/50 dark:text-amber-100"'
+    )
+    expect(agentProgressSource).toContain(
+      'className="mb-2 rounded-md border border-amber-200/70 bg-amber-100/40 px-2 py-1.5 text-[11px] font-mono leading-relaxed text-amber-700/80 dark:border-amber-800/60 dark:bg-amber-900/20 dark:text-amber-300/80 line-clamp-2 break-words [overflow-wrap:anywhere]"'
+    )
+    expect(agentProgressSource).toContain('className="space-y-1.5"')
+    expect(agentProgressSource).toContain(
+      'className="flex flex-wrap items-center gap-1.5 text-[10px] text-amber-700/80 dark:text-amber-300/80"'
+    )
+  })
 })

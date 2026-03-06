@@ -1,5 +1,51 @@
 ## UI Audit Log
 
+### 2026-03-06 — Chunk 17: Inline tool approval card under narrow tile / overlay widths and zoom
+
+- Area selected: desktop inline tool approval card in `apps/desktop/src/renderer/src/components/agent-progress.tsx`
+- Why this chunk: chunk 16 explicitly left the non-markdown sessions chrome adjacent to rendered content as the next best follow-up. The highest-value remaining hotspot in that area was the fixed-position `ToolApprovalBubble`, which appears in the most constrained desktop contexts (sessions tiles and overlay footer area) and still had several one-line layout assumptions.
+- Audit method:
+  - reviewed `ui-audit.md` first to avoid overlap with prior sessions/markdown passes
+  - reviewed `apps/desktop/DEBUGGING.md` plus repo guidance/docs (`README.md`, `DEVELOPMENT.md`, and `apps/desktop/src/renderer/src/AGENTS.md`)
+  - launched the desktop app with remote debugging enabled via `REMOTE_DEBUGGING_PORT=9363 ELECTRON_EXTRA_LAUNCH_ARGS="--inspect=9369" pnpm dev -- -d`
+  - inspected the concrete `ToolApprovalBubble` implementation and its tile/overlay call sites in `agent-progress.tsx`
+  - cross-checked `apps/mobile/src/screens/ChatScreen.tsx`; mobile has respond-to-user history and tool execution UI, but no equivalent inline tool-approval card, so no mobile change was needed for this chunk
+
+#### Findings
+
+- The approval card was still one of the weakest narrow-width / high-zoom surfaces in the sessions stack:
+  - the amber header row did not wrap, so the title and processing spinner competed for one line
+  - the `Tool:` row had no `min-w-0` / truncation contract around the tool-name code pill
+  - the always-visible arguments preview was a single truncated line, which hid useful context while still not giving the card a clear preview container
+  - the `Deny` / `Approve` buttons embedded their hotkey chips inline, forcing too much horizontal content into one row for tight tiles
+- This was primarily a **layout-and-polish** issue rather than a functional bug, but it was the clearest remaining sessions pressure point adjacent to message content after the previous markdown/session-card chunks.
+
+#### Changes made
+
+- Reworked `ToolApprovalBubble` in `agent-progress.tsx` to behave better in narrow tiles and overlay-width states:
+  - added `min-w-0 max-w-full` containment on the card
+  - made the header wrap and protected the shield/spinner as `shrink-0`
+  - changed the tool row to wrap cleanly and capped the tool-name code pill with `max-w-full min-w-0 truncate`
+- Improved preview/readability without expanding the card too aggressively:
+  - replaced the bare truncated arguments line with a lightweight bordered preview block
+  - used `line-clamp-2`, `break-words`, and `overflow-wrap:anywhere` so long argument summaries stay readable without forcing overflow
+  - updated the expanded `pre` block to respect `max-w-full` and wrap long tokens more gracefully
+- Simplified the action area for better zoom resilience:
+  - converted the action row to wrapping equal-width buttons
+  - moved the hotkey hints out of the buttons into a separate wrap-safe metadata row
+  - kept the existing keyboard shortcuts/titles intact while reducing horizontal button pressure
+- Extended `apps/desktop/src/renderer/src/components/agent-progress.tile-layout.test.ts` so the responsive class contract now also covers inline tool-approval card treatment.
+
+#### Verification
+
+- Targeted test: `pnpm --filter @dotagents/desktop exec vitest run src/renderer/src/components/agent-progress.tile-layout.test.ts`
+- Targeted web typecheck: `pnpm --filter @dotagents/desktop typecheck:web`
+
+#### Notes
+
+- Electron-native inspection again attached to the shell document with an empty `#root`, so this chunk combined the documented debug startup path with direct inspection of the concrete approval-card implementation rather than hydrated DOM automation.
+- Best next UI audit chunk after this one: the adjacent `MidTurnUserResponseBubble` / past-response history stack in `agent-progress.tsx`, especially the expanded history section and audio-player/error chrome under tight tile widths and zoom.
+
 ### 2026-03-06 — Chunk 16: Shared markdown renderer long links / code / tables under narrow widths and zoom
 
 - Area selected: desktop shared markdown rendering in `apps/desktop/src/renderer/src/components/markdown-renderer.tsx`

@@ -1104,30 +1104,33 @@ const ToolApprovalBubble: React.FC<{
   const argsPreview = formatArgumentsPreview(approval.arguments)
 
   return (
-    <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/30 overflow-hidden">
+    <div className="min-w-0 max-w-full overflow-hidden rounded-lg border border-amber-300 bg-amber-50/50 dark:border-amber-700 dark:bg-amber-950/30">
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-amber-100/50 dark:bg-amber-900/30 border-b border-amber-200 dark:border-amber-800">
-        <Shield className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-        <span className="text-xs font-medium text-amber-800 dark:text-amber-200">
+      <div className="flex flex-wrap items-center gap-2 border-b border-amber-200 bg-amber-100/50 px-3 py-2 dark:border-amber-800 dark:bg-amber-900/30">
+        <Shield className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+        <span className="min-w-0 flex-1 text-xs font-medium text-amber-800 dark:text-amber-200">
           {isResponding ? "Processing..." : "Tool Approval Required"}
         </span>
         {isResponding && (
-          <Loader2 className="h-3 w-3 text-amber-600 dark:text-amber-400 animate-spin ml-auto" />
+          <Loader2 className="ml-auto h-3 w-3 shrink-0 animate-spin text-amber-600 dark:text-amber-400" />
         )}
       </div>
 
       {/* Content */}
-      <div ref={containerRef} className={cn("px-3 py-2", isResponding && "opacity-60")}>
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-xs text-amber-700 dark:text-amber-300">Tool:</span>
-          <code className="text-xs font-mono font-medium text-amber-900 dark:text-amber-100 bg-amber-100 dark:bg-amber-900/50 px-1.5 py-0.5 rounded">
+      <div ref={containerRef} className={cn("min-w-0 px-3 py-2", isResponding && "opacity-60")}>
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <span className="shrink-0 text-xs text-amber-700 dark:text-amber-300">Tool:</span>
+          <code className="max-w-full min-w-0 truncate rounded bg-amber-100 px-1.5 py-0.5 text-xs font-mono font-medium text-amber-900 dark:bg-amber-900/50 dark:text-amber-100">
             {approval.toolName}
           </code>
         </div>
 
         {/* Arguments preview - always visible */}
         {argsPreview && (
-          <div className="mb-2 text-xs text-amber-700/80 dark:text-amber-300/80 font-mono truncate" title={argsPreview}>
+          <div
+            className="mb-2 rounded-md border border-amber-200/70 bg-amber-100/40 px-2 py-1.5 text-[11px] font-mono leading-relaxed text-amber-700/80 dark:border-amber-800/60 dark:bg-amber-900/20 dark:text-amber-300/80 line-clamp-2 break-words [overflow-wrap:anywhere]"
+            title={argsPreview}
+          >
             {argsPreview}
           </div>
         )}
@@ -1136,58 +1139,72 @@ const ToolApprovalBubble: React.FC<{
         <div className="mb-3">
           <button
             onClick={() => setShowArgs(!showArgs)}
-            className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-200"
+            className="inline-flex max-w-full items-center gap-1 text-left text-xs text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-200"
             disabled={isResponding}
           >
             <ChevronRight className={cn("h-3 w-3 transition-transform", showArgs && "rotate-90")} />
             {showArgs ? "Hide" : "View"} full arguments
           </button>
           {showArgs && (
-            <pre className="mt-1.5 p-2 text-xs bg-amber-100/70 dark:bg-amber-900/40 rounded overflow-x-auto max-h-32 text-amber-900 dark:text-amber-100">
+            <pre className="mt-1.5 max-h-32 max-w-full overflow-x-auto rounded bg-amber-100/70 p-2 text-xs text-amber-900 whitespace-pre-wrap break-words dark:bg-amber-900/40 dark:text-amber-100">
               {JSON.stringify(approval.arguments, null, 2)}
             </pre>
           )}
         </div>
 
         {/* Action buttons with hotkey hints */}
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs border-red-300 text-red-700 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/30"
-            onClick={onDeny}
-            disabled={isResponding}
-            title="Press Shift+Space to deny"
-          >
-            <XCircle className="h-3 w-3 mr-1" />
-            Deny
-            <kbd className="ml-1.5 px-1 py-0.5 text-[10px] font-mono bg-red-100 dark:bg-red-900/50 rounded">Shift+Space</kbd>
-          </Button>
-          <Button
-            size="sm"
-            className={cn(
-              "h-7 text-xs text-white",
-              isResponding
-                ? "bg-green-500 cursor-not-allowed"
-                : "bg-green-600 hover:bg-green-700"
-            )}
-            onClick={onApprove}
-            disabled={isResponding}
-            title="Press Space to approve"
-          >
-            {isResponding ? (
-              <>
-                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                Processing...
-              </>
-            ) : (
-              <>
-                <Check className="h-3 w-3 mr-1" />
-                Approve
-                <kbd className="ml-1.5 px-1 py-0.5 text-[10px] font-mono bg-green-700 rounded">Space</kbd>
-              </>
-            )}
-          </Button>
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 min-w-[7rem] flex-1 border-red-300 text-xs text-red-700 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/30"
+              onClick={onDeny}
+              disabled={isResponding}
+              title="Press Shift+Space to deny"
+            >
+              <XCircle className="mr-1 h-3 w-3" />
+              Deny
+            </Button>
+            <Button
+              size="sm"
+              className={cn(
+                "h-7 min-w-[7rem] flex-1 text-xs text-white",
+                isResponding
+                  ? "cursor-not-allowed bg-green-500"
+                  : "bg-green-600 hover:bg-green-700"
+              )}
+              onClick={onApprove}
+              disabled={isResponding}
+              title="Press Space to approve"
+            >
+              {isResponding ? (
+                <>
+                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <Check className="mr-1 h-3 w-3" />
+                  Approve
+                </>
+              )}
+            </Button>
+          </div>
+          {!isResponding && (
+            <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-amber-700/80 dark:text-amber-300/80">
+              <span className="shrink-0 font-medium uppercase tracking-wider opacity-70">Hotkeys</span>
+              <div className="flex flex-wrap items-center gap-1">
+                <kbd className="rounded bg-green-700 px-1 py-0.5 font-mono text-[10px] text-white">Space</kbd>
+                <span>Approve</span>
+              </div>
+              <span className="opacity-40" aria-hidden="true">•</span>
+              <div className="flex flex-wrap items-center gap-1">
+                <kbd className="rounded bg-red-100 px-1 py-0.5 font-mono text-[10px] text-red-700 dark:bg-red-900/50 dark:text-red-300">Shift+Space</kbd>
+                <span>Deny</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
