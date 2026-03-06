@@ -41,6 +41,11 @@ export function ACPSessionBadge({ info, className }: ACPSessionBadgeProps) {
 
   // Build model label (e.g., "Sonnet 4.5" or "claude-3-5-sonnet")
   const modelLabel = currentModel || null
+  const modelBadgeLabel = modelLabel
+    ? currentMode
+      ? `${modelLabel} • ${currentMode}`
+      : modelLabel
+    : null
 
   // If nothing to display, return null
   if (!agentLabel && !modelLabel) {
@@ -65,27 +70,24 @@ export function ACPSessionBadge({ info, className }: ACPSessionBadgeProps) {
         <TooltipTrigger asChild>
           <div
             className={cn(
-              "inline-flex items-center gap-1.5 cursor-help",
+              "inline-flex max-w-full min-w-0 flex-wrap items-center gap-1.5 cursor-help",
               className
             )}
           >
             {agentLabel && (
               <Badge
                 variant="secondary"
-                className="text-[10px] px-1.5 py-0 font-medium"
+                className="max-w-full min-w-0 text-[10px] px-1.5 py-0 font-medium"
               >
-                {agentLabel}
+                <span className="truncate">{agentLabel}</span>
               </Badge>
             )}
-            {modelLabel && (
+            {modelBadgeLabel && (
               <Badge
                 variant="outline"
-                className="text-[10px] px-1.5 py-0 font-mono"
+                className="max-w-full min-w-0 text-[10px] px-1.5 py-0 font-mono"
               >
-                {modelLabel}
-                {currentMode && (
-                  <span className="ml-1 opacity-60">• {currentMode}</span>
-                )}
+                <span className="truncate">{modelBadgeLabel}</span>
               </Badge>
             )}
           </div>

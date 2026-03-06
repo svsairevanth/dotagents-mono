@@ -76,6 +76,50 @@
 - This is a conservative polish fix: it improves the default/minimum footprint without redesigning the panel layout.
 - Best next UI audit chunk after this one: live visual pass on the sessions page at very narrow main-window widths and increased zoom.
 
+### 2026-03-06 — Chunk 11: Sessions tile chrome under narrow widths / zoom
+
+- Area selected: desktop sessions tile header/footer metadata chrome (`apps/desktop/src/renderer/src/components/agent-progress.tsx`, `apps/desktop/src/renderer/src/components/acp-session-badge.tsx`)
+- Why this chunk: earlier sessions work fixed the page-level header and empty state, but the next highest-pressure hotspot was still inside individual session tiles once the grid compresses toward its `200px` minimum width.
+- Audit method:
+  - reviewed `apps/desktop/DEBUGGING.md`
+  - launched the desktop app with remote debugging enabled via `REMOTE_DEBUGGING_PORT=9333 ELECTRON_EXTRA_LAUNCH_ARGS="--inspect=9339" pnpm dev -- -d`
+  - inspected the sessions tile layout code paths and grid min-width constraints (`session-grid.tsx`, `use-resizable.ts`)
+  - checked `apps/mobile/src/` for an equivalent ACP/tile session surface; no matching mobile UI needed the same change
+
+#### Findings
+
+- The sessions grid can compress tiles down to `200px` wide, which leaves very little room for the tile header chrome once the row contains:
+  - status icon
+  - title + agent label
+  - approval badge
+  - 3–4 icon buttons
+- The tile footer metadata row was still a single non-wrapping flex line. With ACP sessions, the combination of profile label + ACP badges + context bar + step/status text could overflow, clip, or visually crowd under increased font zoom.
+- `ACPSessionBadge` itself did not cap or truncate its inner badge labels to the available width, so long ACP agent/model labels could dominate a narrow tile.
+
+#### Changes made
+
+- Reworked the tile header in `agent-progress.tsx` to use a wrapping layout:
+  - left title block stays `min-w-0`
+  - right-side approval/actions cluster can wrap instead of forcing horizontal overflow
+  - icon buttons are explicitly `shrink-0`
+- Reworked the tile footer metadata row to wrap cleanly while keeping the trailing `Step …` / completion status visible via `whitespace-nowrap`.
+- Updated `ACPSessionBadge` to:
+  - respect parent width with `max-w-full min-w-0`
+  - allow badge wrapping at the container level
+  - truncate long ACP labels inside each badge instead of leaking width pressure into the tile
+- Added a focused regression test for the responsive class contract:
+  - `apps/desktop/src/renderer/src/components/agent-progress.tile-layout.test.ts`
+
+#### Verification
+
+- Targeted test: `pnpm --filter @dotagents/desktop exec vitest run src/renderer/src/components/agent-progress.tile-layout.test.ts`
+- Targeted web typecheck: `pnpm --filter @dotagents/desktop exec tsc --noEmit -p tsconfig.web.json --composite false`
+
+#### Notes
+
+- Electron renderer automation again attached to a shell document instead of the hydrated React tree for this surface, so this chunk relied on live app startup plus direct implementation audit of the narrow-width tile hotspot.
+- This chunk is intentionally scoped to the sessions tile chrome only; the next good follow-up would be a live pass on sessions content density within the tile body itself (message stream, summary tab, and follow-up input) at increased zoom.
+
 ---
 
 

@@ -3052,30 +3052,34 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
       >
         {/* Tile Header - clickable to toggle collapse */}
         <div
-          className="flex items-center gap-2 px-3 py-2 border-b bg-muted/30 flex-shrink-0 cursor-pointer"
+          className="flex flex-wrap items-start gap-2 px-3 py-2 border-b bg-muted/30 flex-shrink-0 cursor-pointer"
           onClick={handleToggleCollapse}
         >
-          {getStatusIndicator()}
-          <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-            <span className="truncate font-medium text-sm">
-              {getTitle()}
-            </span>
-            {/* Agent name indicator in header */}
-            {profileName && (
-              <span className="flex items-center gap-1 text-[10px] text-primary/70">
-                <Bot className="h-2.5 w-2.5 shrink-0" />
-                <span className="truncate">{profileName}</span>
+          <div className="flex min-w-0 flex-1 items-start gap-2">
+            <div className="shrink-0 pt-0.5">
+              {getStatusIndicator()}
+            </div>
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="truncate font-medium text-sm">
+                {getTitle()}
               </span>
-            )}
+              {/* Agent name indicator in header */}
+              {profileName && (
+                <span className="flex items-center gap-1 text-[10px] text-primary/70">
+                  <Bot className="h-2.5 w-2.5 shrink-0" />
+                  <span className="truncate">{profileName}</span>
+                </span>
+              )}
+            </div>
           </div>
-          {hasPendingApproval && (
-            <Badge variant="outline" className="text-amber-600 border-amber-500 text-xs">
-              Approval
-            </Badge>
-          )}
-          <div className="flex items-center gap-1">
+          <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-1">
+            {hasPendingApproval && (
+              <Badge variant="outline" className="shrink-0 border-amber-500 text-xs text-amber-600">
+                Approval
+              </Badge>
+            )}
             {/* Collapse/Expand toggle */}
-            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleToggleCollapse} title={isCollapsed ? "Expand panel" : "Collapse panel"}>
+            <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={handleToggleCollapse} title={isCollapsed ? "Expand panel" : "Collapse panel"}>
               {isCollapsed ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}
             </Button>
 
@@ -3083,7 +3087,7 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6"
+                className="h-6 w-6 shrink-0"
                 onClick={(e) => {
                   e.stopPropagation()
                   onExpand()
@@ -3095,12 +3099,12 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
             )}
 
             {!isComplete && !isSnoozed && (
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); handleSnooze(e); }} title="Minimize">
+              <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={(e) => { e.stopPropagation(); handleSnooze(e); }} title="Minimize">
                 <Minimize2 className="h-3 w-3" />
               </Button>
             )}
             {isSnoozed && (
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={async (e) => {
+              <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={async (e) => {
                 e.stopPropagation()
                 if (!progress?.sessionId) return
 
@@ -3134,11 +3138,11 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
             )}
             {/* Combined close button: stops agent if running, dismisses if complete */}
             {!isComplete ? (
-              <Button variant="ghost" size="icon" className="h-6 w-6 hover:bg-destructive/20 hover:text-destructive" onClick={(e) => { e.stopPropagation(); handleKillConfirmation(); }} title="Stop agent">
+              <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 hover:bg-destructive/20 hover:text-destructive" onClick={(e) => { e.stopPropagation(); handleKillConfirmation(); }} title="Stop agent">
                 <OctagonX className="h-3 w-3" />
               </Button>
             ) : onDismiss ? (
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); onDismiss(); }} title="Dismiss">
+              <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={(e) => { e.stopPropagation(); onDismiss(); }} title="Dismiss">
                 <X className="h-3 w-3" />
               </Button>
             ) : null}
@@ -3310,53 +3314,54 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
             )}
 
             {/* Footer with status info */}
-            <div className="px-3 py-2 border-t bg-muted/20 text-xs text-muted-foreground flex-shrink-0 flex items-center gap-2">
-              {profileName && (
-                <span className="text-[10px] truncate max-w-[80px] text-primary/70" title={`Profile: ${profileName}`}>
-                  {profileName}
-                </span>
-              )}
-              {(profileName && (modelInfo || acpSessionInfo) && !isComplete) && (
-                <span className="text-muted-foreground/50">•</span>
-              )}
-              {/* ACP Session info for tile variant */}
-              {acpSessionInfo && (
-                <ACPSessionBadge info={acpSessionInfo} />
-              )}
-              {/* Model info - only show for non-ACP sessions */}
-              {!isComplete && modelInfo && !acpSessionInfo && (
-                <span className="text-[10px] truncate max-w-[100px]" title={`${modelInfo.provider}: ${modelInfo.model}`}>
-                  {modelInfo.provider}/{modelInfo.model.split('/').pop()?.substring(0, 15)}
-                </span>
-              )}
-              {!isComplete && contextInfo && contextInfo.maxTokens > 0 && (
-                <div
-                  className="flex items-center gap-1"
-                  title={`Context: ${Math.round(contextInfo.estTokens / 1000)}k / ${Math.round(contextInfo.maxTokens / 1000)}k tokens (${Math.min(100, Math.round((contextInfo.estTokens / contextInfo.maxTokens) * 100))}%)`}
-                >
-                  <div className="w-8 h-1 bg-muted rounded-full overflow-hidden">
+            <div className="px-3 py-2 border-t bg-muted/20 text-xs text-muted-foreground flex-shrink-0">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+                  {profileName && (
+                    <span className="min-w-0 max-w-full truncate text-[10px] text-primary/70" title={`Profile: ${profileName}`}>
+                      {profileName}
+                    </span>
+                  )}
+                  {/* ACP Session info for tile variant */}
+                  {acpSessionInfo && (
+                    <ACPSessionBadge info={acpSessionInfo} className="min-w-0 max-w-full" />
+                  )}
+                  {/* Model info - only show for non-ACP sessions */}
+                  {!isComplete && modelInfo && !acpSessionInfo && (
+                    <span className="min-w-0 max-w-full truncate text-[10px]" title={`${modelInfo.provider}: ${modelInfo.model}`}>
+                      {modelInfo.provider}/{modelInfo.model.split('/').pop()?.substring(0, 15)}
+                    </span>
+                  )}
+                  {!isComplete && contextInfo && contextInfo.maxTokens > 0 && (
                     <div
-                      className={cn(
-                        "h-full transition-all duration-300 ease-out rounded-full",
-                        contextInfo.estTokens / contextInfo.maxTokens > 0.9
-                          ? "bg-red-500"
-                          : contextInfo.estTokens / contextInfo.maxTokens > 0.7
-                          ? "bg-amber-500"
-                          : "bg-emerald-500"
-                      )}
-                      style={{
-                        width: `${Math.min(100, (contextInfo.estTokens / contextInfo.maxTokens) * 100)}%`,
-                      }}
-                    />
-                  </div>
+                      className="flex shrink-0 items-center gap-1"
+                      title={`Context: ${Math.round(contextInfo.estTokens / 1000)}k / ${Math.round(contextInfo.maxTokens / 1000)}k tokens (${Math.min(100, Math.round((contextInfo.estTokens / contextInfo.maxTokens) * 100))}%)`}
+                    >
+                      <div className="w-8 h-1 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className={cn(
+                            "h-full transition-all duration-300 ease-out rounded-full",
+                            contextInfo.estTokens / contextInfo.maxTokens > 0.9
+                              ? "bg-red-500"
+                              : contextInfo.estTokens / contextInfo.maxTokens > 0.7
+                              ? "bg-amber-500"
+                              : "bg-emerald-500"
+                          )}
+                          style={{
+                            width: `${Math.min(100, (contextInfo.estTokens / contextInfo.maxTokens) * 100)}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
-              {!isComplete && (
-                <span>Step {currentIteration}/{isFinite(maxIterations) ? maxIterations : "∞"}</span>
-              )}
-              {isComplete && (
-                <span>{wasStopped ? "Stopped" : hasErrors ? "Failed" : "Complete"}</span>
-              )}
+                {!isComplete && (
+                  <span className="shrink-0 whitespace-nowrap">Step {currentIteration}/{isFinite(maxIterations) ? maxIterations : "∞"}</span>
+                )}
+                {isComplete && (
+                  <span className="shrink-0 whitespace-nowrap">{wasStopped ? "Stopped" : hasErrors ? "Failed" : "Complete"}</span>
+                )}
+              </div>
             </div>
           </>
         )}
