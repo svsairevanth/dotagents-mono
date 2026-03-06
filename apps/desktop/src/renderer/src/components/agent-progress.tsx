@@ -1935,9 +1935,9 @@ const PastResponseItem: React.FC<{
   const preview = response.length > 80 ? response.slice(0, 80) + "…" : response
 
   return (
-    <div className="border border-green-200/60 dark:border-green-800/40 rounded-md overflow-hidden">
+    <div className="min-w-0 max-w-full overflow-hidden rounded-md border border-green-200/60 dark:border-green-800/40">
       <div
-        className="flex items-center gap-2 px-2.5 py-1.5 cursor-pointer hover:bg-green-50/50 dark:hover:bg-green-900/20 transition-colors"
+        className="flex min-w-0 items-start gap-2 cursor-pointer px-2.5 py-1.5 transition-colors hover:bg-green-50/50 dark:hover:bg-green-900/20"
         onClick={() => setIsExpanded(!isExpanded)}
       >
         {isExpanded ? (
@@ -1949,18 +1949,18 @@ const PastResponseItem: React.FC<{
           #{index + 1}
         </span>
         {!isExpanded && (
-          <span className="text-xs text-green-700/70 dark:text-green-300/60 truncate">
+          <span className="min-w-0 flex-1 text-xs text-green-700/70 dark:text-green-300/60 line-clamp-2 break-words [overflow-wrap:anywhere]">
             {preview}
           </span>
         )}
       </div>
       {isExpanded && (
-        <div className="px-2.5 pb-2 border-t border-green-200/40 dark:border-green-800/30">
+        <div className="min-w-0 border-t border-green-200/40 px-2.5 pb-2 dark:border-green-800/30">
           <div className="pt-1.5 text-sm text-green-900 dark:text-green-100 whitespace-pre-wrap break-words">
             <MarkdownRenderer content={response} />
           </div>
           {shouldShowTTSButton && (
-            <div className="mt-1.5">
+            <div className="mt-1.5 min-w-0">
               <AudioPlayer
                 text={ttsResponseText}
                 onGenerateAudio={generatePastAudio}
@@ -2128,11 +2128,11 @@ const MidTurnUserResponseBubble: React.FC<{
     (isExpanded || (variant === "overlay" && (configQuery.data?.ttsAutoPlay ?? true)))
 
   return (
-    <div className="rounded-lg border-2 border-green-400 bg-green-50/50 dark:bg-green-950/30 overflow-hidden">
+    <div className="min-w-0 max-w-full overflow-hidden rounded-lg border-2 border-green-400 bg-green-50/50 dark:bg-green-950/30">
       {/* Header */}
       <div
         className={cn(
-          "flex items-start gap-2 px-3 py-2 bg-green-100/50 dark:bg-green-900/30 cursor-pointer hover:bg-green-100/70 dark:hover:bg-green-900/40 transition-colors",
+          "flex min-w-0 flex-wrap items-start gap-2 cursor-pointer bg-green-100/50 px-3 py-2 transition-colors hover:bg-green-100/70 dark:bg-green-900/30 dark:hover:bg-green-900/40",
           isExpanded && "border-b border-green-200 dark:border-green-800",
         )}
         onClick={onToggleExpand}
@@ -2142,12 +2142,19 @@ const MidTurnUserResponseBubble: React.FC<{
         ) : (
           <ChevronRight className="h-3 w-3 text-green-600 dark:text-green-400 flex-shrink-0" />
         )}
-        <MessageSquare className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
-        <div className="min-w-0 flex-1">
+        <MessageSquare className="h-3.5 w-3.5 shrink-0 text-green-600 dark:text-green-400" />
+        <div className="min-w-0 flex-1 space-y-1 text-left">
           <div className="text-xs font-medium text-green-800 dark:text-green-200 truncate">
             {agentLabel}
           </div>
-          <div className="text-xs text-green-700/80 dark:text-green-300/70 truncate min-w-0">
+          <div
+            className={cn(
+              "min-w-0 text-xs text-green-700/80 dark:text-green-300/70",
+              isExpanded
+                ? "font-medium"
+                : "line-clamp-2 break-words [overflow-wrap:anywhere]"
+            )}
+          >
             {isExpanded ? "Latest response" : collapsedPreview}
           </div>
         </div>
@@ -2158,7 +2165,7 @@ const MidTurnUserResponseBubble: React.FC<{
               ttsManager.stopAll("agent-progress-midturn-pause")
             }}
             className={cn(
-              "ml-auto p-1 rounded hover:bg-green-200/50 dark:hover:bg-green-800/50 transition-colors",
+              "ml-auto shrink-0 self-start rounded p-1 transition-colors hover:bg-green-200/50 dark:hover:bg-green-800/50",
               isTTSPlaying && "animate-pulse"
             )}
             title={isGeneratingAudio ? "Generating audio…" : "Pause TTS"}
@@ -2175,7 +2182,7 @@ const MidTurnUserResponseBubble: React.FC<{
       {isExpanded && (
         <>
           {/* Content */}
-          <div className="px-3 py-2">
+          <div className="min-w-0 px-3 py-2">
             <div className="text-sm text-green-900 dark:text-green-100 whitespace-pre-wrap break-words">
               <MarkdownRenderer content={userResponse} />
             </div>
@@ -2184,7 +2191,7 @@ const MidTurnUserResponseBubble: React.FC<{
       )}
 
       {shouldKeepAudioPlayerMounted && (
-        <div className={cn("px-3", isExpanded ? "pb-2" : "hidden")}>
+        <div className={cn("min-w-0 px-3", isExpanded ? "pb-2" : "hidden")}>
           <AudioPlayer
             audioData={audioData || undefined}
             text={ttsSource}
@@ -2196,7 +2203,7 @@ const MidTurnUserResponseBubble: React.FC<{
             onPlayStateChange={setIsTTSPlaying}
           />
           {isExpanded && ttsError && (
-            <div className="mt-1 rounded-md bg-red-50 p-2 text-xs text-red-700 dark:bg-red-900/20 dark:text-red-300">
+            <div className="mt-1 rounded-md bg-red-50 p-2 text-xs text-red-700 break-words [overflow-wrap:anywhere] dark:bg-red-900/20 dark:text-red-300">
               <span className="font-medium">Audio generation failed:</span> {ttsError}
             </div>
           )}
@@ -2207,9 +2214,14 @@ const MidTurnUserResponseBubble: React.FC<{
         <>
           {/* Past Responses History */}
           {pastResponses && pastResponses.length > 0 && (
-            <div className="px-3 py-2 border-t border-green-200/60 dark:border-green-800/40 bg-green-50/30 dark:bg-green-950/20">
-              <div className="text-[10px] font-medium text-green-600/70 dark:text-green-400/60 uppercase tracking-wider mb-1.5">
-                Past Responses ({pastResponses.length})
+            <div className="border-t border-green-200/60 bg-green-50/30 px-3 py-2 dark:border-green-800/40 dark:bg-green-950/20">
+              <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] font-medium uppercase tracking-wider text-green-600/70 dark:text-green-400/60">
+                  Past Responses
+                </span>
+                <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700 dark:bg-green-900/50 dark:text-green-200">
+                  {pastResponses.length}
+                </span>
               </div>
               <div className="space-y-1">
                 {pastResponses.map((response, idx) => (

@@ -1,5 +1,48 @@
 ## UI Audit Log
 
+### 2026-03-06 — Chunk 18: Mid-turn response bubble and past-response history under narrow widths / zoom
+
+- Area selected: `MidTurnUserResponseBubble` and `PastResponseItem` in `apps/desktop/src/renderer/src/components/agent-progress.tsx`
+- Why this chunk: after chunk 17 fixed the adjacent inline tool-approval card, the next most constrained sessions surface in the same area was the green `respond_to_user` / mid-turn response bubble and its expandable past-response history. It sits directly beside markdown content, inline audio controls, and compact history chrome, so it is especially vulnerable to narrow tile widths and font zoom.
+- Audit method:
+  - continued from the chunk-17 sessions audit without overlapping earlier settings/panel/markdown passes
+  - reviewed the concrete `MidTurnUserResponseBubble` and `PastResponseItem` implementation in `agent-progress.tsx`
+  - cross-checked the mobile `ResponseHistoryPanel` usage in `apps/mobile/src/screens/ChatScreen.tsx`; mobile has related response-history UI but not the same compact green card chrome, so this chunk stayed desktop-only
+
+#### Findings
+
+- The mid-turn response stack had mostly been brought into `min-w-0` territory already, but it still had several layout weak spots that showed up under narrow tiles / zoom:
+  - the green header preview still collapsed to a single truncated line even when a two-line preview would fit better and reveal more of the response
+  - the content column lacked explicit vertical spacing / `text-left` structure, so the header metadata and preview could feel cramped when the trailing TTS control appeared
+  - the trailing TTS pause/generate button was not explicitly `shrink-0`, so it could still compete with the preview at tighter widths
+  - past-response history items were still effectively one-line cards: their collapsed previews used `truncate`, not a more tolerant wrap/clamp pattern
+  - the past-response history item container itself was not explicitly capped with `min-w-0 max-w-full`
+- This was a polish/responsiveness follow-up rather than a functional bug, but it materially improves the readability of `respond_to_user` content in the smallest desktop session layouts.
+
+#### Changes made
+
+- Refined the main mid-turn response card:
+  - kept the card/root wrap-safe with `min-w-0 max-w-full`
+  - changed the text column to `space-y-1 text-left`
+  - replaced the one-line collapsed preview with a two-line `line-clamp-2` / `break-words` / `overflow-wrap:anywhere` treatment
+  - marked the trailing TTS control as `shrink-0` so it no longer competes with the preview width
+- Refined past-response history items:
+  - added `min-w-0 max-w-full` containment to the item card
+  - aligned the collapsed row for top-start multi-line preview behavior instead of single-line center alignment
+  - replaced the history preview `truncate` treatment with a two-line clamp that survives long tokens and zoom better
+  - ensured the compact audio-player row stays in a `min-w-0` container when expanded
+- Extended `apps/desktop/src/renderer/src/components/agent-progress.tile-layout.test.ts` again so the layout contract now covers both the main green mid-turn response header and the nested past-response history cards.
+
+#### Verification
+
+- Targeted test: `pnpm --filter @dotagents/desktop exec vitest run src/renderer/src/components/agent-progress.tile-layout.test.ts --reporter=dot`
+- Targeted web typecheck: `pnpm --filter @dotagents/desktop typecheck:web --pretty false`
+
+#### Notes
+
+- The sessions-area follow-up queue is now materially reduced: both the inline approval card and the adjacent mid-turn response/history stack have dedicated audit entries, code fixes, and tile-layout regression coverage.
+- Best next UI audit chunk after this one: a deeper pass on compact audio / message-queue / retry-status chrome that appears between or below session content, especially where status banners and action rows stack in the tile footer area.
+
 ### 2026-03-06 — Chunk 17: Inline tool approval card under narrow tile / overlay widths and zoom
 
 - Area selected: desktop inline tool approval card in `apps/desktop/src/renderer/src/components/agent-progress.tsx`
