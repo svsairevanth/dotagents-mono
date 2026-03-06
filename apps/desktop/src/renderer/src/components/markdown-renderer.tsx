@@ -69,14 +69,14 @@ const markdownLinkComponent = ({
 }) => {
   if (isAllowedMarkdownLinkUrl(href)) {
     return (
-    <a
-      href={href}
-      className="text-primary underline hover:text-primary/80"
-      target="_blank"
-      rel="noopener noreferrer"
-    >
-      {children}
-    </a>
+      <a
+        href={href}
+        className="break-words text-primary underline underline-offset-2 hover:text-primary/80 [overflow-wrap:anywhere]"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        {children}
+      </a>
     )
   }
 
@@ -112,6 +112,49 @@ const markdownImageComponent = ({
 const sharedMarkdownComponents = {
   a: markdownLinkComponent,
   img: markdownImageComponent,
+  code: ({ children, ...props }: any) => {
+    const inline = !props.className
+    if (inline) {
+      return (
+        <code
+          className="rounded bg-black/5 px-1.5 py-0.5 font-mono text-[0.8125rem] text-current dark:bg-white/10 [overflow-wrap:anywhere]"
+          {...props}
+        >
+          {children}
+        </code>
+      )
+    }
+    return (
+      <code
+        className="block min-w-max font-mono text-[0.8125rem] leading-5 text-current"
+        {...props}
+      >
+        {children}
+      </code>
+    )
+  },
+  pre: ({ children }) => (
+    <pre className="mb-3 max-w-full overflow-x-auto rounded-lg border border-black/10 bg-black/5 p-3 dark:border-white/10 dark:bg-white/5">
+      {children}
+    </pre>
+  ),
+  table: ({ children }) => (
+    <div className="mb-3 max-w-full overflow-x-auto rounded-lg border border-border/80">
+      <table className="w-max min-w-full border-collapse text-sm">
+        {children}
+      </table>
+    </div>
+  ),
+  th: ({ children }) => (
+    <th className="whitespace-nowrap border-b border-r border-border bg-muted/50 px-3 py-2 text-left align-top font-semibold last:border-r-0">
+      {children}
+    </th>
+  ),
+  td: ({ children }) => (
+    <td className="border-b border-r border-border px-3 py-2 align-top last:border-r-0 [overflow-wrap:anywhere]">
+      {children}
+    </td>
+  ),
 }
 
 const ThinkSection: React.FC<ThinkSectionProps> = ({
@@ -270,65 +313,23 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
                   </p>
                 ),
                 ul: ({ children }) => (
-                  <ul className="mb-3 list-inside list-disc space-y-1 text-foreground">
+                  <ul className="mb-3 list-outside list-disc space-y-1 pl-5 text-foreground">
                     {children}
                   </ul>
                 ),
                 ol: ({ children }) => (
-                  <ol className="mb-3 list-inside list-decimal space-y-1 text-foreground">
+                  <ol className="mb-3 list-outside list-decimal space-y-1 pl-5 text-foreground">
                     {children}
                   </ol>
                 ),
                 li: ({ children }) => (
-                  <li className="text-foreground">{children}</li>
+                  <li className="break-words pl-0.5 text-foreground">{children}</li>
                 ),
                 blockquote: ({ children }) => (
                   <blockquote className="mb-3 border-l-4 border-muted-foreground pl-4 italic text-muted-foreground">
                     {children}
                   </blockquote>
                 ),
-                code: ({ children, ...props }: any) => {
-                  const inline = !props.className;
-                  if (inline) {
-                    return (
-                      <code
-                        className="rounded bg-muted px-1.5 py-0.5 font-mono text-sm text-foreground"
-                        {...props}
-                      >
-                        {children}
-                      </code>
-                    )
-                  }
-                  return (
-                    <code
-                      className="block overflow-x-auto rounded-lg bg-muted p-3 font-mono text-sm text-foreground"
-                      {...props}
-                    >
-                      {children}
-                    </code>
-                  )
-                },
-                pre: ({ children }) => (
-                  <pre className="mb-3 overflow-x-auto rounded-lg bg-muted p-3">
-                    {children}
-                  </pre>
-                ),
-                table: ({ children }) => (
-                  <div className="mb-3 overflow-x-auto">
-                    <table className="min-w-full border-collapse border border-border">
-                      {children}
-                    </table>
-                  </div>
-                ),
-                th: ({ children }) => (
-                  <th className="border border-border bg-muted px-3 py-2 text-left font-semibold">
-                    {children}
-                  </th>
-                ),
-                td: ({ children }) => (
-                  <td className="border border-border px-3 py-2">{children}</td>
-                ),
-
               }}
             >
               {part.content}

@@ -1,5 +1,48 @@
 ## UI Audit Log
 
+### 2026-03-06 — Chunk 16: Shared markdown renderer long links / code / tables under narrow widths and zoom
+
+- Area selected: desktop shared markdown rendering in `apps/desktop/src/renderer/src/components/markdown-renderer.tsx`
+- Why this chunk: chunk 15 explicitly left rendered markdown as the next best sessions follow-up. The highest-value remaining hotspot was the shared markdown renderer used in session messages and adjacent summary surfaces, especially for long inline code/links, fenced code blocks, tables, and the separate `<think>` rendering path.
+- Audit method:
+  - reviewed `apps/desktop/DEBUGGING.md`
+  - reviewed repo guidance/docs (`README.md`, `DEVELOPMENT.md`, and `apps/desktop/src/renderer/src/AGENTS.md`) to keep the pass aligned with the Electron-first desktop renderer and the required mobile cross-check
+  - launched the desktop app with remote debugging enabled via `REMOTE_DEBUGGING_PORT=9363 ELECTRON_EXTRA_LAUNCH_ARGS="--inspect=9369" pnpm dev -- -d`
+  - inspected the shared renderer implementation in `markdown-renderer.tsx` plus its session call sites in `agent-progress.tsx` / `session-tile.tsx`
+  - cross-checked `apps/mobile/src/ui/MarkdownRenderer.tsx`; mobile uses a separate React Native markdown renderer and does not share the desktop `<think>` path, so no matching mobile change was required for this chunk
+
+#### Findings
+
+- The shared desktop markdown renderer still had a few compressed-width / high-zoom weak points:
+  - long markdown links used a plain underlined anchor style with no explicit overflow handling, so URL-heavy content could force awkward wrapping or horizontal pressure in narrow session tiles
+  - inline code relied on default word-breaking behavior, which is brittle for long paths, commands, hashes, or provider/model identifiers embedded in prose
+  - fenced code blocks effectively styled both `pre` and block `code`, which is visually heavier than necessary and makes the block chrome feel denser than the rest of the sessions surface
+  - GFM tables had horizontal scrolling but not a stronger outer chrome / cell wrapping treatment for long values
+- The most important consistency issue was in the `<think>` path:
+  - normal markdown content had custom code/table rendering, but think sections only reused links/images
+  - that meant the same content type could render with different density and overflow behavior depending on whether it appeared in the visible answer or inside the expandable thinking section
+
+#### Changes made
+
+- Hardened shared markdown chrome in `markdown-renderer.tsx` so the same overflow-safe treatment now applies everywhere the shared renderer is used:
+  - long links now explicitly use `break-words` + `overflow-wrap:anywhere`
+  - inline code now wraps more gracefully instead of depending on default token behavior
+  - fenced code blocks now use a single outer `pre` shell with `max-w-full overflow-x-auto`, lighter neutral surface styling, and simpler inner block-code typography
+  - table wrappers now use rounded bordered horizontal-scroll containers with better cell alignment/wrapping for long values
+- Extended `sharedMarkdownComponents` so think sections inherit the same code/pre/table handling instead of falling back to looser default prose rendering.
+- Polished list readability in the main markdown flow by switching the custom desktop lists from `list-inside` to `list-outside` with explicit left padding and break handling on list items.
+- Added focused regression coverage in `apps/desktop/src/renderer/src/components/markdown-renderer.layout.test.ts` for the responsive/overflow-safe class contract.
+
+#### Verification
+
+- Targeted test: `pnpm --filter @dotagents/desktop exec vitest run src/renderer/src/components/markdown-renderer.layout.test.ts`
+- Targeted web typecheck: `pnpm --filter @dotagents/desktop typecheck:web`
+
+#### Notes
+
+- Electron-native inspection again attached to the shell document with an empty `#root`, so this chunk used the documented debug startup path plus direct inspection of the shared renderer implementation and call sites rather than relying on hydrated DOM automation.
+- Best next UI audit chunk after this one: audit the non-markdown session chrome directly adjacent to rendered content (especially the inline tool-approval / mid-turn response cards) for narrow-tile and zoom pressure now that the markdown content itself is more resilient.
+
 ### 2026-03-06 — Chunk 15: Sessions summary cards in narrow tiles / zoom
 
 - Area selected: desktop sessions summary tab cards inside `apps/desktop/src/renderer/src/components/agent-summary-view.tsx`
