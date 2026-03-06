@@ -1802,10 +1802,16 @@ class ACPService extends EventEmitter {
         }
       }
 
-      if (result?.configOptions || result?.config_options) {
+      const sessionConfigOptions = Array.isArray(result?.configOptions)
+        ? result.configOptions
+        : Array.isArray(result?.config_options)
+          ? result.config_options
+          : undefined
+
+      if (sessionConfigOptions) {
         instance.sessionInfo = {
           ...instance.sessionInfo,
-          configOptions: result.configOptions || result.config_options,
+          configOptions: sessionConfigOptions,
         }
       }
 

@@ -88,7 +88,9 @@ export function buildProfileContext(
   const profileName = !profile
     ? undefined
     : "displayName" in profile
-      ? profile.displayName
+      ? (typeof profile.displayName === "string" && profile.displayName.trim().length > 0
+          ? profile.displayName
+          : profile.profileName)
       : profile.profileName
 
   if (existingContext) parts.push(existingContext)

@@ -54,6 +54,7 @@ function getConfigOptionByCategory(
   category: string,
 ): ACPConfigOption | undefined {
   return configOptions?.find((option) => option.category === category)
+    || configOptions?.find((option) => option.id === category)
 }
 
 function getCurrentConfigOptionLabel(option: ACPConfigOption | undefined): string | undefined {

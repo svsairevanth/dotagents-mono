@@ -779,6 +779,78 @@ describe("ACP Service", () => {
         }),
       ])
     })
+
+    it("ignores non-array config options from config_options_update notifications", async () => {
+      const { acpService } = await import("./acp-service")
+      await acpService.spawnAgent("test-agent")
+
+      const sessionUpdatePromise = new Promise<{ sessionId: string }>((resolve) => {
+        acpService.once("sessionUpdate", (event) => resolve(event))
+      })
+
+      acpService.emit("notification", {
+        agentName: "test-agent",
+        method: "session/update",
+        params: {
+          sessionId: "session-invalid-config-options",
+          update: {
+            sessionUpdate: "config_options_update",
+            configOptions: {
+              id: "mode",
+            },
+          },
+        },
+      })
+
+      const event = await sessionUpdatePromise
+      expect(event.sessionId).toBe("session-invalid-config-options")
+      expect(acpService.getAgentInstance("test-agent")?.sessionInfo?.configOptions).toBeUndefined()
+    })
+
+    it("stores config options arrays from session/new responses", async () => {
+      const { acpService } = await import("./acp-service")
+      await acpService.spawnAgent("test-agent")
+
+      vi.spyOn(acpService as any, "sendRequest").mockResolvedValue({
+        sessionId: "session-new-config-options",
+        config_options: [
+          {
+            id: "model",
+            name: "Model",
+            type: "select",
+            currentValue: "sonnet",
+            options: [{ value: "sonnet", name: "Claude Sonnet" }],
+          },
+        ],
+      })
+
+      const sessionId = await (acpService as any).createSession("test-agent")
+
+      expect(sessionId).toBe("session-new-config-options")
+      expect(acpService.getAgentInstance("test-agent")?.sessionInfo?.configOptions).toEqual([
+        expect.objectContaining({
+          id: "model",
+          currentValue: "sonnet",
+        }),
+      ])
+    })
+
+    it("ignores non-array config options from session/new responses", async () => {
+      const { acpService } = await import("./acp-service")
+      await acpService.spawnAgent("test-agent")
+
+      vi.spyOn(acpService as any, "sendRequest").mockResolvedValue({
+        sessionId: "session-new-invalid-config-options",
+        configOptions: {
+          id: "model",
+        },
+      })
+
+      const sessionId = await (acpService as any).createSession("test-agent")
+
+      expect(sessionId).toBe("session-new-invalid-config-options")
+      expect(acpService.getAgentInstance("test-agent")?.sessionInfo?.configOptions).toBeUndefined()
+    })
   })
 
   describe("Tool Call Status Types", () => {

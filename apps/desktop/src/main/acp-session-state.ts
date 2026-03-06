@@ -190,16 +190,16 @@ export function getAppRunIdForAcpSession(acpSessionId: string): number | undefin
  * @param acpSessionId The ACP session ID to remove
  */
 export function clearAcpToAppSessionMapping(acpSessionId: string): void {
-  if (acpToAppSession.has(acpSessionId)) {
-    acpToAppSession.delete(acpSessionId)
-    acpToAppRunId.delete(acpSessionId)
+  const removedAppSession = acpToAppSession.delete(acpSessionId)
+  const removedRunId = acpToAppRunId.delete(acpSessionId)
 
-    const clientSessionToken = acpSessionToClientToken.get(acpSessionId)
-    if (clientSessionToken) {
-      acpSessionToClientToken.delete(acpSessionId)
-      acpClientTokenToSession.delete(clientSessionToken)
-    }
+  const clientSessionToken = acpSessionToClientToken.get(acpSessionId)
+  if (clientSessionToken) {
+    acpSessionToClientToken.delete(acpSessionId)
+    acpClientTokenToSession.delete(clientSessionToken)
+  }
 
+  if (removedAppSession || removedRunId || clientSessionToken) {
     logApp(`[ACP Session] Cleared ACP → app session mapping for ${acpSessionId}`)
   }
 }
