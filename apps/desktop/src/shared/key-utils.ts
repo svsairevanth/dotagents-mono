@@ -186,7 +186,6 @@ export function validateKeyCombo(combo: string): {
 
   const dangerousCombos = [
     "ctrl-alt-delete", // System shortcut
-    "ctrl-shift-escape", // Task manager (but we allow this for kill switch)
     "alt-f4", // Close window
     "ctrl-w", // Close tab
     "ctrl-q", // Quit application
