@@ -993,7 +993,7 @@ export default function SettingsScreen({ navigation }: any) {
                 </Text>
               </View>
               {config.baseUrl && (
-                <Text style={styles.connectionCardUrl} numberOfLines={1}>
+                <Text style={styles.connectionCardUrl} numberOfLines={2}>
                   {config.baseUrl}
                 </Text>
               )}
@@ -2625,29 +2625,35 @@ function createStyles(theme: ReturnType<typeof useTheme>['theme']) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
+      gap: spacing.sm,
     },
     connectionCardLeft: {
       flex: 1,
+      minWidth: 0,
     },
     connectionStatusRow: {
       flexDirection: 'row',
       alignItems: 'center',
+      flexWrap: 'wrap',
       gap: spacing.sm,
     },
     connectionCardTitle: {
       fontSize: 16,
       fontWeight: '600',
       color: theme.colors.foreground,
+      flexShrink: 1,
     },
     connectionCardUrl: {
       fontSize: 12,
       color: theme.colors.mutedForeground,
       marginTop: spacing.xs,
+      lineHeight: 16,
     },
     connectionCardChevron: {
       fontSize: 24,
       color: theme.colors.mutedForeground,
       marginLeft: spacing.sm,
+      flexShrink: 0,
     },
     sectionTitle: {
       ...theme.typography.label,
@@ -2661,6 +2667,7 @@ function createStyles(theme: ReturnType<typeof useTheme>['theme']) {
     label: {
       ...theme.typography.label,
       marginTop: spacing.sm,
+      flexShrink: 1,
     },
     helperText: {
       fontSize: 12,
@@ -2672,24 +2679,30 @@ function createStyles(theme: ReturnType<typeof useTheme>['theme']) {
     },
     row: {
       flexDirection: 'row',
-      alignItems: 'center',
+      alignItems: 'flex-start',
       justifyContent: 'space-between',
+      gap: spacing.md,
       marginTop: spacing.sm,
     },
     themeSelector: {
       flexDirection: 'row',
+      flexWrap: 'wrap',
       gap: spacing.sm,
       marginBottom: spacing.sm,
     },
     themeOption: {
-      flex: 1,
+      flexBasis: 76,
+      flexGrow: 1,
       paddingVertical: spacing.sm,
-      paddingHorizontal: spacing.md,
+      paddingHorizontal: spacing.sm,
       borderRadius: radius.lg,
       borderWidth: 1,
       borderColor: theme.colors.border,
       backgroundColor: theme.colors.background,
       alignItems: 'center',
+      justifyContent: 'center',
+      minWidth: 76,
+      minHeight: 44,
     },
     themeOptionActive: {
       borderColor: theme.colors.primary,
@@ -2698,6 +2711,7 @@ function createStyles(theme: ReturnType<typeof useTheme>['theme']) {
     themeOptionText: {
       fontSize: 14,
       color: theme.colors.foreground,
+      textAlign: 'center',
     },
     themeOptionTextActive: {
       color: theme.colors.primaryForeground,

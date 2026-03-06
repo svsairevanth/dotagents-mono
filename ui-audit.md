@@ -1,5 +1,49 @@
 ## UI Audit Log
 
+### 2026-03-06 — Chunk 23: Mobile Settings top-level controls at narrow widths and larger text
+
+- Area selected:
+  - mobile `apps/mobile/src/screens/SettingsScreen.tsx`
+  - adjacent mobile `apps/mobile/src/ui/TTSSettings.tsx`
+- Why this chunk: I checked `ui-audit.md` first and avoided the already-logged desktop/shared chunks. The mobile top-level Settings surface was still unclaimed, and a live pass showed the connection card, theme selector, toggle rows, and TTS voice selector were the highest-value narrow-width/zoom pressure point still untouched.
+- Audit method:
+  - re-read `ui-audit.md` first to keep the work unique
+  - reused `apps/desktop/DEBUGGING.md` plus the repo design guidance/docs (`README.md`, `DEVELOPMENT.md`, `apps/desktop/src/renderer/src/AGENTS.md`) to stay grounded in the repo’s Electron/mobile debugging guidance and cross-platform design expectations
+  - inspected `SettingsScreen.tsx` and `TTSSettings.tsx` directly
+  - ran the mobile app via `pnpm --filter @dotagents/mobile web` and live-checked the initial Settings screen at ~320px / 280px plus higher zoom states to confirm real layout behavior before and after the change
+
+#### Findings
+
+- The mobile Settings screen’s top controls had a few subtle but repeatable responsiveness issues:
+  - the connection card URL was limited to a single line, which made long server URLs feel fragile under narrow widths and zoom
+  - the theme selector used equal-width pills without wrap-aware sizing, so it either got cramped or needed a better compact/wrap balance
+  - the generic label/switch rows were visually tighter than they needed to be once labels wrapped under zoom
+  - the `TTSSettings` voice selector capped itself with a rigid width assumption, which made the selected voice value more likely to clip or crowd the chevron at extreme narrow/zoom combinations
+
+#### Changes made
+
+- Refined the top-level mobile Settings chrome in `SettingsScreen.tsx`:
+  - let the connection card URL wrap to two lines and added explicit `minWidth: 0` / wrap-safe containment for the card title + status row
+  - made the shared row treatment top-align its controls with a consistent gap so long labels wrap more cleanly beside switches
+  - kept labels shrink-safe instead of assuming one-line copy
+  - reworked the theme selector into a wrap-aware control that stays compact at normal 320px/280px widths while still reflowing safely under tighter zoom
+- Hardened the adjacent `TTSSettings.tsx` voice row:
+  - allowed the voice row to wrap when needed
+  - widened/shrank the selector more gracefully with a full-width cap and a smaller minimum width
+  - let the selected voice label use up to two lines so `System Default` and similar values stay readable without pushing the chevron out of bounds
+
+#### Verification
+
+- Targeted mobile typecheck: `pnpm --filter @dotagents/mobile exec tsc --noEmit`
+- Live mobile web re-checks at `http://localhost:8081` after `pnpm --filter @dotagents/mobile web`:
+  - checked the initial Settings screen around `320px` and `280px` widths
+  - re-checked higher zoom states (~`125%` / `150%`) to confirm no page-level horizontal overflow and to verify the TTS selector edge case was resolved
+
+#### Notes
+
+- This chunk stays mobile-scoped: there is no direct desktop equivalent for the top-level mobile Settings screen chrome, so no desktop file changes were needed here.
+- Best next UI audit chunk after this one: the still-unlogged mobile `SettingsScreen` desktop-settings management lists (profiles / memories / agents / loops) are the next strongest narrow-width and large-text pressure point.
+
 ### 2026-03-06 — Chunk 22: Shared predefined prompts menu under compact header/composer widths and zoom
 
 - Area selected:
