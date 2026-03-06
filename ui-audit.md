@@ -1,5 +1,60 @@
 ## UI Audit Log
 
+### 2026-03-06 — Chunk 22: Shared predefined prompts menu under compact header/composer widths and zoom
+
+- Area selected:
+  - shared desktop `apps/desktop/src/renderer/src/components/predefined-prompts-menu.tsx`
+  - cross-checked dense call sites in `apps/desktop/src/renderer/src/pages/sessions.tsx`, `apps/desktop/src/renderer/src/components/text-input-panel.tsx`, `apps/desktop/src/renderer/src/components/overlay-follow-up-input.tsx`, and `apps/desktop/src/renderer/src/components/tile-follow-up-input.tsx`
+- Why this chunk: I checked `ui-audit.md` first and continued with the unlogged follow-up explicitly called out in chunk 21. The shared prompts menu sits in the same dense desktop header/composer chrome as `AgentSelector`, so it was the best next place to improve width/zoom resilience without overlapping prior work.
+- Audit method:
+  - re-read `ui-audit.md` first to avoid duplicating prior chunks
+  - reused `apps/desktop/DEBUGGING.md` plus the repo design guidance/docs (`README.md`, `DEVELOPMENT.md`, `apps/desktop/src/renderer/src/AGENTS.md`) to keep the pass grounded in the Electron-first desktop renderer constraints and the required mobile cross-check
+  - launched the desktop app with `REMOTE_DEBUGGING_PORT=9383 ELECTRON_EXTRA_LAUNCH_ARGS="--inspect=9389" pnpm dev -- -d`; Electron-native inspection again attached to the shell document with an empty `#root`, so the concrete audit relied on the shared component plus its renderer call sites
+  - inspected the shared trigger/dropdown rows directly and traced how compact trigger sizing behaves inside sessions headers and composer action rows
+  - cross-checked `apps/mobile/src/screens/ChatScreen.tsx`; mobile has a composer/send surface, but no equivalent predefined prompt tray, so this chunk remained desktop-only
+
+#### Findings
+
+- The shared prompts menu still assumed a relatively roomy desktop dropdown:
+  - the menu used a fixed `w-64 max-h-80` footprint, which gave long prompt names/content and skill names/descriptions very little room under narrower windows or font zoom
+  - prompt rows only showed a single truncated name line, so users lost almost all prompt-content context before selecting
+  - skill rows also collapsed to a single truncated name line even though `AgentSkill` exposes descriptions that could help differentiate similar entries
+- The prompt-management controls were cramped for a high-zoom polish pass:
+  - edit/delete buttons were only `h-5 w-5`, so they felt cramped beside long labels and were small hit targets compared with nearby desktop chrome
+  - the row layout used `items-center justify-between` without a stronger `min-w-0 items-start` contract, making it more fragile once text wrapped or the actions needed room
+- The trigger itself also needed compact-context polish:
+  - it had no explicit `aria-label`
+  - it ignored its `buttonSize` prop, so the shared icon button stayed visually larger than adjacent `h-6` / `h-7` action buttons inside the text-input and overlay follow-up composers
+
+#### Changes made
+
+- Refined the shared trigger and dropdown in `predefined-prompts-menu.tsx`:
+  - respected `buttonSize` for icon-only footprint presets while still allowing call-site overrides via `className`
+  - added `aria-label="Open predefined prompts"`
+  - widened the menu to a viewport-aware `w-[min(26rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)]` and bounded height with `max-h-[min(32rem,calc(100vh-2rem))]`
+  - softened section headers into compact uppercase labels for quicker scanning
+- Reworked prompt and skill rows for better width/zoom resilience:
+  - switched rows to `min-w-0 items-start gap-2.5`
+  - promoted prompt/skill names to stronger truncated title lines with hover titles
+  - added wrap-safe two-line secondary previews from `prompt.content` and `skill.description`
+  - enlarged edit/delete controls to `h-7 w-7` and added explicit `aria-label`s per prompt
+  - made empty-state copy opt into wrap-safe overflow handling too
+- Tightened the compact composer call sites so the shared trigger fits the surrounding chrome:
+  - `text-input-panel.tsx` now pins the trigger to `h-6 w-6` beside the image button
+  - `overlay-follow-up-input.tsx` now requests `buttonSize="sm"` to match its neighboring `h-7 w-7` controls
+  - `tile-follow-up-input.tsx` was reviewed and already had a compact `h-6 w-6` override, so no additional change was needed there
+- Added `apps/desktop/src/renderer/src/components/predefined-prompts-menu.layout.test.ts` so the trigger/menu preview contract now has focused regression coverage.
+
+#### Verification
+
+- Targeted test: `pnpm --filter @dotagents/desktop exec vitest run src/renderer/src/components/predefined-prompts-menu.layout.test.ts src/renderer/src/components/agent-selector.layout.test.ts`
+- Targeted web typecheck: `pnpm --filter @dotagents/desktop typecheck:web`
+
+#### Notes
+
+- This chunk stays desktop-only/shared-component scoped: mobile `ChatScreen` has a composer, but no equivalent quick-prompt trigger/menu to keep in sync.
+- Best next UI audit chunk after this one: fully audit the compact follow-up composers (`apps/desktop/src/renderer/src/components/overlay-follow-up-input.tsx` and `apps/desktop/src/renderer/src/components/tile-follow-up-input.tsx`) for any remaining trailing-action, attachment-strip, and placeholder/agent-label pressure under narrow widths and zoom.
+
 ### 2026-03-06 — Chunk 21: Shared AgentSelector trigger/menu resilience under narrow widths and zoom
 
 - Area selected:

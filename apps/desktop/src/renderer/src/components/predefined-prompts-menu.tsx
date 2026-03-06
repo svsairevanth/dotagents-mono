@@ -55,6 +55,17 @@ export function PredefinedPromptsMenu({
     queryFn: () => tipcClient.getSkills(),
   })
   const availableSkills = skillsQuery.data ?? []
+  const triggerButtonClassName = buttonSize === "default"
+    ? "h-9 w-9"
+    : buttonSize === "sm"
+      ? "h-7 w-7"
+      : "h-8 w-8"
+  const triggerIconClassName = buttonSize === "sm" ? "h-3.5 w-3.5 shrink-0" : "h-4 w-4 shrink-0"
+  const sectionLabelClassName = "px-2 pb-1 pt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground"
+  const menuContentClassName = "w-[min(26rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] max-h-[min(32rem,calc(100vh-2rem))] overflow-y-auto"
+  const entryClassName = "flex min-w-0 items-start gap-2.5 py-2 cursor-pointer"
+  const entryTextClassName = "min-w-0 flex-1 space-y-0.5"
+  const secondaryTextClassName = "line-clamp-2 text-xs leading-4 text-muted-foreground [overflow-wrap:anywhere]"
 
   const handleSelectPrompt = (prompt: PredefinedPrompt) => {
     onSelectPrompt(prompt.content)
@@ -130,30 +141,34 @@ export function PredefinedPromptsMenu({
             type="button"
             size={actualButtonSize}
             variant="ghost"
-            className={cn("flex-shrink-0", className)}
+            className={cn("shrink-0", triggerButtonClassName, className)}
             disabled={disabled}
             title="Predefined prompts"
+            aria-label="Open predefined prompts"
           >
-            <BookMarked className="h-4 w-4" />
+            <BookMarked className={triggerIconClassName} />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-64 max-h-80 overflow-y-auto">
-          <DropdownMenuLabel>Predefined Prompts</DropdownMenuLabel>
+        <DropdownMenuContent align="end" className={menuContentClassName}>
+          <DropdownMenuLabel className={sectionLabelClassName}>Predefined Prompts</DropdownMenuLabel>
           <DropdownMenuSeparator />
           {prompts.length === 0 ? (
-            <div className="px-2 py-3 text-sm text-muted-foreground text-center">
+            <div className="px-2 py-3 text-center text-sm text-muted-foreground [overflow-wrap:anywhere]">
               No saved prompts yet
             </div>
           ) : (
             prompts.map((prompt) => (
               <DropdownMenuItem
                 key={prompt.id}
-                className="flex items-center justify-between gap-2 cursor-pointer"
+                className={entryClassName}
                 onSelect={() => handleSelectPrompt(prompt)}
               >
-                <span className="truncate flex-1">{prompt.name}</span>
+                <div className={entryTextClassName}>
+                  <div className="truncate font-medium" title={prompt.name}>{prompt.name}</div>
+                  <p className={secondaryTextClassName}>{prompt.content}</p>
+                </div>
                 <div
-                  className="flex items-center gap-1 flex-shrink-0"
+                  className="mt-0.5 flex shrink-0 items-center gap-1 self-start"
                   onPointerDown={(e) => e.stopPropagation()}
                   onClick={(e) => e.stopPropagation()}
                 >
@@ -161,9 +176,10 @@ export function PredefinedPromptsMenu({
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-5 w-5"
+                    className="h-7 w-7"
                     onClick={(e) => handleEdit(e, prompt)}
                     title="Edit"
+                    aria-label={`Edit predefined prompt ${prompt.name}`}
                   >
                     <Pencil className="h-3 w-3" />
                   </Button>
@@ -171,9 +187,10 @@ export function PredefinedPromptsMenu({
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-5 w-5 text-destructive hover:text-destructive"
+                    className="h-7 w-7 text-destructive hover:text-destructive"
                     onClick={(e) => handleDelete(e, prompt)}
                     title="Delete"
+                    aria-label={`Delete predefined prompt ${prompt.name}`}
                   >
                     <Trash2 className="h-3 w-3" />
                   </Button>
@@ -183,24 +200,29 @@ export function PredefinedPromptsMenu({
           )}
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={handleAddNew} className="cursor-pointer">
-            <Plus className="h-4 w-4 mr-2" />
+            <Plus className="mr-2 h-4 w-4 shrink-0" />
             Add new prompt
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuLabel>Skills</DropdownMenuLabel>
+          <DropdownMenuLabel className={sectionLabelClassName}>Skills</DropdownMenuLabel>
           {availableSkills.length === 0 ? (
-            <div className="px-2 py-3 text-sm text-muted-foreground text-center">
+            <div className="px-2 py-3 text-center text-sm text-muted-foreground [overflow-wrap:anywhere]">
               No skills available
             </div>
           ) : (
             availableSkills.map((skill) => (
               <DropdownMenuItem
                 key={skill.id}
-                className="flex items-center gap-2 cursor-pointer"
+                className={entryClassName}
                 onSelect={() => onSelectPrompt(skill.instructions)}
               >
-                <Sparkles className="h-4 w-4 flex-shrink-0" />
-                <span className="truncate">{skill.name}</span>
+                <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                <div className={entryTextClassName}>
+                  <div className="truncate font-medium" title={skill.name}>{skill.name}</div>
+                  <p className={secondaryTextClassName}>
+                    {skill.description || "Use this skill as a reusable prompt."}
+                  </p>
+                </div>
               </DropdownMenuItem>
             ))
           )}
