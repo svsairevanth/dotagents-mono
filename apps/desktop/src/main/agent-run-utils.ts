@@ -1,3 +1,5 @@
+import type { SessionProfileSnapshot } from "../shared/types"
+
 export const DEFAULT_UNLIMITED_GUARDRAIL_ITERATION_BUDGET = 60
 export const AGENT_STOP_NOTE =
   "(Agent mode was stopped by emergency kill switch)"
@@ -10,6 +12,13 @@ export interface AgentIterationLimits {
 interface ConversationMessageLike {
   role: string
   content?: string | null
+}
+
+type ProfileContextSource = {
+  profileName?: string
+  displayName?: string
+  guidelines?: string
+  systemPrompt?: string
 }
 
 export function resolveAgentIterationLimits(
@@ -67,6 +76,27 @@ export function getLatestAssistantMessageContent(
   }
 
   return undefined
+}
+
+export function buildProfileContext(
+  profile: ProfileContextSource | SessionProfileSnapshot | undefined,
+  existingContext?: string,
+): string | undefined {
+  if (!profile && !existingContext) return undefined
+
+  const parts: string[] = []
+  const profileName = !profile
+    ? undefined
+    : "displayName" in profile
+      ? profile.displayName
+      : profile.profileName
+
+  if (existingContext) parts.push(existingContext)
+  if (profileName) parts.push(`[Acting as: ${profileName}]`)
+  if (profile?.systemPrompt) parts.push(`System Prompt: ${profile.systemPrompt}`)
+  if (profile?.guidelines) parts.push(`Guidelines: ${profile.guidelines}`)
+
+  return parts.length > 0 ? parts.join("\n\n") : undefined
 }
 
 export function getPreferredDelegationOutput(

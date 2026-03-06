@@ -22,6 +22,7 @@ import { skillsService } from "./skills-service"
 import { memoryService } from "./memory-service"
 import { agentProfileService, createSessionSnapshotFromProfile, toolConfigToMcpServerConfig } from "./agent-profile-service"
 import { getRendererHandlers } from "@egoist/tipc/main"
+import { getAcpSessionForClientSessionToken, getAppSessionForAcpSession } from "./acp-session-state"
 import { WINDOWS } from "./window"
 import type { RendererHandlers } from "./renderer-handlers"
 
@@ -76,6 +77,21 @@ function notifyConversationHistoryChanged(): void {
       sendNotification()
     }
   }
+}
+
+function getProfileSnapshotForAcpMcpRequest(
+  acpSessionToken: string | undefined,
+): SessionProfileSnapshot | undefined {
+  if (!acpSessionToken) return undefined
+
+  const acpSessionId = getAcpSessionForClientSessionToken(acpSessionToken)
+  if (!acpSessionId) return undefined
+
+  const appSessionId = getAppSessionForAcpSession(acpSessionId)
+  if (!appSessionId) return undefined
+
+  return agentSessionStateManager.getSessionProfileSnapshot(appSessionId)
+    ?? agentSessionTracker.getSessionProfileSnapshot(appSessionId)
 }
 
 // Exact reserved names that collide with internal storage files.
@@ -630,6 +646,7 @@ async function runAgent(options: RunAgentOptions): Promise<{
           sessionId,
           runId,
           onProgress,
+          profileSnapshot,
         })
 
         if (result.response) {
@@ -1938,32 +1955,37 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
   // MCP Protocol Endpoints - Expose DotAgents builtin tools to external agents
   // These endpoints implement a simplified MCP-over-HTTP protocol
 
-  // POST /mcp/tools/list - List all available builtin tools
-  fastify.post("/mcp/tools/list", async (_req, reply) => {
+  const listInjectedMcpTools = async (
+    acpSessionToken: string | undefined,
+    reply: any,
+  ) => {
     try {
       const { isBuiltinTool } = await import("./builtin-tools")
+      const profileSnapshot = getProfileSnapshotForAcpMcpRequest(acpSessionToken)
 
       // Convert to MCP format
-      const tools = mcpService
-        .getAvailableTools()
+      const tools = (profileSnapshot?.mcpServerConfig
+        ? mcpService.getAvailableToolsForProfile(profileSnapshot.mcpServerConfig)
+        : mcpService.getAvailableTools())
         .filter((tool) => isBuiltinTool(tool.name))
         .map((tool) => ({
-        name: tool.name,
-        description: tool.description,
-        inputSchema: tool.inputSchema,
-      }))
+          name: tool.name,
+          description: tool.description,
+          inputSchema: tool.inputSchema,
+        }))
 
-      return reply.send({
-        tools,
-      })
+      return reply.send({ tools })
     } catch (error: any) {
       diagnosticsService.logError("remote-server", "MCP tools/list error", error)
       return reply.code(500).send({ error: error?.message || "Failed to list tools" })
     }
-  })
+  }
 
-  // POST /mcp/tools/call - Execute a builtin tool
-  fastify.post("/mcp/tools/call", async (req, reply) => {
+  const callInjectedMcpTool = async (
+    req: any,
+    reply: any,
+    acpSessionToken: string | undefined,
+  ) => {
     try {
       const body = req.body as any
       const { name, arguments: args } = body
@@ -1974,19 +1996,30 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
 
       const { isBuiltinTool } = await import("./builtin-tools")
 
-      // Validate that this is a builtin tool
       if (!isBuiltinTool(name)) {
         return reply.code(400).send({ error: `Unknown builtin tool: ${name}` })
       }
 
-      // Execute the tool (go through MCPService so allowlist/disabled checks are enforced)
-      const result = await mcpService.executeToolCall({ name, arguments: args || {} } as any, undefined, false)
+      const profileSnapshot = getProfileSnapshotForAcpMcpRequest(acpSessionToken)
+      const appSessionId = acpSessionToken
+        ? (() => {
+          const acpSessionId = getAcpSessionForClientSessionToken(acpSessionToken)
+          return acpSessionId ? getAppSessionForAcpSession(acpSessionId) : undefined
+        })()
+        : undefined
+
+      const result = await mcpService.executeToolCall(
+        { name, arguments: args || {} } as any,
+        undefined,
+        false,
+        appSessionId,
+        profileSnapshot?.mcpServerConfig,
+      )
 
       if (!result) {
         return reply.code(500).send({ error: "Tool execution returned null" })
       }
 
-      // Return in MCP format
       return reply.send({
         content: result.content,
         isError: result.isError,
@@ -1998,6 +2031,28 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
         isError: true,
       })
     }
+  }
+
+  // POST /mcp/tools/list - List all available builtin tools
+  fastify.post("/mcp/tools/list", async (req, reply) => {
+    const query = req.query as { acpSessionToken?: string } | undefined
+    return listInjectedMcpTools(query?.acpSessionToken, reply)
+  })
+
+  fastify.post("/mcp/:acpSessionToken/tools/list", async (req, reply) => {
+    const params = req.params as { acpSessionToken?: string }
+    return listInjectedMcpTools(params?.acpSessionToken, reply)
+  })
+
+  // POST /mcp/tools/call - Execute a builtin tool
+  fastify.post("/mcp/tools/call", async (req, reply) => {
+    const query = req.query as { acpSessionToken?: string } | undefined
+    return callInjectedMcpTool(req, reply, query?.acpSessionToken)
+  })
+
+  fastify.post("/mcp/:acpSessionToken/tools/call", async (req, reply) => {
+    const params = req.params as { acpSessionToken?: string }
+    return callInjectedMcpTool(req, reply, params?.acpSessionToken)
   })
 
   // ============================================

@@ -13,6 +13,12 @@ interface ACPSessionBadgeProps {
     agentVersion?: string
     currentModel?: string
     currentMode?: string
+    configOptions?: Array<{
+      id: string
+      name: string
+      currentValue: string
+      options: Array<{ value: string; name: string }>
+    }>
   }
   className?: string
 }
@@ -24,7 +30,7 @@ interface ACPSessionBadgeProps {
  * Visual example: `[Claude Code v0.12.6] [Sonnet 4.5]`
  */
 export function ACPSessionBadge({ info, className }: ACPSessionBadgeProps) {
-  const { agentTitle, agentVersion, currentModel, currentMode } = info
+  const { agentTitle, agentVersion, currentModel, currentMode, configOptions } = info
 
   // Build agent label (e.g., "Claude Code v0.12.6")
   const agentLabel = agentTitle
@@ -47,6 +53,11 @@ export function ACPSessionBadge({ info, className }: ACPSessionBadgeProps) {
   if (agentVersion) tooltipLines.push(`Version: ${agentVersion}`)
   if (currentModel) tooltipLines.push(`Model: ${currentModel}`)
   if (currentMode) tooltipLines.push(`Mode: ${currentMode}`)
+  for (const option of configOptions || []) {
+    if (option.id === "model" || option.id === "mode") continue
+    const label = option.options.find((value) => value.value === option.currentValue)?.name || option.currentValue
+    tooltipLines.push(`${option.name}: ${label}`)
+  }
 
   return (
     <TooltipProvider delayDuration={0}>

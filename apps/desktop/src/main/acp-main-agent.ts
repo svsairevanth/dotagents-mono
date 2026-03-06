@@ -14,9 +14,10 @@ import {
   setAcpToSpeakMcpSessionMapping,
 } from "./acp-session-state"
 import { emitAgentProgress } from "./emit-agent-progress"
-import { AgentProgressUpdate, AgentProgressStep } from "../shared/types"
+import { AgentProgressUpdate, AgentProgressStep, SessionProfileSnapshot, ACPConfigOption } from "../shared/types"
 import { logApp } from "./debug"
 import { conversationService } from "./conversation-service"
+import { buildProfileContext } from "./agent-run-utils"
 
 export interface ACPMainAgentOptions {
   /** Name of the ACP agent to use */
@@ -31,6 +32,8 @@ export interface ACPMainAgentOptions {
   runId: number
   /** Callback for progress updates */
   onProgress?: (update: AgentProgressUpdate) => void
+  /** Profile snapshot used for ACP context parity + tool filtering parity */
+  profileSnapshot?: SessionProfileSnapshot
 }
 
 export interface ACPMainAgentResult {
@@ -46,6 +49,64 @@ export interface ACPMainAgentResult {
   error?: string
 }
 
+function getConfigOptionByCategory(
+  configOptions: ACPConfigOption[] | undefined,
+  category: string,
+): ACPConfigOption | undefined {
+  return configOptions?.find((option) => option.category === category)
+}
+
+function getCurrentConfigOptionLabel(option: ACPConfigOption | undefined): string | undefined {
+  if (!option) return undefined
+  return option.options.find((value) => value.value === option.currentValue)?.name || option.currentValue
+}
+
+function getConfigOptionChoices(option: ACPConfigOption | undefined): Array<{ id: string; name: string; description?: string }> | undefined {
+  if (!option) return undefined
+  return option.options.map((value) => ({
+    id: value.value,
+    name: value.name,
+    description: value.description,
+  }))
+}
+
+function summarizeAcpContentBlock(block: ACPContentBlock): { title: string; description?: string; type: AgentProgressStep["type"] } | undefined {
+  if (block.type === "tool_result") {
+    const description = typeof block.result === "string"
+      ? block.result
+      : block.result
+        ? JSON.stringify(block.result)
+        : undefined
+    return { title: "Tool result", description: description?.slice(0, 200), type: "tool_result" }
+  }
+
+  if (block.type === "image") {
+    return { title: "Image output", description: block.mimeType || "image", type: "tool_result" }
+  }
+
+  if (block.type === "audio") {
+    return { title: "Audio output", description: block.mimeType || "audio", type: "tool_result" }
+  }
+
+  if (block.type === "resource") {
+    return {
+      title: "Embedded resource",
+      description: block.resource?.uri || block.uri || block.mimeType,
+      type: "tool_result",
+    }
+  }
+
+  if (block.type === "resource_link") {
+    return {
+      title: block.title || block.name || "Resource link",
+      description: block.uri || block.description,
+      type: "tool_result",
+    }
+  }
+
+  return undefined
+}
+
 /**
  * Process a transcript using an ACP agent as the main agent.
  * This bypasses the normal LLM API call and routes directly to the ACP agent.
@@ -54,7 +115,7 @@ export async function processTranscriptWithACPAgent(
   transcript: string,
   options: ACPMainAgentOptions
 ): Promise<ACPMainAgentResult> {
-  const { agentName, conversationId, forceNewSession, sessionId, runId, onProgress } = options
+  const { agentName, conversationId, forceNewSession, sessionId, runId, onProgress, profileSnapshot } = options
 
   logApp(`[ACP Main] Processing transcript with agent ${agentName} for conversation ${conversationId}`)
 
@@ -94,18 +155,23 @@ export async function processTranscriptWithACPAgent(
       agentName: agentInstance.agentInfo?.name,
       agentTitle: agentInstance.agentInfo?.title,
       agentVersion: agentInstance.agentInfo?.version,
-      currentModel: agentInstance.sessionInfo?.models?.currentModelId,
-      currentMode: agentInstance.sessionInfo?.modes?.currentModeId,
-      availableModels: agentInstance.sessionInfo?.models?.availableModels?.map(m => ({
+      currentModel: getCurrentConfigOptionLabel(getConfigOptionByCategory(agentInstance.sessionInfo?.configOptions, "model"))
+        || agentInstance.sessionInfo?.models?.currentModelId,
+      currentMode: getCurrentConfigOptionLabel(getConfigOptionByCategory(agentInstance.sessionInfo?.configOptions, "mode"))
+        || agentInstance.sessionInfo?.modes?.currentModeId,
+      availableModels: getConfigOptionChoices(getConfigOptionByCategory(agentInstance.sessionInfo?.configOptions, "model"))
+        || agentInstance.sessionInfo?.models?.availableModels?.map(m => ({
         id: m.modelId,
         name: m.name,
         description: m.description,
       })),
-      availableModes: agentInstance.sessionInfo?.modes?.availableModes?.map(m => ({
+      availableModes: getConfigOptionChoices(getConfigOptionByCategory(agentInstance.sessionInfo?.configOptions, "mode"))
+        || agentInstance.sessionInfo?.modes?.availableModes?.map(m => ({
         id: m.id,
         name: m.name,
         description: m.description,
       })),
+      configOptions: agentInstance.sessionInfo?.configOptions,
     }
   }
 
@@ -229,6 +295,18 @@ export async function processTranscriptWithACPAgent(
               step.subagentId = event.toolResponseStats.agentId
             }
             steps.push(step)
+          } else {
+            const summary = summarizeAcpContentBlock(block)
+            if (summary) {
+              steps.push({
+                id: generateStepId("acp-content"),
+                type: summary.type,
+                title: summary.title,
+                description: summary.description,
+                status: event.isComplete ? "completed" : "in_progress",
+                timestamp: Date.now(),
+              })
+            }
           }
         }
       }
@@ -294,7 +372,8 @@ export async function processTranscriptWithACPAgent(
 
     try {
       // Send the prompt
-      const result = await acpService.sendPrompt(agentName, acpSessionId, transcript)
+      const promptContext = buildProfileContext(profileSnapshot)
+      const result = await acpService.sendPrompt(agentName, acpSessionId, transcript, promptContext)
 
       // Use accumulated text if result.response is empty but we received streaming content
       const finalResponse = result.response || accumulatedText || undefined

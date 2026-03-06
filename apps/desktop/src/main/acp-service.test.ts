@@ -737,6 +737,50 @@ describe("ACP Service", () => {
     })
   })
 
+  describe("ACP Session Config Options", () => {
+    it("stores config options from config_options_update notifications", async () => {
+      const { acpService } = await import("./acp-service")
+      await acpService.spawnAgent("test-agent")
+
+      const sessionUpdatePromise = new Promise<{ sessionId: string }>((resolve) => {
+        acpService.once("sessionUpdate", (event) => resolve(event))
+      })
+
+      acpService.emit("notification", {
+        agentName: "test-agent",
+        method: "session/update",
+        params: {
+          sessionId: "session-config-options",
+          update: {
+            sessionUpdate: "config_options_update",
+            configOptions: [
+              {
+                id: "mode",
+                name: "Session Mode",
+                category: "mode",
+                type: "select",
+                currentValue: "code",
+                options: [
+                  { value: "ask", name: "Ask" },
+                  { value: "code", name: "Code" },
+                ],
+              },
+            ],
+          },
+        },
+      })
+
+      const event = await sessionUpdatePromise
+      expect(event.sessionId).toBe("session-config-options")
+      expect(acpService.getAgentInstance("test-agent")?.sessionInfo?.configOptions).toEqual([
+        expect.objectContaining({
+          id: "mode",
+          currentValue: "code",
+        }),
+      ])
+    })
+  })
+
   describe("Tool Call Status Types", () => {
     it("should export tool call status types", async () => {
       const acpModule = await import("./acp-service")

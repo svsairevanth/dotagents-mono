@@ -256,7 +256,13 @@ async function processWithAgentMode(
 
     // Start tracking this agent session (or reuse existing one)
     const sessionId = existingSessionId || agentSessionTracker.startSession(conversationId, conversationTitle, startSnoozed)
-    const runId = agentSessionStateManager.startSessionRun(sessionId)
+    const profileSnapshot = agentSessionStateManager.getSessionProfileSnapshot(sessionId)
+      ?? agentSessionTracker.getSessionProfileSnapshot(sessionId)
+      ?? (() => {
+        const currentProfile = agentProfileService.getCurrentProfile()
+        return currentProfile ? createSessionSnapshotFromProfile(currentProfile) : undefined
+      })()
+    const runId = agentSessionStateManager.startSessionRun(sessionId, profileSnapshot)
 
     try {
       // Process with ACP agent
@@ -265,6 +271,7 @@ async function processWithAgentMode(
         conversationId: conversationId || sessionId,
         sessionId,
         runId,
+        profileSnapshot,
       })
 
       // Save assistant response to conversation history if we have a conversation ID

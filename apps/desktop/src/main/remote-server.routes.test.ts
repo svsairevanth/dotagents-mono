@@ -41,4 +41,14 @@ describe("remote-server route registration", () => {
     expect(source).toContain('cfg.mainAgentMode === "acp" && cfg.mainAgentName')
     expect(source).toContain("processTranscriptWithACPAgent")
   })
+
+  it("applies session-aware ACP MCP filtering for injected tool routes", () => {
+    const source = getRemoteServerSource()
+
+    expect(source).toContain("getProfileSnapshotForAcpMcpRequest")
+    expect(source).toContain('fastify.post("/mcp/:acpSessionToken/tools/list"')
+    expect(source).toContain('fastify.post("/mcp/:acpSessionToken/tools/call"')
+    expect(source).toContain("mcpService.getAvailableToolsForProfile(profileSnapshot.mcpServerConfig)")
+    expect(source).toContain("profileSnapshot?.mcpServerConfig")
+  })
 })
