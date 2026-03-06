@@ -2538,9 +2538,24 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
       // Don't show assistant message from thinking step when streaming is active
       // to avoid duplicate content (streaming bubble already shows the text)
       const isStreaming = progress.streamingContent?.isStreaming
+      const latestAssistantHistoryMessage = [...messages]
+        .reverse()
+        .find(
+          (message) =>
+            message.role === "assistant" &&
+            !message.toolCalls?.length &&
+            !message.toolResults?.length &&
+            message.content.trim().length > 0,
+        )
+      const historyAlreadyContainsThinking = !!(
+        currentThinkingStep.llmContent &&
+        latestAssistantHistoryMessage?.content &&
+        currentThinkingStep.llmContent.endsWith(latestAssistantHistoryMessage.content)
+      )
 
       if (
         !isStreaming &&
+        !historyAlreadyContainsThinking &&
         currentThinkingStep.llmContent &&
         currentThinkingStep.llmContent.trim().length > 0
       ) {
@@ -2756,11 +2771,27 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
 
   // Add streaming content to display items if present and actively streaming
   if (progress.streamingContent && progress.streamingContent.isStreaming && progress.streamingContent.text) {
-    displayItems.push({
-      kind: "streaming",
-      id: "streaming-content",
-      data: progress.streamingContent,
-    })
+    const latestAssistantText = [...messages]
+      .reverse()
+      .find(
+        (message) =>
+          message.role === "assistant" &&
+          !message.toolCalls?.length &&
+          !message.toolResults?.length &&
+          message.content.trim().length > 0,
+      )
+    const historyAlreadyContainsStream = !!(
+      latestAssistantText?.content &&
+      progress.streamingContent.text.endsWith(latestAssistantText.content)
+    )
+
+    if (!historyAlreadyContainsStream) {
+      displayItems.push({
+        kind: "streaming",
+        id: "streaming-content",
+        data: progress.streamingContent,
+      })
+    }
   }
 
   // Add mid-turn user response to display items if present
