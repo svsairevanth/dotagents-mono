@@ -18,6 +18,14 @@ import type {
   AgentProfileConnectionType,
   AgentProfileRole,
 } from "@shared/types"
+import {
+  buildHubBundleArtifactUrl,
+  buildHubBundleInstallUrl,
+  slugifyHubCatalogId,
+  type HubCatalogAuthor,
+  type HubCatalogCompatibility,
+  type HubPublishPayload,
+} from "@dotagents/shared"
 import { getAgentsLayerPaths, type AgentsLayerPaths } from "./agents-files/modular-config"
 import { loadAgentProfilesLayer, writeAgentsProfileFiles } from "./agents-files/agent-profiles"
 import { loadAgentsSkillsLayer, writeAgentsSkillFile, skillIdToDirPath } from "./agents-files/skills"
@@ -30,16 +38,9 @@ import { logApp } from "./debug"
 // Types
 // ============================================================================
 
-export interface BundlePublicMetadataAuthor {
-  displayName: string
-  handle?: string
-  url?: string
-}
+export type BundlePublicMetadataAuthor = HubCatalogAuthor
 
-export interface BundlePublicMetadataCompatibility {
-  minDesktopVersion?: string
-  notes?: string[]
-}
+export type BundlePublicMetadataCompatibility = HubCatalogCompatibility
 
 export interface BundlePublicMetadata {
   summary: string
@@ -157,6 +158,12 @@ export interface ExportBundleOptions {
   publicMetadata?: BundlePublicMetadata
   components?: BundleComponentSelection
   skillIds?: string[]
+}
+
+export interface GeneratePublishPayloadOptions extends ExportBundleOptions {
+  publicMetadata: BundlePublicMetadata
+  catalogId?: string
+  artifactUrl?: string
 }
 
 // ============================================================================
@@ -322,6 +329,33 @@ function sanitizeBundlePublicMetadata(
         }
       : {}),
   }
+}
+
+function normalizePublishCatalogId(catalogId: string | undefined, bundleName: string): string {
+  const normalized = normalizeOptionalString(catalogId)
+  return slugifyHubCatalogId(normalized || bundleName)
+}
+
+function normalizePublishArtifactUrl(artifactUrl: string | undefined, catalogId: string): string {
+  const normalized = normalizeOptionalString(artifactUrl)
+  if (!normalized) {
+    return buildHubBundleArtifactUrl(catalogId)
+  }
+
+  try {
+    const parsedUrl = new URL(normalized)
+    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+      throw new Error("unsupported protocol")
+    }
+    return parsedUrl.toString()
+  } catch {
+    throw new Error("Publish payload requires artifactUrl to be a valid http(s) URL")
+  }
+}
+
+function buildPublishArtifactFileName(bundleName: string, catalogId: string): string {
+  const safeName = bundleName.replace(/[^a-zA-Z0-9-_ ]/g, "").trim()
+  return `${safeName || catalogId}.dotagents`
 }
 
 function isSecretKey(key: string): boolean {
@@ -1545,28 +1579,6 @@ export async function importBundleFromDialog(
 // Publish Payload Generation
 // ============================================================================
 
-export interface HubPublishPayload {
-  /** Catalog metadata suitable for Hub listing */
-  catalogItem: {
-    name: string
-    summary: string
-    description?: string
-    author: BundlePublicMetadataAuthor
-    tags: string[]
-    bundleVersion: 1
-    publishedAt: string
-    updatedAt: string
-    componentCounts: BundleManifest["components"]
-    artifact: {
-      fileName: string
-      sizeBytes: number
-    }
-    compatibility?: BundlePublicMetadataCompatibility
-  }
-  /** The raw bundle JSON string, ready to save as .dotagents file */
-  bundleJson: string
-}
-
 /**
  * Generate a publish-ready payload from the local .agents layer(s).
  *
@@ -1578,7 +1590,7 @@ export interface HubPublishPayload {
  */
 export async function generatePublishPayload(
   agentsDirs: string[],
-  options: ExportBundleOptions & { publicMetadata: BundlePublicMetadata }
+  options: GeneratePublishPayloadOptions
 ): Promise<HubPublishPayload> {
   if (!options.publicMetadata?.summary) {
     throw new Error("Publish payload requires a summary in publicMetadata")
@@ -1587,8 +1599,14 @@ export async function generatePublishPayload(
     throw new Error("Publish payload requires author.displayName in publicMetadata")
   }
 
-  const publishOptions = {
-    ...options,
+  const {
+    catalogId: requestedCatalogId,
+    artifactUrl: requestedArtifactUrl,
+    ...exportOptions
+  } = options
+
+  const publishOptions: ExportBundleOptions = {
+    ...exportOptions,
     components: {
       ...DEFAULT_PUBLISH_COMPONENTS,
       ...options.components,
@@ -1601,27 +1619,33 @@ export async function generatePublishPayload(
 
   const bundleJson = JSON.stringify(bundle, null, 2)
   const now = new Date().toISOString()
-  const safeName = (bundle.manifest.name || "bundle").replace(/[^a-zA-Z0-9-_ ]/g, "")
+  const catalogId = normalizePublishCatalogId(requestedCatalogId, bundle.manifest.name)
+  const artifactUrl = normalizePublishArtifactUrl(requestedArtifactUrl, catalogId)
+  const artifactFileName = buildPublishArtifactFileName(bundle.manifest.name, catalogId)
+  const publicMetadata = bundle.manifest.publicMetadata!
 
   return {
     catalogItem: {
+      id: catalogId,
       name: bundle.manifest.name,
-      summary: bundle.manifest.publicMetadata!.summary,
+      summary: publicMetadata.summary,
       description: bundle.manifest.description,
-      author: bundle.manifest.publicMetadata!.author,
-      tags: bundle.manifest.publicMetadata!.tags,
+      author: publicMetadata.author,
+      tags: publicMetadata.tags,
       bundleVersion: 1,
       publishedAt: now,
       updatedAt: now,
       componentCounts: bundle.manifest.components,
       artifact: {
-        fileName: `${safeName}.dotagents`,
+        url: artifactUrl,
+        fileName: artifactFileName,
         sizeBytes: Buffer.byteLength(bundleJson, "utf-8"),
       },
-      ...(bundle.manifest.publicMetadata!.compatibility
-        ? { compatibility: bundle.manifest.publicMetadata!.compatibility }
+      ...(publicMetadata.compatibility
+        ? { compatibility: publicMetadata.compatibility }
         : {}),
     },
     bundleJson,
+    installUrl: buildHubBundleInstallUrl(artifactUrl),
   }
 }

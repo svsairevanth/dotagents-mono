@@ -16,8 +16,8 @@ import {
   generatePublishPayload,
   type DotAgentsBundle,
   type ImportConflictStrategy,
-  type HubPublishPayload,
 } from "./bundle-service"
+import type { HubPublishPayload } from "@dotagents/shared"
 import { getAgentsLayerPaths } from "./agents-files/modular-config"
 import { loadAgentProfilesLayer, writeAgentsProfileFiles } from "./agents-files/agent-profiles"
 import { loadAgentsSkillsLayer, writeAgentsSkillFile } from "./agents-files/skills"
@@ -1667,14 +1667,21 @@ describe("generatePublishPayload", () => {
     expect(result.catalogItem.author.handle).toBe("@test")
     expect(result.catalogItem.tags).toEqual(["test", "demo"])
     expect(result.catalogItem.bundleVersion).toBe(1)
+    expect(result.catalogItem.id).toBe("test-publish-bundle")
     expect(result.catalogItem.publishedAt).toBeTruthy()
     expect(result.catalogItem.updatedAt).toBeTruthy()
     expect(result.catalogItem.componentCounts.agentProfiles).toBe(1)
     expect(result.catalogItem.componentCounts.skills).toBe(1)
     expect(result.catalogItem.componentCounts.repeatTasks).toBe(0)
     expect(result.catalogItem.componentCounts.memories).toBe(0)
+    expect(result.catalogItem.artifact.url).toBe(
+      "https://hub.dotagentsprotocol.com/bundles/test-publish-bundle.dotagents",
+    )
     expect(result.catalogItem.artifact.fileName).toBe("Test Publish Bundle.dotagents")
     expect(result.catalogItem.artifact.sizeBytes).toBeGreaterThan(0)
+    expect(result.installUrl).toBe(
+      "dotagents://install?bundle=https%3A%2F%2Fhub.dotagentsprotocol.com%2Fbundles%2Ftest-publish-bundle.dotagents",
+    )
 
     // Bundle JSON is valid
     const bundle = JSON.parse(result.bundleJson)
@@ -1708,6 +1715,27 @@ describe("generatePublishPayload", () => {
     expect(bundle.repeatTasks[0].id).toBe("task-pub-1")
     expect(bundle.memories).toHaveLength(1)
     expect(bundle.memories[0].id).toBe("memory-pub-1")
+  })
+
+  it("accepts explicit catalog ids and artifact urls for Hub catalog alignment", async () => {
+    const result = await generatePublishPayload([tempDir], {
+      name: "Aligned Bundle",
+      catalogId: "featured-aligned-bundle",
+      artifactUrl: "https://cdn.dotagentsprotocol.com/bundles/featured-aligned-bundle.dotagents",
+      publicMetadata: {
+        summary: "Aligned for the Hub catalog",
+        author: { displayName: "Author" },
+        tags: ["featured"],
+      },
+    })
+
+    expect(result.catalogItem.id).toBe("featured-aligned-bundle")
+    expect(result.catalogItem.artifact.url).toBe(
+      "https://cdn.dotagentsprotocol.com/bundles/featured-aligned-bundle.dotagents",
+    )
+    expect(result.installUrl).toBe(
+      "dotagents://install?bundle=https%3A%2F%2Fcdn.dotagentsprotocol.com%2Fbundles%2Ffeatured-aligned-bundle.dotagents",
+    )
   })
 
   it("throws when summary is missing", async () => {
@@ -1778,5 +1806,19 @@ describe("generatePublishPayload", () => {
     expect(result.catalogItem.author.displayName).toBe("Just Name")
     expect(result.catalogItem.author.handle).toBeUndefined()
     expect(result.catalogItem.author.url).toBeUndefined()
+  })
+
+  it("rejects non-http artifact urls", async () => {
+    await expect(
+      generatePublishPayload([tempDir], {
+        name: "Bad Url",
+        artifactUrl: "file:///tmp/bad.dotagents",
+        publicMetadata: {
+          summary: "Has a bad artifact URL",
+          author: { displayName: "Author" },
+          tags: [],
+        },
+      }),
+    ).rejects.toThrow(/artifactUrl/)
   })
 })

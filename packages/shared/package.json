@@ -60,6 +60,11 @@
       "types": "./dist/api-types.d.ts",
       "import": "./dist/api-types.mjs",
       "require": "./dist/api-types.js"
+    },
+    "./hub": {
+      "types": "./dist/hub.d.ts",
+      "import": "./dist/hub.mjs",
+      "require": "./dist/hub.js"
     }
   },
   "scripts": {

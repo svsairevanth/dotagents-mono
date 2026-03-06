@@ -21,6 +21,10 @@
     "strict": false,
     "noImplicitAny": false,
     "skipLibCheck": true,
+    "preserveSymlinks": true,
+    "typeRoots": [
+      "./node_modules/@types"
+    ],
     "baseUrl": ".",
     "paths": {
       "@renderer/*": [
@@ -31,6 +35,18 @@
       ],
       "@shared/*": [
         "src/shared/*"
+      ],
+      "react": [
+        "./node_modules/react"
+      ],
+      "react-dom": [
+        "./node_modules/react-dom"
+      ],
+      "react/jsx-runtime": [
+        "./node_modules/react/jsx-runtime"
+      ],
+      "react/jsx-dev-runtime": [
+        "./node_modules/react/jsx-dev-runtime"
       ],
     }
   }

@@ -4468,6 +4468,8 @@ export const router = {
   generatePublishPayload: t.procedure
     .input<{
       name?: string
+      catalogId?: string
+      artifactUrl?: string
       description?: string
       publicMetadata: {
         summary: string
@@ -4500,6 +4502,8 @@ export const router = {
         : [globalAgentsFolder]
       return generatePublishPayload(dirs, {
         name: input.name,
+        catalogId: input.catalogId,
+        artifactUrl: input.artifactUrl,
         description: input.description,
         publicMetadata: input.publicMetadata,
         components: input.components,

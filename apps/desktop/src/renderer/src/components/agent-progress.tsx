@@ -419,6 +419,8 @@ const CompactMessage: React.FC<{
           : "border-l-2 border-gray-400 bg-gray-400/5"
       case "tool":
         return "border-l-2 border-orange-400 bg-orange-400/5"
+      default:
+        return "border-l-2 border-gray-400 bg-gray-400/5"
     }
   }
 

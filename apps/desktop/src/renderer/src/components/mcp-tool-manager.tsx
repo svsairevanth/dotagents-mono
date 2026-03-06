@@ -84,7 +84,7 @@ export function MCPToolManager({ onToolToggle }: MCPToolManagerProps) {
   )
 
   // Filter tools based on search and server selection
-  const filteredToolsByServer = Object.entries(toolsByServer).reduce(
+  const filteredToolsByServer = (Object.entries(toolsByServer) as Array<[string, DetailedTool[]]>).reduce<Record<string, DetailedTool[]>>(
     (acc, [serverName, serverTools]) => {
       if (selectedServer !== "all" && serverName !== selectedServer) {
         return acc
@@ -104,7 +104,7 @@ export function MCPToolManager({ onToolToggle }: MCPToolManagerProps) {
 
       return acc
     },
-    {} as Record<string, DetailedTool[]>,
+    {},
   )
 
   const handleToolToggle = async (toolName: string, enabled: boolean) => {

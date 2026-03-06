@@ -13,6 +13,7 @@ export default defineConfig({
     'shell-parse': 'src/shell-parse.ts',
     'connection-recovery': 'src/connection-recovery.ts',
     'api-types': 'src/api-types.ts',
+    hub: 'src/hub.ts',
   },
   format: ['cjs', 'esm'],
   dts: true,

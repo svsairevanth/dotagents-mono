@@ -907,7 +907,7 @@ export function SettingsAgents() {
                   {Object.entries(editing.properties).map(([key, val]) => (
                     <div key={key} className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-card">
                       <code className="text-sm font-mono bg-muted px-1.5 py-0.5 rounded">{key}</code>
-                      <span className="text-sm flex-1 truncate">{val}</span>
+                      <span className="text-sm flex-1 truncate">{String(val)}</span>
                       <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => removeProperty(key)}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>

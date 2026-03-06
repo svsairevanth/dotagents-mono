@@ -1033,8 +1033,8 @@ export function MCPConfigManager({
   useEffect(() => {
     // Check if collapsedServers prop actually changed
     const prevCollapsed = prevCollapsedServersRef.current
-    const prevSet = new Set(prevCollapsed ?? [])
-    const currentSet = new Set(collapsedServers ?? [])
+    const prevSet = new Set<string>(prevCollapsed ?? [])
+    const currentSet = new Set<string>(collapsedServers ?? [])
     // Also detect undefined → array transitions
     const wasUndefined = prevCollapsed === undefined
     const isUndefined = collapsedServers === undefined
@@ -1054,8 +1054,8 @@ export function MCPConfigManager({
       } else {
         // [] = explicitly "no servers collapsed" (all expanded)
         // [...names] = specific servers are collapsed
-        const collapsedSet = new Set(collapsedServers)
-        const newExpanded = new Set([...currentServerNames].filter(name => !collapsedSet.has(name)))
+        const collapsedSet = new Set<string>(collapsedServers)
+        const newExpanded = new Set<string>([...currentServerNames].filter(name => !collapsedSet.has(name)))
         setExpandedServers(newExpanded)
       }
     }
@@ -1142,26 +1142,26 @@ export function MCPConfigManager({
   // Also handles new servers appearing after initialization - they default to expanded
   useEffect(() => {
     if (tools.length > 0) {
-      const allToolServerNames = [...new Set(tools.map(t => t.serverName))]
-      const collapsedSet = new Set(collapsedToolServers ?? [])
+      const allToolServerNames = [...new Set<string>(tools.map(t => t.serverName))]
+      const collapsedSet = new Set<string>(collapsedToolServers ?? [])
 
       if (!toolServersInitialized) {
         // Initial setup: all servers expanded by default, except those persisted as collapsed
-        const expanded = new Set(allToolServerNames.filter(name => !collapsedSet.has(name)))
+        const expanded = new Set<string>(allToolServerNames.filter(name => !collapsedSet.has(name)))
         setExpandedToolServers(expanded)
-        setKnownToolServers(new Set(allToolServerNames))
+        setKnownToolServers(new Set<string>(allToolServerNames))
         setToolServersInitialized(true)
       } else {
         // After initialization: detect new servers and expand them by default
         const newServers = allToolServerNames.filter(name => !knownToolServers.has(name))
         if (newServers.length > 0) {
           setExpandedToolServers(prev => {
-            const updated = new Set(prev)
+            const updated = new Set<string>(prev)
             newServers.forEach(name => updated.add(name))
             return updated
           })
           setKnownToolServers(prev => {
-            const updated = new Set(prev)
+            const updated = new Set<string>(prev)
             newServers.forEach(name => updated.add(name))
             return updated
           })
@@ -1175,8 +1175,8 @@ export function MCPConfigManager({
   useEffect(() => {
     // Check if collapsedToolServers prop actually changed (use set comparison for robustness)
     const prevCollapsed = prevCollapsedToolServersRef.current
-    const prevSet = new Set(prevCollapsed ?? [])
-    const currentSet = new Set(collapsedToolServers ?? [])
+    const prevSet = new Set<string>(prevCollapsed ?? [])
+    const currentSet = new Set<string>(collapsedToolServers ?? [])
     const collapsedChanged =
       prevSet.size !== currentSet.size ||
       [...prevSet].some(s => !currentSet.has(s))
@@ -1184,9 +1184,9 @@ export function MCPConfigManager({
     if (collapsedChanged && toolServersInitialized) {
       prevCollapsedToolServersRef.current = collapsedToolServers
       // Re-sync expandedToolServers from the new collapsed list
-      const allToolServerNames = [...new Set(tools.map(t => t.serverName))]
-      const collapsedSet = new Set(collapsedToolServers ?? [])
-      const newExpanded = new Set(allToolServerNames.filter(name => !collapsedSet.has(name)))
+      const allToolServerNames = [...new Set<string>(tools.map(t => t.serverName))]
+      const collapsedSet = new Set<string>(collapsedToolServers ?? [])
+      const newExpanded = new Set<string>(allToolServerNames.filter(name => !collapsedSet.has(name)))
       setExpandedToolServers(newExpanded)
     }
   }, [collapsedToolServers, tools, toolServersInitialized])
@@ -1322,16 +1322,16 @@ export function MCPConfigManager({
 
   const toggleToolsExpansion = (serverName: string) => {
     setExpandedToolServers(prev => {
-      const allToolServerNames = [...new Set(tools.map(t => t.serverName))]
-      const collapsedSet = new Set(collapsedToolServers ?? [])
+      const allToolServerNames = [...new Set<string>(tools.map(t => t.serverName))]
+      const collapsedSet = new Set<string>(collapsedToolServers ?? [])
 
       // If not yet initialized, start with all servers expanded (minus persisted collapsed ones)
       // This ensures first toggle behaves correctly even before useEffect runs
       let newSet: Set<string>
       if (!toolServersInitialized && prev.size === 0) {
-        newSet = new Set(allToolServerNames.filter(name => !collapsedSet.has(name)))
+        newSet = new Set<string>(allToolServerNames.filter(name => !collapsedSet.has(name)))
       } else {
-        newSet = new Set(prev)
+        newSet = new Set<string>(prev)
       }
 
       if (newSet.has(serverName)) {
@@ -1926,7 +1926,7 @@ export function MCPConfigManager({
                 </div>
               ) : (
                 // Group filtered tools by server
-                Object.entries(
+                (Object.entries(
                   getAllFilteredTools().reduce((acc, tool) => {
                     if (!acc[tool.serverName]) {
                       acc[tool.serverName] = []
@@ -1934,7 +1934,7 @@ export function MCPConfigManager({
                     acc[tool.serverName].push(tool)
                     return acc
                   }, {} as Record<string, DetailedTool[]>)
-                ).map(([serverName, serverTools]) => {
+                ) as Array<[string, DetailedTool[]]>).map(([serverName, serverTools]) => {
                   // Before initialization: expanded unless in collapsedToolServers (respects persisted state)
                   // After initialization: use the expandedToolServers set
                   const isExpanded = !toolServersInitialized

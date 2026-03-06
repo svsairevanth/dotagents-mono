@@ -17,8 +17,20 @@ async function loadIndexForHubInstall(argv: string[]) {
   const createPanelWindow = vi.fn()
   const createSetupWindow = vi.fn()
   const showMainWindow = vi.fn()
+  const findHubBundleInstallBundleUrl = vi.fn((candidates: readonly string[]) => {
+    const deepLink = candidates.find((candidate) => typeof candidate === "string" && candidate.startsWith("dotagents://install?bundle="))
+    return deepLink
+      ? "https://hub.dotagentsprotocol.com/bundles/featured-agent.dotagents"
+      : null
+  })
+  const downloadHubBundleToTempFile = vi.fn(async () => "/tmp/downloaded-featured-agent.dotagents")
   const findHubBundleHandoffFilePath = vi.fn((candidates: readonly string[]) =>
-    candidates.find((candidate) => typeof candidate === "string" && candidate.endsWith(".dotagents")) ?? null,
+    candidates.find(
+      (candidate) =>
+        typeof candidate === "string"
+        && candidate.endsWith(".dotagents")
+        && !candidate.startsWith("dotagents://"),
+    ) ?? null,
   )
 
   vi.doMock("electron", () => ({
@@ -95,12 +107,21 @@ async function loadIndexForHubInstall(argv: string[]) {
   vi.doMock("./loop-service", () => ({ loopService: { startAllLoops: vi.fn(), stopAllLoops: vi.fn() } }))
   vi.doMock("./state", () => ({ setHeadlessMode: vi.fn() }))
   vi.doMock("./bundle-service", () => ({ findHubBundleHandoffFilePath }))
+  vi.doMock("./hub-install", () => ({
+    findHubBundleInstallBundleUrl,
+    downloadHubBundleToTempFile,
+  }))
   vi.doMock("./updater", () => ({ init: vi.fn() }))
 
   await import("./index")
   await flushPromises()
 
-  return { handlers, createMainWindow, showMainWindow }
+  return {
+    handlers,
+    createMainWindow,
+    showMainWindow,
+    downloadHubBundleToTempFile,
+  }
 }
 
 afterEach(() => {
@@ -116,6 +137,19 @@ describe("Hub install handoff routing", () => {
 
     expect(createMainWindow).toHaveBeenCalledWith({
       url: `/settings/agents?installBundle=${encodeURIComponent(bundlePath)}`,
+    })
+  })
+
+  it("downloads startup Hub install deep links before opening settings/agents", async () => {
+    const deepLink =
+      "dotagents://install?bundle=https%3A%2F%2Fhub.dotagentsprotocol.com%2Fbundles%2Ffeatured-agent.dotagents"
+    const { createMainWindow, downloadHubBundleToTempFile } = await loadIndexForHubInstall(["electron", deepLink])
+
+    expect(downloadHubBundleToTempFile).toHaveBeenCalledWith(
+      "https://hub.dotagentsprotocol.com/bundles/featured-agent.dotagents",
+    )
+    expect(createMainWindow).toHaveBeenCalledWith({
+      url: `/settings/agents?installBundle=${encodeURIComponent("/tmp/downloaded-featured-agent.dotagents")}`,
     })
   })
 
@@ -135,5 +169,26 @@ describe("Hub install handoff routing", () => {
     showMainWindow.mockClear()
     secondInstanceHandler({}, ["DotAgents", bundlePath])
     expect(showMainWindow).toHaveBeenCalledWith(`/settings/agents?installBundle=${encodeURIComponent(bundlePath)}`)
+  })
+
+  it("downloads Hub install deep links received via open-url and routes them into showMainWindow", async () => {
+    const deepLink =
+      "dotagents://install?bundle=https%3A%2F%2Fhub.dotagentsprotocol.com%2Fbundles%2Ffeatured-agent.dotagents"
+    const { handlers, showMainWindow, downloadHubBundleToTempFile } = await loadIndexForHubInstall(["electron"])
+
+    showMainWindow.mockClear()
+    const openUrlHandler = handlers.get("open-url")?.[0] as ((event: { preventDefault: () => void }, url: string) => void)
+
+    const event = { preventDefault: vi.fn() }
+    openUrlHandler(event, deepLink)
+    await flushPromises()
+
+    expect(event.preventDefault).toHaveBeenCalled()
+    expect(downloadHubBundleToTempFile).toHaveBeenCalledWith(
+      "https://hub.dotagentsprotocol.com/bundles/featured-agent.dotagents",
+    )
+    expect(showMainWindow).toHaveBeenCalledWith(
+      `/settings/agents?installBundle=${encodeURIComponent("/tmp/downloaded-featured-agent.dotagents")}`,
+    )
   })
 })
