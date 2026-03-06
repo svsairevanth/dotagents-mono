@@ -384,13 +384,17 @@ const VISUALIZER_BUFFER_LENGTH = 70
 const WAVEFORM_BAR_WIDTH = 2
 const WAVEFORM_GAP = 2 // gap-0.5 = 2px in Tailwind
 const WAVEFORM_PADDING = 32 // px-4 = 16px on each side
+const WAVEFORM_PANEL_CONTENT_MIN_WIDTH = 360
 
-// Calculate minimum width needed for waveform
+// Raw waveform width only accounts for the bar lane itself.
+// Keep a slightly wider floor so the recording badge + submit hint do not feel cramped.
 const calculateMinWaveformWidth = () => {
-  return (VISUALIZER_BUFFER_LENGTH * (WAVEFORM_BAR_WIDTH + WAVEFORM_GAP)) + WAVEFORM_PADDING
+  const waveformWidth =
+    (VISUALIZER_BUFFER_LENGTH * (WAVEFORM_BAR_WIDTH + WAVEFORM_GAP)) + WAVEFORM_PADDING
+  return Math.max(waveformWidth, WAVEFORM_PANEL_CONTENT_MIN_WIDTH)
 }
 
-export const MIN_WAVEFORM_WIDTH = calculateMinWaveformWidth() // ~312px
+export const MIN_WAVEFORM_WIDTH = calculateMinWaveformWidth() // 360px floor for panel breathing room
 
 // Minimum height for waveform panel:
 // - Drag bar: 24px

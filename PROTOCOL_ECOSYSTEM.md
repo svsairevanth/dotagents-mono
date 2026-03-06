@@ -609,7 +609,7 @@ The repo now contains a static website in `website/` for `https://dotagents.app`
 - **Desktop Application**: Electron-based (macOS, Windows, Linux)
 - **Mobile Application**: React Native (Expo)
 - **Website**: Static landing page in `website/`
-- **Documentation**: Markdown files in repo (README.md, DEVELOPMENT.md, agents.md)
+- **Documentation**: Markdown files in repo (README.md, DEVELOPMENT.md, AGENTS.md)
 - **External Resources**: Discord, GitHub, techfren.net (referenced but not in repo)
 
 ---
