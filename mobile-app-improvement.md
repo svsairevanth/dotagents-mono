@@ -204,3 +204,35 @@ Purpose: track investigation and incremental, shippable improvements to the Expo
   - Apply minimum `44x44` touch-target guardrails to Chat message-level actions (`Read aloud`, collapse toggles, and tool disclosure row).
   - Add a dedicated per-message `Copy` action in Chat with clear labels/hints and keyboard order validation.
 
+### 2026-03-07 - Iteration 8
+- Status: Shipped.
+- Area selected: Voice listening/transcription announcements (live-region semantics in Chat composer flow).
+- Investigation notes:
+  - Reused existing Expo Web workflow from repo scripts: `pnpm --filter @dotagents/mobile web --port 19007`.
+  - Re-audited Chat voice flow in Expo Web (`Go to Chats` -> `+ New Chat`) and inspected accessibility tree/DOM updates during mic hold/release.
+  - Confirmed pre-fix gap: dynamic voice state text (`Listening...`, `Release to send/edit`, transcript preview updates) changed visually but did not use any live region semantics, so screen readers would not reliably announce state transitions.
+- Change made:
+  - Extended `apps/mobile/src/lib/accessibility.ts` with `createVoiceInputLiveRegionAnnouncement(...)`:
+    - Normalizes voice/transcript announcements.
+    - Includes mode-aware guidance (`Release to send`, `Release to edit`, or `Tap mic again to stop`).
+    - Falls back to `Voice input ready.` when idle.
+    - Truncates very long transcript text for concise announcements.
+  - Updated `apps/mobile/src/screens/ChatScreen.tsx`:
+    - Added hidden web live-region node (`nativeID: chat-voice-status-live-region`) with `aria-live="polite"` and `accessibilityLiveRegion="polite"`.
+    - Wired live-region content to current voice state (`listening`, `handsFree`, `willCancel`, `liveTranscript`, `sttPreview`) so updates are announced without moving focus.
+  - Expanded `apps/mobile/src/lib/accessibility.test.ts` with focused coverage for the new helper.
+- Tests/verification:
+  - Ran: `pnpm --filter @dotagents/mobile test src/lib/accessibility.test.ts` ✅ (26 tests).
+  - Ran: `pnpm --filter @dotagents/mobile exec tsc --noEmit` ✅.
+  - Re-verified in Expo Web automation:
+    - `#chat-voice-status-live-region` now exposes `aria-live="polite"`.
+    - Live-region text transitions observed across voice states:
+      - `Voice input ready.`
+      - `Voice listening active. Release to send your message.`
+      - `Voice listening active... Transcript: ...`
+      - `Voice input captured. Transcript: ...`
+- Next checks:
+  - Add explicit accessibility label/hint and stable role semantics to the main Chat mic `Pressable` (currently focusable but easy to interpret ambiguously in assistive tech).
+  - Apply minimum `44x44` touch-target guardrails to Chat message-level actions (`Read aloud`, collapse toggles, tool disclosure row).
+  - Add a dedicated per-message `Copy` action in Chat with clear labels/hints and keyboard-order validation.
+

@@ -7,6 +7,7 @@ import {
   createMinimumTouchTargetStyle,
   createSwitchAccessibilityLabel,
   createTextInputAccessibilityLabel,
+  createVoiceInputLiveRegionAnnouncement,
 } from './accessibility';
 
 describe('createSwitchAccessibilityLabel', () => {
@@ -141,6 +142,61 @@ describe('createMinimumTouchTargetStyle', () => {
       alignItems: 'center',
       justifyContent: 'center',
     });
+  });
+});
+
+describe('createVoiceInputLiveRegionAnnouncement', () => {
+  it('announces push-to-talk listening state with release instructions', () => {
+    expect(
+      createVoiceInputLiveRegionAnnouncement({
+        listening: true,
+        handsFree: false,
+        willCancel: false,
+      }),
+    ).toBe('Voice listening active. Release to send your message.');
+  });
+
+  it('announces listening transcripts when present', () => {
+    expect(
+      createVoiceInputLiveRegionAnnouncement({
+        listening: true,
+        handsFree: true,
+        willCancel: false,
+        liveTranscript: 'draft a short update',
+      }),
+    ).toBe('Voice listening active. Tap mic again to stop. Transcript: draft a short update');
+  });
+
+  it('announces captured transcript when listening stops', () => {
+    expect(
+      createVoiceInputLiveRegionAnnouncement({
+        listening: false,
+        handsFree: false,
+        willCancel: false,
+        sttPreview: 'final transcript text',
+      }),
+    ).toBe('Voice input captured. Transcript: final transcript text');
+  });
+
+  it('truncates very long transcripts to keep announcements concise', () => {
+    expect(
+      createVoiceInputLiveRegionAnnouncement({
+        listening: false,
+        handsFree: false,
+        willCancel: false,
+        sttPreview: 'a'.repeat(220),
+      }),
+    ).toBe(`Voice input captured. Transcript: ${'a'.repeat(137)}...`);
+  });
+
+  it('falls back to an idle readiness message when there is no voice activity', () => {
+    expect(
+      createVoiceInputLiveRegionAnnouncement({
+        listening: false,
+        handsFree: false,
+        willCancel: false,
+      }),
+    ).toBe('Voice input ready.');
   });
 });
 

@@ -58,6 +58,7 @@ import {
   createMinimumTouchTargetStyle,
   createSwitchAccessibilityLabel,
   createTextInputAccessibilityLabel,
+  createVoiceInputLiveRegionAnnouncement,
 } from '../lib/accessibility';
 
 interface PendingImageAttachment {
@@ -71,6 +72,7 @@ const MAX_PENDING_IMAGES = 4;
 const MAX_PENDING_IMAGE_FILE_SIZE_BYTES = 4 * 1024 * 1024;
 const MAX_TOTAL_PENDING_IMAGE_EMBEDDED_BYTES = 900 * 1024;
 const CHAT_COMPOSER_HINT_NATIVE_ID = 'chat-composer-hint';
+const CHAT_VOICE_STATUS_LIVE_REGION_NATIVE_ID = 'chat-voice-status-live-region';
 
 const IMAGE_MIME_BY_EXTENSION: Record<string, string> = {
   '.png': 'image/png',
@@ -2142,6 +2144,13 @@ export default function ChatScreen({ route, navigation }: any) {
 	  listening,
 	  isWeb: isWebPlatform,
 	});
+	const voiceInputLiveRegionAnnouncement = createVoiceInputLiveRegionAnnouncement({
+	  listening,
+	  handsFree,
+	  willCancel,
+	  liveTranscript,
+	  sttPreview,
+	});
 
   const composerHasContent = input.trim().length > 0 || pendingImages.length > 0;
 
@@ -3351,6 +3360,16 @@ export default function ChatScreen({ route, navigation }: any) {
                 {composerAccessibilityHint}
               </Text>
             )}
+	            {isWebPlatform && (
+	              <Text
+	                nativeID={CHAT_VOICE_STATUS_LIVE_REGION_NATIVE_ID}
+	                style={styles.visuallyHiddenComposerHint}
+	                accessibilityLiveRegion="polite"
+	                aria-live="polite"
+	              >
+	                {voiceInputLiveRegionAnnouncement}
+	              </Text>
+	            )}
 	            <TouchableOpacity
 	              style={[styles.sendButton, !composerHasContent && styles.sendButtonDisabled]}
 	              onPress={sendComposerInput}

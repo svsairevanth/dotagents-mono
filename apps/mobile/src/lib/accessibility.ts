@@ -3,10 +3,12 @@ const FALLBACK_SERVER_LABEL = 'Enable MCP server';
 const FALLBACK_BUTTON_LABEL = 'Action button';
 const FALLBACK_INPUT_LABEL = 'Input field';
 const FALLBACK_DISCLOSURE_LABEL = 'details';
+const FALLBACK_VOICE_STATUS = 'Voice input ready.';
 const WEB_SHORTCUT_HINT = 'Use Shift+Enter or Ctrl/Cmd+Enter to send.';
 const DEFAULT_TOUCH_TARGET_SIZE = 44;
 const DEFAULT_TOUCH_TARGET_PADDING = 6;
 const DEFAULT_TOUCH_TARGET_GAP = 2;
+const MAX_VOICE_ANNOUNCEMENT_TRANSCRIPT_CHARS = 140;
 
 const normalizeLabel = (label: string): string => {
   const trimmed = label.trim();
@@ -74,6 +76,55 @@ export const createExpandCollapseAccessibilityLabel = (
   const normalizedName = normalizeLabel(targetName);
   const safeName = normalizedName || FALLBACK_DISCLOSURE_LABEL;
   return `${isExpanded ? 'Collapse' : 'Expand'} ${safeName}`;
+};
+
+const normalizeVoiceTranscriptForAnnouncement = (text: string): string => {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (!normalized) {
+    return '';
+  }
+  if (normalized.length <= MAX_VOICE_ANNOUNCEMENT_TRANSCRIPT_CHARS) {
+    return normalized;
+  }
+  return `${normalized.slice(0, MAX_VOICE_ANNOUNCEMENT_TRANSCRIPT_CHARS - 3).trimEnd()}...`;
+};
+
+export const createVoiceInputLiveRegionAnnouncement = ({
+  listening,
+  handsFree,
+  willCancel,
+  liveTranscript,
+  sttPreview,
+}: {
+  listening: boolean;
+  handsFree: boolean;
+  willCancel: boolean;
+  liveTranscript?: string;
+  sttPreview?: string;
+}): string => {
+  const transcriptForAnnouncement = normalizeVoiceTranscriptForAnnouncement(
+    liveTranscript || sttPreview || '',
+  );
+
+  if (listening) {
+    const releaseInstruction = handsFree
+      ? 'Tap mic again to stop.'
+      : willCancel
+        ? 'Release to edit your message.'
+        : 'Release to send your message.';
+
+    if (transcriptForAnnouncement) {
+      return `Voice listening active. ${releaseInstruction} Transcript: ${transcriptForAnnouncement}`;
+    }
+
+    return `Voice listening active. ${releaseInstruction}`;
+  }
+
+  if (transcriptForAnnouncement) {
+    return `Voice input captured. Transcript: ${transcriptForAnnouncement}`;
+  }
+
+  return FALLBACK_VOICE_STATUS;
 };
 
 export const createMinimumTouchTargetStyle = ({
