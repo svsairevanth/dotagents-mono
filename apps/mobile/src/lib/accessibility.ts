@@ -2,6 +2,7 @@ const FALLBACK_SWITCH_LABEL = 'Setting toggle';
 const FALLBACK_SERVER_LABEL = 'Enable MCP server';
 const FALLBACK_BUTTON_LABEL = 'Action button';
 const FALLBACK_INPUT_LABEL = 'Input field';
+const FALLBACK_DISCLOSURE_LABEL = 'details';
 const DEFAULT_TOUCH_TARGET_SIZE = 44;
 const DEFAULT_TOUCH_TARGET_PADDING = 6;
 const DEFAULT_TOUCH_TARGET_GAP = 2;
@@ -41,6 +42,15 @@ export const createTextInputAccessibilityLabel = (fieldName: string): string => 
     return FALLBACK_INPUT_LABEL;
   }
   return `${normalizedName} input`;
+};
+
+export const createExpandCollapseAccessibilityLabel = (
+  targetName: string,
+  isExpanded: boolean,
+): string => {
+  const normalizedName = normalizeLabel(targetName);
+  const safeName = normalizedName || FALLBACK_DISCLOSURE_LABEL;
+  return `${isExpanded ? 'Collapse' : 'Expand'} ${safeName}`;
 };
 
 export const createMinimumTouchTargetStyle = ({

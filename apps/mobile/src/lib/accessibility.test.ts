@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   createButtonAccessibilityLabel,
+  createExpandCollapseAccessibilityLabel,
   createMcpServerSwitchAccessibilityLabel,
   createMinimumTouchTargetStyle,
   createSwitchAccessibilityLabel,
@@ -56,6 +57,20 @@ describe('createTextInputAccessibilityLabel', () => {
 
   it('falls back for empty names', () => {
     expect(createTextInputAccessibilityLabel('   ')).toBe('Input field');
+  });
+});
+
+describe('createExpandCollapseAccessibilityLabel', () => {
+  it('returns an expand label when collapsed', () => {
+    expect(createExpandCollapseAccessibilityLabel('message', false)).toBe('Expand message');
+  });
+
+  it('returns a collapse label when expanded', () => {
+    expect(createExpandCollapseAccessibilityLabel('tool execution details', true)).toBe('Collapse tool execution details');
+  });
+
+  it('falls back for empty target names', () => {
+    expect(createExpandCollapseAccessibilityLabel('   ', false)).toBe('Expand details');
   });
 });
 

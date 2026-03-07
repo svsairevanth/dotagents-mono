@@ -53,6 +53,7 @@ import { MarkdownRenderer } from '../ui/MarkdownRenderer';
 import { AgentSelectorSheet } from '../ui/AgentSelectorSheet';
 import {
   createButtonAccessibilityLabel,
+  createExpandCollapseAccessibilityLabel,
   createMinimumTouchTargetStyle,
   createSwitchAccessibilityLabel,
 } from '../lib/accessibility';
@@ -2790,8 +2791,10 @@ export default function ChatScreen({ route, navigation }: any) {
                   <Pressable
                     onPress={() => toggleMessageExpansion(i)}
                     accessibilityRole="button"
+                    accessibilityLabel={createExpandCollapseAccessibilityLabel('message', isExpanded)}
                     accessibilityHint={isExpanded ? 'Collapse message' : 'Expand message'}
                     accessibilityState={{ expanded: isExpanded }}
+                    aria-expanded={isExpanded}
                     style={({ pressed }) => [
                       styles.messageHeader,
                       styles.messageHeaderClickable,
@@ -2846,6 +2849,11 @@ export default function ChatScreen({ route, navigation }: any) {
                         {!isExpanded && (
                           <Pressable
                             onPress={() => toggleMessageExpansion(i)}
+                            accessibilityRole="button"
+                            accessibilityLabel={createExpandCollapseAccessibilityLabel('tool execution details', false)}
+                            accessibilityHint="Expands this tool execution summary"
+                            accessibilityState={{ expanded: false }}
+                            aria-expanded={false}
                             style={({ pressed }) => [
                               styles.toolCallCompactRow,
                               isPending && styles.toolCallCompactPending,
@@ -2918,7 +2926,9 @@ export default function ChatScreen({ route, navigation }: any) {
                                       pressed && styles.toolCallHeaderPressed,
                                     ]}
                                     accessibilityRole="button"
+                                    accessibilityLabel={createExpandCollapseAccessibilityLabel(`${toolCall.name} tool details`, isToolCallFullyExpanded)}
                                     accessibilityState={{ expanded: isToolCallFullyExpanded }}
+                                    aria-expanded={isToolCallFullyExpanded}
                                     accessibilityHint={isToolCallFullyExpanded ? 'Collapse tool details' : 'Expand to show full input/output'}
                                   >
                                     <Text style={styles.toolName}>{toolCall.name}</Text>

@@ -149,3 +149,31 @@ Purpose: track investigation and incremental, shippable improvements to the Expo
   - Validate large-text/dynamic-type behavior on Sessions list rows and Rapid Fire footer controls.
   - Audit destructive actions (`Delete Session`, `Clear All`) for confirmation copy consistency and accidental-tap safeguards.
 
+### 2026-03-07 - Iteration 6
+- Status: Shipped.
+- Area selected: Chat message/tool disclosure controls (screen-reader naming + expanded-state semantics).
+- Investigation notes:
+  - Reused existing Expo Web workflow from repo scripts: `pnpm --filter @dotagents/mobile web --port 19007`.
+  - Investigated Chat flow with browser automation and keyboard traversal on message-level controls.
+  - Confirmed ambiguous semantics before fix:
+    - Message/tool disclosure controls relied on icon text or hints, with missing explicit labels on key toggles.
+    - Expanded/collapsed state was not consistently exposed as `aria-expanded` on web for disclosure actions.
+- Change made:
+  - Extended `apps/mobile/src/lib/accessibility.ts` with `createExpandCollapseAccessibilityLabel(targetName, isExpanded)` for normalized disclosure labels with fallback handling.
+  - Updated `apps/mobile/src/screens/ChatScreen.tsx` disclosure controls:
+    - Collapsible message header now has explicit label (`Expand message` / `Collapse message`) and explicit `aria-expanded` state.
+    - Collapsed tool execution summary row now has explicit button semantics, descriptive label, hint, and `aria-expanded={false}`.
+    - Per-tool details header now has explicit label (`Expand/Collapse <tool> tool details`) and explicit `aria-expanded` transitions.
+  - Expanded `apps/mobile/src/lib/accessibility.test.ts` with coverage for the new disclosure-label helper.
+- Tests/verification:
+  - Ran: `pnpm --filter @dotagents/mobile test src/lib/accessibility.test.ts` ✅ (17 tests).
+  - Ran: `pnpm --filter @dotagents/mobile exec tsc --noEmit` ✅.
+  - Re-verified in Expo Web automation:
+    - Message disclosure toggle exposes `role="button"`, label transitions (`Expand message`/`Collapse message`), and `aria-expanded` toggles (`false`/`true`).
+    - Tool summary disclosure row exposes `role="button"`, `aria-label="Expand tool execution details"`, and `aria-expanded="false"`.
+    - Tool detail headers expose descriptive labels (for example `Expand execute_command tool details`) with `aria-expanded` transitions (`false -> true`).
+- Next checks:
+  - Add a dedicated per-message `Copy` action in Chat (currently missing from message action row) with keyboard and screen-reader semantics.
+  - Apply minimum `44x44` touch-target guardrails to Chat message-level actions (`Read aloud`, collapse toggles, and tool disclosure row).
+  - Add explicit accessibility label/hint to the Chat composer text input for keyboard/screen-reader clarity.
+
