@@ -6,6 +6,7 @@ Track small, shippable product improvements. Review this file before each iterat
 ### Recently Investigated
 - 2026-03-07: Initial setup. No prior investigation log existed.
 - 2026-03-07: Desktop main-process session shutdown guardrails (`apps/desktop/src/main/state.ts`).
+- 2026-03-07: Desktop text composer submission resilience (`apps/desktop/src/renderer/src/components/text-input-panel.tsx`).
 
 ### 2026-03-07 — Desktop session shutdown guardrails
 - Date:
@@ -33,6 +34,33 @@ Track small, shippable product improvements. Review this file before each iterat
   - inspect other session-adjacent cleanup seams for the same “caller must remember” pattern, especially queue pause/resume and user-response cleanup on less common cancellation paths
   - inspect desktop composer / send flows next for a small UX or resilience improvement
 
+### 2026-03-07 — Desktop text composer submission resilience
+- Date:
+  - 2026-03-07
+- Area / screen / subsystem:
+  - desktop panel text composer / new-message send flow in `apps/desktop/src/renderer/src/components/text-input-panel.tsx`
+  - submit orchestration in `apps/desktop/src/renderer/src/pages/panel.tsx`
+- Why it was chosen:
+  - the previous reliability pass explicitly called out desktop composer / send flows as the next area to inspect
+  - this composer starts new desktop text sessions, so duplicate submissions or draft loss here directly affect a core user flow
+- What was inspected:
+  - `apps/desktop/src/renderer/src/components/text-input-panel.tsx`
+  - `apps/desktop/src/renderer/src/pages/panel.tsx`
+  - adjacent desktop follow-up composers in `apps/desktop/src/renderer/src/components/overlay-follow-up-input.tsx` and `apps/desktop/src/renderer/src/components/tile-follow-up-input.tsx`
+  - `apps/desktop/src/renderer/src/components/session-input.tsx` (found to be currently unused)
+  - mobile composer send callback in `apps/mobile/src/screens/ChatScreen.tsx` to check whether the same fix needed to be mirrored there
+- Improvement made:
+  - hardened the active desktop text composer so it now awaits the async submit result instead of clearing immediately
+  - preserved the draft when submission is declined before the session starts (for example, if selected-agent application does not complete)
+  - added a local in-flight submit guard so rapid repeat clicks / Enter presses cannot trigger duplicate sends before parent mutation state propagates
+  - updated `panel.tsx` to return an explicit success boolean from `handleTextSubmit(...)` so the composer knows when it is safe to clear local state
+- Tests / verification:
+  - `pnpm --filter @dotagents/desktop exec vitest run src/renderer/src/components/text-input-panel.submit.test.tsx src/renderer/src/pages/panel.recording-layout.test.ts`
+  - `pnpm --filter @dotagents/desktop typecheck:web`
+- Follow-up checks:
+  - inspect `overlay-follow-up-input.tsx` and `tile-follow-up-input.tsx` for similar resilience gaps around send-error feedback and queued/active-session edge states
+  - decide whether the currently unused `session-input.tsx` should be removed, revived, or brought under test to avoid future drift
+
 ### Iteration Template
 - Date:
 - Area / screen / subsystem:
@@ -43,7 +71,7 @@ Track small, shippable product improvements. Review this file before each iterat
 - Follow-up checks:
 
 ### Backlog of Areas to Inspect
-- Desktop composer and message-send flows
+- Desktop follow-up composers and queued-send edge states
 - Desktop session lifecycle and error states (follow-up: queue/user-response cleanup consistency)
 - Settings screens and validation UX
 - Agent/task management flows

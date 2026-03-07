@@ -761,7 +761,7 @@ export function Component() {
       },
     })
     if (!applied) {
-      return
+      return false
     }
 
     // Capture the conversation ID at submit time - if user explicitly continued a conversation
@@ -788,6 +788,8 @@ export function Component() {
       // This prevents message leaking while still supporting explicit continuation.
       conversationId: conversationIdForMcp ?? undefined,
     })
+
+    return true
   }
 
 
