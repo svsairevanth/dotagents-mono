@@ -1,6 +1,9 @@
 const FALLBACK_SWITCH_LABEL = 'Setting toggle';
 const FALLBACK_SERVER_LABEL = 'Enable MCP server';
 const FALLBACK_BUTTON_LABEL = 'Action button';
+const DEFAULT_TOUCH_TARGET_SIZE = 44;
+const DEFAULT_TOUCH_TARGET_PADDING = 6;
+const DEFAULT_TOUCH_TARGET_GAP = 2;
 
 const normalizeLabel = (label: string): string => {
   const trimmed = label.trim();
@@ -30,4 +33,24 @@ export const createButtonAccessibilityLabel = (actionName: string): string => {
   }
   return `${normalizedName} button`;
 };
+
+export const createMinimumTouchTargetStyle = ({
+  minSize = DEFAULT_TOUCH_TARGET_SIZE,
+  horizontalPadding = DEFAULT_TOUCH_TARGET_PADDING,
+  verticalPadding = DEFAULT_TOUCH_TARGET_PADDING,
+  horizontalMargin = DEFAULT_TOUCH_TARGET_GAP,
+}: {
+  minSize?: number;
+  horizontalPadding?: number;
+  verticalPadding?: number;
+  horizontalMargin?: number;
+} = {}) => ({
+  minWidth: minSize,
+  minHeight: minSize,
+  paddingHorizontal: horizontalPadding,
+  paddingVertical: verticalPadding,
+  marginHorizontal: horizontalMargin,
+  alignItems: 'center' as const,
+  justifyContent: 'center' as const,
+});
 

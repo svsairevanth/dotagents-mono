@@ -51,7 +51,11 @@ import { useTheme } from '../ui/ThemeProvider';
 import { spacing, radius, Theme, hexToRgba } from '../ui/theme';
 import { MarkdownRenderer } from '../ui/MarkdownRenderer';
 import { AgentSelectorSheet } from '../ui/AgentSelectorSheet';
-import { createButtonAccessibilityLabel, createSwitchAccessibilityLabel } from '../lib/accessibility';
+import {
+  createButtonAccessibilityLabel,
+  createMinimumTouchTargetStyle,
+  createSwitchAccessibilityLabel,
+} from '../lib/accessibility';
 
 interface PendingImageAttachment {
   id: string;
@@ -450,26 +454,27 @@ export default function ChatScreen({ route, navigation }: any) {
         </TouchableOpacity>
       ),
       headerLeft: () => (
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <View style={styles.headerActionsRow}>
           <TouchableOpacity
             onPress={() => navigation.navigate('Sessions')}
             accessibilityRole="button"
             accessibilityLabel="Back to chat history"
-            style={{ paddingHorizontal: 12, paddingVertical: 6 }}
+            accessibilityHint="Returns to the chat history list"
+            style={styles.headerEdgeActionButton}
           >
             <Text style={{ fontSize: 20, color: theme.colors.foreground }}>←</Text>
           </TouchableOpacity>
         </View>
       ),
       headerRight: () => (
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <View style={styles.headerActionsRow}>
           <ConnectionStatusIndicator
             state={connectionInfo.state}
             retryCount={connectionInfo.retryCount}
             compact
           />
           {responding && (
-            <View style={{ paddingHorizontal: 8, paddingVertical: 6 }}>
+            <View style={styles.headerActionButton}>
               <Image
                 source={isDark ? darkSpinner : lightSpinner}
                 style={{ width: 28, height: 28 }}
@@ -481,7 +486,8 @@ export default function ChatScreen({ route, navigation }: any) {
             onPress={handleNewChat}
             accessibilityRole="button"
             accessibilityLabel="Start new chat"
-            style={{ paddingHorizontal: 8, paddingVertical: 6 }}
+            accessibilityHint="Creates a new empty conversation"
+            style={styles.headerActionButton}
           >
             <Text style={{ fontSize: 18, color: theme.colors.foreground }}>✚</Text>
           </TouchableOpacity>
@@ -489,7 +495,8 @@ export default function ChatScreen({ route, navigation }: any) {
             onPress={handleKillSwitch}
             accessibilityRole="button"
             accessibilityLabel="Emergency stop - kill all agent sessions"
-            style={{ paddingHorizontal: 8, paddingVertical: 6 }}
+            accessibilityHint="Shows a confirmation before stopping all running sessions"
+            style={styles.headerActionButton}
           >
             <View style={{
               width: 28,
@@ -504,9 +511,12 @@ export default function ChatScreen({ route, navigation }: any) {
           </TouchableOpacity>
           <TouchableOpacity
             onPress={toggleHandsFree}
-            accessibilityRole="button"
-            accessibilityLabel={`Toggle hands-free (currently ${handsFree ? 'on' : 'off'})`}
-            style={{ paddingHorizontal: 8, paddingVertical: 6 }}
+            accessibilityRole="switch"
+            accessibilityLabel={createSwitchAccessibilityLabel('Hands-free voice mode')}
+            accessibilityHint="When enabled, speech is sent automatically after each phrase"
+            accessibilityState={{ checked: handsFree }}
+            aria-checked={handsFree}
+            style={styles.headerActionButton}
           >
             <View style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}>
               <Text style={{ fontSize: 18 }}>🎙️</Text>
@@ -528,14 +538,15 @@ export default function ChatScreen({ route, navigation }: any) {
             onPress={() => navigation.navigate('Settings')}
             accessibilityRole="button"
             accessibilityLabel="Settings"
-            style={{ paddingHorizontal: 12, paddingVertical: 6 }}
+            accessibilityHint="Opens app settings"
+            style={styles.headerEdgeActionButton}
           >
             <Text style={{ fontSize: 18, color: theme.colors.foreground }}>⚙️</Text>
           </TouchableOpacity>
         </View>
       ),
     });
-  }, [navigation, handsFree, handleKillSwitch, handleNewChat, responding, theme, isDark, sessionStore, connectionInfo.state, connectionInfo.retryCount, currentProfile]);
+  }, [navigation, handsFree, handleKillSwitch, handleNewChat, responding, theme, isDark, sessionStore, connectionInfo.state, connectionInfo.retryCount, currentProfile, styles]);
 
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -3399,7 +3410,16 @@ export default function ChatScreen({ route, navigation }: any) {
 
 function createStyles(theme: Theme, screenHeight: number) {
   const micButtonHeight = Math.round(screenHeight * 0.2);
+  const headerActionButton = createMinimumTouchTargetStyle();
+  const headerEdgeActionButton = createMinimumTouchTargetStyle({ horizontalPadding: 12 });
   return StyleSheet.create({
+    headerActionsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 2,
+    },
+    headerActionButton,
+    headerEdgeActionButton,
     // Compact desktop-style messages: left-border accent, full width, no bubbles
     msg: {
       paddingLeft: spacing.xs,

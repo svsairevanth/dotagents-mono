@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createButtonAccessibilityLabel,
   createMcpServerSwitchAccessibilityLabel,
+  createMinimumTouchTargetStyle,
   createSwitchAccessibilityLabel,
 } from './accessibility';
 
@@ -40,6 +41,37 @@ describe('createButtonAccessibilityLabel', () => {
 
   it('falls back for empty names', () => {
     expect(createButtonAccessibilityLabel('   ')).toBe('Action button');
+  });
+});
+
+describe('createMinimumTouchTargetStyle', () => {
+  it('returns 44x44 touch targets by default', () => {
+    expect(createMinimumTouchTargetStyle()).toEqual({
+      minWidth: 44,
+      minHeight: 44,
+      paddingHorizontal: 6,
+      paddingVertical: 6,
+      marginHorizontal: 2,
+      alignItems: 'center',
+      justifyContent: 'center',
+    });
+  });
+
+  it('supports custom sizing and spacing overrides', () => {
+    expect(createMinimumTouchTargetStyle({
+      minSize: 48,
+      horizontalPadding: 4,
+      verticalPadding: 5,
+      horizontalMargin: 1,
+    })).toEqual({
+      minWidth: 48,
+      minHeight: 48,
+      paddingHorizontal: 4,
+      paddingVertical: 5,
+      marginHorizontal: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+    });
   });
 });
 

@@ -63,3 +63,32 @@ Purpose: track investigation and incremental, shippable improvements to the Expo
   - Audit message action affordances (copy, speak, expand/collapse) for keyboard-only navigation order.
   - Review chat header icon-only controls (new chat, emergency stop, settings) for minimum touch target size and descriptive accessibility hints.
 
+### 2026-03-07 - Iteration 3
+- Status: Shipped.
+- Area selected: Chat header icon controls (touch-target reliability and switch semantics).
+- Investigation notes:
+  - Reused existing Expo Web workflow: `pnpm --filter @dotagents/mobile web --port 19007`.
+  - Investigated Chat header controls in Expo Web after navigating `Connection settings -> Test & Save -> Go to Chats -> New Chat`.
+  - Measured controls in DOM and found multiple undersized/tightly packed targets in header actions:
+    - New chat: ~`29.68 x 33.5`
+    - Hands-free: ~`40 x 36`
+    - Settings: ~`42 x 35.5`
+  - Concrete risk: destructive Emergency Stop was adjacent to small controls with no spacing, increasing accidental-tap likelihood.
+- Change made:
+  - Added `createMinimumTouchTargetStyle` in `apps/mobile/src/lib/accessibility.ts` to centralize minimum hit-target sizing/spacing for tappable controls.
+  - Updated `apps/mobile/src/screens/ChatScreen.tsx` header controls to use shared touch-target styles:
+    - Back / New chat / Emergency stop / Hands-free / Settings now use minimum 44x44 targets.
+    - Added small horizontal spacing between header controls to reduce mis-taps.
+  - Improved header accessibility metadata:
+    - Added descriptive `accessibilityHint` for back, new chat, emergency stop, and settings.
+    - Converted hands-free header control from generic button semantics to switch semantics (`accessibilityRole="switch"`, `accessibilityState`, `aria-checked`) with stable label.
+  - Expanded `apps/mobile/src/lib/accessibility.test.ts` with touch-target helper tests.
+- Tests/verification:
+  - Ran: `pnpm --filter @dotagents/mobile test src/lib/accessibility.test.ts` ✅ (10 tests).
+  - Ran: `pnpm --filter @dotagents/mobile exec tsc --noEmit` ✅.
+  - Re-verified in Expo Web/Playwright that right-side header actions now render at `>=44x44`, include spacing, and hands-free exposes switch semantics with `aria-checked` transitions (`false -> true -> false`).
+- Next checks:
+  - Validate Chat composer under larger text scaling to ensure input/send/mic controls remain usable without overlap.
+  - Audit message-level actions (expand/collapse tool details, speak, copy) for keyboard/tab order and explicit hints.
+  - Review Session list header actions for the same minimum touch-target guardrail.
+
