@@ -4,6 +4,8 @@ import {
   createChatComposerAccessibilityHint,
   createExpandCollapseAccessibilityLabel,
   createMcpServerSwitchAccessibilityLabel,
+  createMicControlAccessibilityHint,
+  createMicControlAccessibilityLabel,
   createMinimumTouchTargetStyle,
   createSwitchAccessibilityLabel,
   createTextInputAccessibilityLabel,
@@ -59,6 +61,41 @@ describe('createTextInputAccessibilityLabel', () => {
 
   it('falls back for empty names', () => {
     expect(createTextInputAccessibilityLabel('   ')).toBe('Input field');
+  });
+});
+
+describe('createMicControlAccessibilityLabel', () => {
+  it('returns a stable microphone control label', () => {
+    expect(createMicControlAccessibilityLabel()).toBe('Voice input microphone button');
+  });
+});
+
+describe('createMicControlAccessibilityHint', () => {
+  it('describes hold-to-talk behavior when idle', () => {
+    expect(
+      createMicControlAccessibilityHint({ handsFree: false, listening: false, willCancel: false }),
+    ).toBe('Press and hold to dictate your message. Release to send.');
+  });
+
+  it('describes release-to-send behavior while push-to-talk is active', () => {
+    expect(
+      createMicControlAccessibilityHint({ handsFree: false, listening: true, willCancel: false }),
+    ).toBe('Voice input is active. Release to send your dictated message.');
+  });
+
+  it('describes release-to-edit behavior when edit-before-send is enabled', () => {
+    expect(
+      createMicControlAccessibilityHint({ handsFree: false, listening: true, willCancel: true }),
+    ).toBe('Voice input is active. Release to insert dictated text for editing.');
+  });
+
+  it('describes hands-free toggle behavior', () => {
+    expect(
+      createMicControlAccessibilityHint({ handsFree: true, listening: false, willCancel: false }),
+    ).toBe('Double tap to start voice input. Double tap again to stop recording.');
+    expect(
+      createMicControlAccessibilityHint({ handsFree: true, listening: true, willCancel: true }),
+    ).toBe('Voice input is active. Double tap to stop recording.');
   });
 });
 

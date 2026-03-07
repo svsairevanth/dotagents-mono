@@ -55,6 +55,8 @@ import {
   createButtonAccessibilityLabel,
   createChatComposerAccessibilityHint,
   createExpandCollapseAccessibilityLabel,
+  createMicControlAccessibilityHint,
+  createMicControlAccessibilityLabel,
   createMinimumTouchTargetStyle,
   createSwitchAccessibilityLabel,
   createTextInputAccessibilityLabel,
@@ -2144,6 +2146,11 @@ export default function ChatScreen({ route, navigation }: any) {
 	  listening,
 	  isWeb: isWebPlatform,
 	});
+	const micControlAccessibilityHint = createMicControlAccessibilityHint({
+	  handsFree,
+	  listening,
+	  willCancel,
+	});
 	const voiceInputLiveRegionAnnouncement = createVoiceInputLiveRegionAnnouncement({
 	  listening,
 	  handsFree,
@@ -3394,6 +3401,11 @@ export default function ChatScreen({ route, navigation }: any) {
                 // @ts-ignore - Web-only CSS to disable long-press selection/callouts
                 Platform.OS === 'web' && { userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' },
               ]}
+              accessibilityRole="button"
+              accessibilityLabel={createMicControlAccessibilityLabel()}
+              accessibilityHint={micControlAccessibilityHint}
+              accessibilityState={{ busy: listening }}
+              aria-busy={listening}
               onPressIn={!handsFree ? (e: GestureResponderEvent) => {
 					lastGrantTimeRef.current = Date.now();
 						webPressInSeenRef.current = true;

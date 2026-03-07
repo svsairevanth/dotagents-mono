@@ -236,3 +236,33 @@ Purpose: track investigation and incremental, shippable improvements to the Expo
   - Apply minimum `44x44` touch-target guardrails to Chat message-level actions (`Read aloud`, collapse toggles, tool disclosure row).
   - Add a dedicated per-message `Copy` action in Chat with clear labels/hints and keyboard-order validation.
 
+### 2026-03-07 - Iteration 9
+- Status: Shipped.
+- Area selected: Chat composer main mic control semantics (assistive-tech clarity and state exposure).
+- Investigation notes:
+  - Reused existing Expo Web workflow from repo scripts: `pnpm --filter @dotagents/mobile web --port 19007`.
+  - Navigated through setup and verified in an active Chat thread (`Connection settings -> Test & Save -> Go to Chats -> + New Chat`).
+  - Confirmed pre-fix gap in Expo Web accessibility tree/DOM:
+    - Chat mic control was keyboard-focusable but had no explicit role/label metadata, so assistive tech relied on changing emoji/text (`🎤 Hold` / `🎤 Talk`) for naming.
+    - Mode and listening state instructions were not explicit on the control itself.
+- Change made:
+  - Extended `apps/mobile/src/lib/accessibility.ts` with mic-specific helpers:
+    - `createMicControlAccessibilityLabel()` for stable, explicit control naming.
+    - `createMicControlAccessibilityHint(...)` for mode-aware guidance (push-to-talk, hands-free, release-to-edit/send behavior).
+  - Updated `apps/mobile/src/screens/ChatScreen.tsx` main mic `Pressable` to include:
+    - `accessibilityRole="button"`
+    - stable `accessibilityLabel` via shared helper
+    - dynamic `accessibilityHint` via shared helper
+    - explicit busy state via `accessibilityState={{ busy: listening }}` and `aria-busy`
+  - Expanded `apps/mobile/src/lib/accessibility.test.ts` with dedicated tests for the new mic helpers.
+- Tests/verification:
+  - Ran: `pnpm --filter @dotagents/mobile test src/lib/accessibility.test.ts` ✅ (31 tests).
+  - Ran: `pnpm --filter @dotagents/mobile exec tsc --noEmit` ✅.
+  - Re-verified in Expo Web automation on ChatScreen mic (not Sessions Rapid Fire):
+    - Mic now renders as `button` with `aria-label="Voice input microphone button"` in both hands-free OFF and ON states.
+    - `aria-busy` transitions correctly during listening (`false -> true -> false`) in both hands-free tap mode and push-to-talk hold/release mode.
+- Next checks:
+  - Apply minimum `44x44` touch-target guardrails to Chat message-level actions (`Read aloud`, collapse toggles, tool disclosure row).
+  - Add a dedicated per-message `Copy` action in Chat with clear labels/hints and keyboard-order validation.
+  - Validate large-text/dynamic-type behavior for Chat composer controls (attach/TTS/edit-before-send/send) to avoid overlap/wrapping regressions.
+

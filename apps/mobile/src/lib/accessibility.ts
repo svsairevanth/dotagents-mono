@@ -4,6 +4,7 @@ const FALLBACK_BUTTON_LABEL = 'Action button';
 const FALLBACK_INPUT_LABEL = 'Input field';
 const FALLBACK_DISCLOSURE_LABEL = 'details';
 const FALLBACK_VOICE_STATUS = 'Voice input ready.';
+const MIC_CONTROL_LABEL = 'Voice input microphone button';
 const WEB_SHORTCUT_HINT = 'Use Shift+Enter or Ctrl/Cmd+Enter to send.';
 const DEFAULT_TOUCH_TARGET_SIZE = 44;
 const DEFAULT_TOUCH_TARGET_PADDING = 6;
@@ -45,6 +46,34 @@ export const createTextInputAccessibilityLabel = (fieldName: string): string => 
     return FALLBACK_INPUT_LABEL;
   }
   return `${normalizedName} input`;
+};
+
+export const createMicControlAccessibilityLabel = (): string => MIC_CONTROL_LABEL;
+
+export const createMicControlAccessibilityHint = ({
+  handsFree,
+  listening,
+  willCancel,
+}: {
+  handsFree: boolean;
+  listening: boolean;
+  willCancel: boolean;
+}): string => {
+  if (handsFree) {
+    if (listening) {
+      return 'Voice input is active. Double tap to stop recording.';
+    }
+    return 'Double tap to start voice input. Double tap again to stop recording.';
+  }
+
+  if (listening) {
+    if (willCancel) {
+      return 'Voice input is active. Release to insert dictated text for editing.';
+    }
+    return 'Voice input is active. Release to send your dictated message.';
+  }
+
+  return 'Press and hold to dictate your message. Release to send.';
 };
 
 export const createChatComposerAccessibilityHint = ({
