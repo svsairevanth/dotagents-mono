@@ -45,4 +45,25 @@ describe("getSettingsSaveErrorMessage", () => {
       "Couldn't save your settings because DotAgents doesn't have permission to write its config files.",
     )
   })
+
+  it("uses nested causes when the top-level message is only a generic wrapper", () => {
+    const error = new Error("Failed to save settings to disk.", {
+      cause: new Error("ENOSPC: no space left on device"),
+    })
+
+    expect(getSettingsSaveErrorMessage(error)).toBe(
+      "Couldn't save your settings because your disk is full. Free up some space and try again.",
+    )
+  })
+
+  it("unwraps aggregate-style nested errors when the wrapper message is generic", () => {
+    const error = new AggregateError(
+      [new Error("EROFS: read-only file system")],
+      "Failed to save settings to disk.",
+    )
+
+    expect(getSettingsSaveErrorMessage(error)).toBe(
+      "Couldn't save your settings because the config location is read-only.",
+    )
+  })
 })
