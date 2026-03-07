@@ -9,7 +9,7 @@ const toMenu = (
 }
 
 export const createAppMenu = () => {
-  const isMac = process.env.IS_MAC
+  const isMac = String(process.env.IS_MAC).toLowerCase() === "true"
 
   const template: Electron.MenuItemConstructorOptions[] = [
     // { role: 'appMenu' }
