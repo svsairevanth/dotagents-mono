@@ -64,6 +64,10 @@ function findNestedErrorMessage(error: unknown, seen: WeakSet<object>): string |
   }
 
   const stringified = String(error)
+  if (error instanceof Error && !error.message && stringified === error.name) {
+    return undefined
+  }
+
   return stringified && stringified !== "[object Object]" ? stringified : undefined
 }
 
@@ -72,5 +76,17 @@ export function getErrorMessage(error: unknown, fallback = "Unknown error"): str
 }
 
 export function normalizeError(error: unknown, fallback = "Unknown error"): Error {
-  return error instanceof Error ? error : new Error(getErrorMessage(error, fallback))
+  const message = getErrorMessage(error, fallback)
+
+  if (error instanceof Error) {
+    if (error.message === message) {
+      return error
+    }
+
+    const normalized = new Error(message, { cause: error })
+    normalized.name = error.name || normalized.name
+    return normalized
+  }
+
+  return new Error(message)
 }

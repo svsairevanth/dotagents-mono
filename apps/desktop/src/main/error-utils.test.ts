@@ -25,6 +25,11 @@ describe("error-utils", () => {
     expect(getErrorMessage(aggregateLikeError, "Fallback message")).toBe("Primary provider unavailable")
   })
 
+  it("uses the fallback when a blank Error only stringifies to its constructor name", () => {
+    expect(getErrorMessage(new Error(""), "Fallback message")).toBe("Fallback message")
+    expect(getErrorMessage(new TypeError(""), "Fallback message")).toBe("Fallback message")
+  })
+
   it("normalizes nullish values to Error with fallback message", () => {
     const normalizedNull = normalizeError(null, "Request failed")
     const normalizedUndefined = normalizeError(undefined, "Request failed")
@@ -40,5 +45,28 @@ describe("error-utils", () => {
 
     expect(normalized).toBeInstanceOf(Error)
     expect(normalized.message).toBe("Provider returned 401")
+  })
+
+  it("rewraps blank Error instances with a readable nested cause message", () => {
+    const original = new TypeError("", { cause: new Error("Streaming request failed") })
+
+    const normalized = normalizeError(original, "Fallback message")
+
+    expect(normalized).toBeInstanceOf(Error)
+    expect(normalized).not.toBe(original)
+    expect(normalized.name).toBe("TypeError")
+    expect(normalized.message).toBe("Streaming request failed")
+    expect((normalized as Error & { cause?: unknown }).cause).toBe(original)
+  })
+
+  it("rewraps blank Error instances with the fallback message when no nested details exist", () => {
+    const original = new Error("")
+
+    const normalized = normalizeError(original, "Fallback message")
+
+    expect(normalized).toBeInstanceOf(Error)
+    expect(normalized).not.toBe(original)
+    expect(normalized.message).toBe("Fallback message")
+    expect((normalized as Error & { cause?: unknown }).cause).toBe(original)
   })
 })
