@@ -8,6 +8,37 @@
 
 ## Recent Iterations
 
+### 2026-03-07 — Iteration 3: strengthen Connection inline action accessibility
+
+- Status: completed
+- Area:
+  - Connection screen inline actions in `apps/mobile/src/screens/ConnectionSettingsScreen.tsx`
+  - live flow inspected in Expo Web: `Settings -> Connection`
+- Why this area:
+  - iteration 2 already fixed first-run save validation in Connection, and its follow-up notes called out weak accessibility semantics for text-only actions.
+  - fresh Expo Web inspection confirmed a concrete usability issue: `Show/Hide` and `Reset to default` worked, but rendered as tiny text-only controls with weak button affordance.
+- What was investigated:
+  - current inline action markup and styles in `ConnectionSettingsScreen.tsx`
+  - live Expo Web behavior and accessibility output for `Show/Hide` and `Reset to default`
+- Findings:
+  - both controls were exposed as small inline text actions instead of clear button-like controls
+  - Expo Web showed weak hit areas and semantics for assistive tech compared with the primary actions on the same screen
+- Change made:
+  - restyled the API key visibility toggle and Base URL reset action as bordered pill buttons with a 44px minimum height
+  - added descriptive accessibility labels/hints so the controls are announced as clear buttons
+  - extended `apps/mobile/tests/connection-settings-validation.test.js` with regression coverage for the new accessibility/touch-target guardrails
+- Verification:
+  - `pnpm --filter @dotagents/mobile exec tsc --noEmit`
+  - `node --test apps/mobile/tests/connection-settings-validation.test.js`
+  - live Expo Web verification at `http://localhost:8091`:
+    - confirmed `Show API key` / `Hide API key` are exposed as buttons and toggle the input masking correctly
+    - confirmed `Reset base URL to default` is exposed as a button and restores `https://api.openai.com/v1`
+    - confirmed both inline actions render at 44px height after the change
+- Follow-up checks:
+  - investigate why `Scan QR Code` does not surface a visible scanner modal in Expo Web, so the web flow remains nonfunctional there
+  - investigate the unrelated Settings warning after reconnecting: `⚠️ Failed to load: settings`
+  - investigate the Expo Web runtime errors noted in earlier passes, especially `normalizeApiBaseUrl is not a function` and `Unexpected text node ... child of a <View>`
+
 ### 2026-03-07 — Iteration 2: stop misleading empty-key saves on Connection
 
 - Status: completed

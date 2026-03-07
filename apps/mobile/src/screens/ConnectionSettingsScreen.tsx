@@ -221,7 +221,13 @@ export default function ConnectionSettingsScreen({ navigation }: any) {
 
         <View style={styles.labelRow}>
           <Text style={styles.label}>API Key</Text>
-          <TouchableOpacity onPress={() => setShowApiKey(!showApiKey)}>
+          <TouchableOpacity
+            style={styles.inlineActionButton}
+            onPress={() => setShowApiKey(!showApiKey)}
+            accessibilityRole="button"
+            accessibilityLabel={showApiKey ? 'Hide API key' : 'Show API key'}
+            accessibilityHint="Toggles whether the API key is visible"
+          >
             <Text style={styles.resetText}>{showApiKey ? 'Hide' : 'Show'}</Text>
           </TouchableOpacity>
         </View>
@@ -237,7 +243,13 @@ export default function ConnectionSettingsScreen({ navigation }: any) {
 
         <View style={styles.labelRow}>
           <Text style={styles.label}>Base URL</Text>
-          <TouchableOpacity onPress={resetBaseUrl}>
+          <TouchableOpacity
+            style={styles.inlineActionButton}
+            onPress={resetBaseUrl}
+            accessibilityRole="button"
+            accessibilityLabel="Reset base URL to default"
+            accessibilityHint="Restores the default OpenAI-compatible base URL"
+          >
             <Text style={styles.resetText}>Reset to default</Text>
           </TouchableOpacity>
         </View>
@@ -340,9 +352,22 @@ function createStyles(theme: ReturnType<typeof useTheme>['theme']) {
       alignItems: 'center',
       marginTop: spacing.sm,
     },
+    inlineActionButton: {
+      minWidth: 44,
+      minHeight: 44,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+      borderRadius: radius.full,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.secondary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     resetText: {
       fontSize: 12,
       color: theme.colors.primary,
+      fontWeight: '500',
     },
     helperText: {
       fontSize: 12,
