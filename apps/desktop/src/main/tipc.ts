@@ -78,6 +78,7 @@ import * as parakeetStt from "./parakeet-stt"
 import { loopService } from "./loop-service"
 import { clearSessionUserResponse } from "./session-user-response-store"
 import { BUILTIN_SERVER_NAME } from "./builtin-tool-definitions"
+import { isMissingApiKeyErrorMessage } from "../shared/api-key-error-utils"
 
 /**
  * Convert Float32Array audio samples to WAV format buffer
@@ -1306,6 +1307,24 @@ export const router = {
   displayError: t.procedure
     .input<{ title?: string; message: string }>()
     .action(async ({ input }) => {
+      if (isMissingApiKeyErrorMessage(input.message)) {
+        const result = await dialog.showMessageBox({
+          type: "error",
+          title: input.title || "Error",
+          message: input.message,
+          detail: "Configure your API key in Settings > Models.",
+          buttons: ["Open Model Settings", "Close"],
+          defaultId: 0,
+          cancelId: 1,
+          noLink: true,
+        })
+
+        if (result.response === 0) {
+          showMainWindow("/settings/models")
+        }
+        return
+      }
+
       dialog.showErrorBox(input.title || "Error", input.message)
     }),
 

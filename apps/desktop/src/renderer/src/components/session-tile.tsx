@@ -32,6 +32,7 @@ import { AudioPlayer } from "@renderer/components/audio-player"
 import { useConfigQuery } from "@renderer/lib/queries"
 import { ttsManager } from "@renderer/lib/tts-manager"
 import { removeTTSKey } from "@renderer/lib/tts-tracking"
+import { isMissingApiKeyErrorMessage } from "@shared/api-key-error-utils"
 
 const MIN_HEIGHT = 120
 const MAX_HEIGHT = 4000 // Allow tiles to fill large displays - effectively no practical limit
@@ -511,14 +512,34 @@ export function SessionTile({
 
                   // Render error messages with special styling
                   if (message.role === "error") {
+                    const errorContent = typeof message.content === "string"
+                      ? message.content
+                      : JSON.stringify(message.content)
+                    const shouldShowModelSettingsCta = isMissingApiKeyErrorMessage(errorContent)
+
                     return (
                       <div key={messageId} className="rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 p-3">
                         <div className="text-xs font-medium text-red-600 dark:text-red-400 mb-1">
                           Error
                         </div>
                         <div className="text-sm text-red-700 dark:text-red-300">
-                          {typeof message.content === "string" ? message.content : JSON.stringify(message.content)}
+                          {errorContent}
                         </div>
+                        {shouldShowModelSettingsCta && (
+                          <div className="mt-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                void tipcClient.showMainWindow({ url: "/settings/models" })
+                              }}
+                            >
+                              Open Model Settings
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     )
                   }
