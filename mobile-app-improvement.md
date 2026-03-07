@@ -92,3 +92,31 @@ Purpose: track investigation and incremental, shippable improvements to the Expo
   - Audit message-level actions (expand/collapse tool details, speak, copy) for keyboard/tab order and explicit hints.
   - Review Session list header actions for the same minimum touch-target guardrail.
 
+### 2026-03-07 - Iteration 4
+- Status: Shipped.
+- Area selected: Connection Settings quick actions + form field accessibility.
+- Investigation notes:
+  - Reused existing Expo Web workflow: `pnpm --filter @dotagents/mobile web --port 19007`.
+  - Audited initial setup flow with keyboard/accessibility focus on the Connection Settings screen.
+  - Found small quick-action controls and missing explicit input labels:
+    - API key `Show/Hide` and `Reset to default` controls were previously tiny and under-labeled.
+    - API key and Base URL inputs depended on placeholder text for naming.
+- Change made:
+  - Extended `apps/mobile/src/lib/accessibility.ts` with `createTextInputAccessibilityLabel(fieldName)` for stable form-input naming.
+  - Updated `apps/mobile/src/screens/ConnectionSettingsScreen.tsx`:
+    - Added explicit button semantics/labels/hints for API key `Show/Hide` and `Reset to default` actions.
+    - Enforced minimum 44px touch targets for those inline actions via `createMinimumTouchTargetStyle`.
+    - Added explicit input accessibility labels/hints for API key and Base URL fields.
+  - Expanded `apps/mobile/src/lib/accessibility.test.ts` with coverage for the new input-label helper.
+- Tests/verification:
+  - Ran: `pnpm --filter @dotagents/mobile test src/lib/accessibility.test.ts` ✅ (13 tests).
+  - Ran: `pnpm --filter @dotagents/mobile exec tsc --noEmit` ✅.
+  - Re-verified in Expo Web DOM/accessibility tree:
+    - API key `Show/Hide` now exposes descriptive button labels and `44px` height (`46.86x44`, `44x44`).
+    - `Reset to default` now exposes a descriptive button label and `44px` height (`105.54x44`).
+    - API key/Base URL now expose explicit input labels (`API key input`, `Base URL input`) rather than placeholder-only naming.
+- Next checks:
+  - Apply the same minimum touch-target guardrail to Sessions screen actions (`+ New Chat`, `Clear All`, top-right settings icon).
+  - Improve message-level expand/collapse controls in Chat to reduce keyboard tab friction and add clearer labels.
+  - Validate Connection Settings with larger text scaling to ensure inline actions do not wrap/overlap.
+

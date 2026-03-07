@@ -4,6 +4,7 @@ import {
   createMcpServerSwitchAccessibilityLabel,
   createMinimumTouchTargetStyle,
   createSwitchAccessibilityLabel,
+  createTextInputAccessibilityLabel,
 } from './accessibility';
 
 describe('createSwitchAccessibilityLabel', () => {
@@ -41,6 +42,20 @@ describe('createButtonAccessibilityLabel', () => {
 
   it('falls back for empty names', () => {
     expect(createButtonAccessibilityLabel('   ')).toBe('Action button');
+  });
+});
+
+describe('createTextInputAccessibilityLabel', () => {
+  it('adds an input suffix for named fields', () => {
+    expect(createTextInputAccessibilityLabel('API key')).toBe('API key input');
+  });
+
+  it('trims surrounding whitespace', () => {
+    expect(createTextInputAccessibilityLabel('  Base URL  ')).toBe('Base URL input');
+  });
+
+  it('falls back for empty names', () => {
+    expect(createTextInputAccessibilityLabel('   ')).toBe('Input field');
   });
 });
 
