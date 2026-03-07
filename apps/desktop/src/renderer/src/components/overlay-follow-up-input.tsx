@@ -265,9 +265,9 @@ export function OverlayFollowUpInput({
     >
       {/* Agent indicator - shows which agent is handling this session */}
       {agentName && (
-        <div className="flex items-center gap-1 text-[10px] text-primary/70">
+        <div className="flex min-w-0 items-center gap-1 text-[10px] text-primary/70">
           <Bot className="h-2.5 w-2.5 shrink-0" />
-          <span className="truncate" title={`Agent: ${agentName}`}>{agentName}</span>
+          <span className="min-w-0 truncate" title={`Agent: ${agentName}`}>{agentName}</span>
         </div>
       )}
 
@@ -292,7 +292,7 @@ export function OverlayFollowUpInput({
         </div>
       )}
 
-      <div className="flex w-full items-center gap-2">
+      <div className="flex w-full flex-wrap items-center gap-2">
         <input
           ref={inputRef}
           type="text"
@@ -303,7 +303,7 @@ export function OverlayFollowUpInput({
           onFocus={handleInputInteraction}
           placeholder={getPlaceholder()}
           className={cn(
-            "flex-1 text-sm bg-transparent border-0 outline-none",
+            "min-w-0 flex-[1_1_10rem] text-sm bg-transparent border-0 outline-none",
             "placeholder:text-muted-foreground/60",
             "focus:ring-0"
           )}
@@ -317,75 +317,77 @@ export function OverlayFollowUpInput({
           className="hidden"
           onChange={handleImageSelection}
         />
-        <PredefinedPromptsMenu
-          onSelectPrompt={(content) => setText(content)}
-          disabled={isDisabled}
-          buttonSize="sm"
-        />
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          className="h-7 w-7 flex-shrink-0"
-          disabled={isDisabled || imageAttachments.length >= MAX_IMAGE_ATTACHMENTS}
-          onMouseDown={handleInputInteraction}
-          onClick={handleImageButtonClick}
-          title="Attach image"
-        >
-          <ImagePlus className="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          type="submit"
-          size="icon"
-          variant="ghost"
-          className="h-7 w-7 flex-shrink-0"
-          disabled={!hasMessageContent || isDisabled}
-          onMouseDown={handleInputInteraction}
-          title={isSessionActive && isQueueEnabled ? "Queue message" : "Send message"}
-        >
-          <Send className={cn(
-            "h-3.5 w-3.5",
-            sendMutation.isPending && "animate-pulse"
-          )} />
-        </Button>
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          className={cn(
-            "h-7 w-7 flex-shrink-0",
-            "hover:bg-red-100 dark:hover:bg-red-900/30",
-            "hover:text-red-600 dark:hover:text-red-400"
-          )}
-          disabled={isVoiceDisabled}
-          onMouseDown={handleInputInteraction}
-          onClick={handleVoiceClick}
-          title={isSessionActive && isQueueEnabled ? "Record voice message (will be queued)" : isSessionActive ? "Voice unavailable while agent is processing" : "Continue with voice"}
-        >
-          <Mic className="h-3.5 w-3.5" />
-        </Button>
-        {/* Kill switch - stop agent button (only show when session is active) */}
-        {isSessionActive && sessionId && !sessionId.startsWith('pending-') && (
+        <div className="ml-auto flex max-w-full shrink-0 flex-wrap items-center gap-2">
+          <PredefinedPromptsMenu
+            onSelectPrompt={(content) => setText(content)}
+            disabled={isDisabled}
+            buttonSize="sm"
+          />
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7 flex-shrink-0"
+            disabled={isDisabled || imageAttachments.length >= MAX_IMAGE_ATTACHMENTS}
+            onMouseDown={handleInputInteraction}
+            onClick={handleImageButtonClick}
+            title="Attach image"
+          >
+            <ImagePlus className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            type="submit"
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7 flex-shrink-0"
+            disabled={!hasMessageContent || isDisabled}
+            onMouseDown={handleInputInteraction}
+            title={isSessionActive && isQueueEnabled ? "Queue message" : "Send message"}
+          >
+            <Send className={cn(
+              "h-3.5 w-3.5",
+              sendMutation.isPending && "animate-pulse"
+            )} />
+          </Button>
           <Button
             type="button"
             size="icon"
             variant="ghost"
             className={cn(
               "h-7 w-7 flex-shrink-0",
-              "text-red-500 hover:text-red-600",
-              "hover:bg-red-100 dark:hover:bg-red-950/30"
+              "hover:bg-red-100 dark:hover:bg-red-900/30",
+              "hover:text-red-600 dark:hover:text-red-400"
             )}
-            disabled={isStoppingSession}
+            disabled={isVoiceDisabled}
             onMouseDown={handleInputInteraction}
-            onClick={handleStopSession}
-            title="Stop agent execution"
+            onClick={handleVoiceClick}
+            title={isSessionActive && isQueueEnabled ? "Record voice message (will be queued)" : isSessionActive ? "Voice unavailable while agent is processing" : "Continue with voice"}
           >
-            <OctagonX className={cn(
-              "h-3.5 w-3.5",
-              isStoppingSession && "animate-pulse"
-            )} />
+            <Mic className="h-3.5 w-3.5" />
           </Button>
-        )}
+          {/* Kill switch - stop agent button (only show when session is active) */}
+          {isSessionActive && sessionId && !sessionId.startsWith('pending-') && (
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className={cn(
+                "h-7 w-7 flex-shrink-0",
+                "text-red-500 hover:text-red-600",
+                "hover:bg-red-100 dark:hover:bg-red-950/30"
+              )}
+              disabled={isStoppingSession}
+              onMouseDown={handleInputInteraction}
+              onClick={handleStopSession}
+              title="Stop agent execution"
+            >
+              <OctagonX className={cn(
+                "h-3.5 w-3.5",
+                isStoppingSession && "animate-pulse"
+              )} />
+            </Button>
+          )}
+        </div>
       </div>
     </form>
   )
