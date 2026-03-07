@@ -16,8 +16,14 @@ export function getUpdateInfo() {
 export async function checkForUpdatesMenuItem(_menuItem: MenuItem) {
   // Auto-updater is disabled - show message directing to GitHub releases
   await dialog.showMessageBox({
+    type: "info",
     title: "Check for Updates",
-    message: `To check for updates, please visit:\nhttps://github.com/aj47/SpeakMCP/releases`,
+    message: "Updates are currently manual.",
+    detail: "To check for updates, please visit:\nhttps://github.com/aj47/dotagents-mono/releases",
+    buttons: ["OK"],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
   })
 }
 

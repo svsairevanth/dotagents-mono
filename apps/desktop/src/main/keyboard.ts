@@ -1383,35 +1383,18 @@ export function listenToKeyboardEvents() {
     // show a helpful notification about the input group requirement
     if (process.platform === "linux" && code === 1) {
       if (stderrBuffer.includes("PermissionDenied") || stderrBuffer.includes("Permission denied")) {
-        const { dialog, Notification } = require("electron")
+        const { dialog } = require("electron")
 
-        // Show a notification if supported
-        if (Notification.isSupported()) {
-          const notification = new Notification({
-            title: "DotAgents: Hotkeys Not Working",
-            body: "Global hotkeys require input group membership. Click for details.",
-            urgency: "critical",
-          })
-          notification.on("click", () => {
-            dialog.showMessageBox({
-              type: "warning",
-              title: "Global Hotkeys Permission Required",
-              message: "To use global hotkeys on Linux (especially Wayland), you need to add your user to the 'input' group.",
-              detail: "Run this command in a terminal:\n\nsudo usermod -aG input $USER\n\nThen log out and log back in for the change to take effect.\n\nThis is required because DotAgents needs to read keyboard events from /dev/input/ devices.",
-              buttons: ["OK"],
-            })
-          })
-          notification.show()
-        } else {
-          // Fallback to dialog
-          dialog.showMessageBox({
-            type: "warning",
-            title: "Global Hotkeys Permission Required",
-            message: "To use global hotkeys on Linux (especially Wayland), you need to add your user to the 'input' group.",
-            detail: "Run this command in a terminal:\n\nsudo usermod -aG input $USER\n\nThen log out and log back in for the change to take effect.",
-            buttons: ["OK"],
-          })
-        }
+        dialog.showMessageBox({
+          type: "warning",
+          title: "Global Hotkeys Permission Required",
+          message: "To use global hotkeys on Linux (especially Wayland), you need to add your user to the 'input' group.",
+          detail: "Run this command in a terminal:\n\nsudo usermod -aG input $USER\n\nThen log out and log back in for the change to take effect.\n\nThis is required because DotAgents needs to read keyboard events from /dev/input/ devices.",
+          buttons: ["OK"],
+          defaultId: 0,
+          cancelId: 0,
+          noLink: true,
+        })
 
         // eslint-disable-next-line no-console
         console.error(

@@ -120,7 +120,7 @@ export const createAppMenu = () => {
         {
           label: "Send Feedback",
           click() {
-            shell.openExternal("https://github.com/aj47/SpeakMCP/issues/new")
+            shell.openExternal("https://github.com/aj47/dotagents-mono/issues/new")
           },
         },
       ]),
