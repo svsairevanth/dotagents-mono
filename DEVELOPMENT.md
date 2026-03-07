@@ -29,12 +29,16 @@ pnpm dev       # Start development server
 | `pnpm build` | Production build for current platform |
 | `pnpm build:mac` | macOS build (Apple Silicon + Intel) |
 | `pnpm build:win` | Windows build (x64) |
-| `pnpm build:linux` | Linux build (x64) |
+| `pnpm build:linux` | Linux build for the current host architecture |
+| `pnpm --filter @dotagents/desktop build:linux:x64` | Linux build targeting `x64` |
+| `pnpm --filter @dotagents/desktop build:linux:arm64` | Linux build targeting `arm64` |
 | `pnpm test` | Run test suite |
 | `pnpm test:run` | Run tests once (CI mode) |
 | `pnpm test:coverage` | Run tests with coverage |
 
 For signed release builds, see [BUILDING.md](BUILDING.md).
+For Linux release goals and acceptance criteria, see [LINUX_SUPPORT_MATRIX.md](LINUX_SUPPORT_MATRIX.md)
+and [LINUX_PARITY_CHECKLIST.md](LINUX_PARITY_CHECKLIST.md).
 
 ## Docker Support
 
@@ -47,6 +51,25 @@ docker compose run --rm shell             # Interactive development shell
 ```
 
 > **Note**: SpeakMCP is an Electron desktop app that requires a display. Docker is primarily for building Linux packages.
+
+## Architecture-specific Linux Build Notes
+
+- Use the desktop package scripts below to produce Linux artifacts for a specific architecture:
+
+```bash
+pnpm --filter @dotagents/desktop build:linux:x64
+pnpm --filter @dotagents/desktop build:linux:arm64
+```
+
+- For release-style local packaging without publishing, use the `build:linux:release:*` variants.
+- If you need to override Linux packaging targets manually, set `DOTAGENTS_LINUX_TARGETS` (comma-separated):
+
+```bash
+DOTAGENTS_LINUX_TARGETS=AppImage,deb pnpm --filter @dotagents/desktop build:linux:arm64
+```
+
+- Architecture-specific release policy and parity requirements live in
+  [LINUX_SUPPORT_MATRIX.md](LINUX_SUPPORT_MATRIX.md).
 
 ## Debug Mode
 
