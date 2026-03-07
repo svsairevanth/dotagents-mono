@@ -78,12 +78,7 @@ import * as parakeetStt from "./parakeet-stt"
 import { loopService } from "./loop-service"
 import { clearSessionUserResponse } from "./session-user-response-store"
 import { BUILTIN_SERVER_NAME } from "./builtin-tool-definitions"
-
-const MISSING_API_KEY_ERROR_REGEX = /api key is required(?: for)?(?:\s+[a-z0-9._-]+)?/i
-
-function isMissingApiKeyErrorMessage(message: string): boolean {
-  return MISSING_API_KEY_ERROR_REGEX.test(message)
-}
+import { isMissingApiKeyErrorMessage } from "../shared/api-key-error-utils"
 
 /**
  * Convert Float32Array audio samples to WAV format buffer

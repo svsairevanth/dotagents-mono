@@ -32,15 +32,11 @@ import { AudioPlayer } from "@renderer/components/audio-player"
 import { useConfigQuery } from "@renderer/lib/queries"
 import { ttsManager } from "@renderer/lib/tts-manager"
 import { removeTTSKey } from "@renderer/lib/tts-tracking"
+import { isMissingApiKeyErrorMessage } from "@shared/api-key-error-utils"
 
 const MIN_HEIGHT = 120
 const MAX_HEIGHT = 4000 // Allow tiles to fill large displays - effectively no practical limit
 const DEFAULT_HEIGHT = 280
-const MISSING_API_KEY_ERROR_REGEX = /api key is required(?: for)?(?:\s+[a-z0-9._-]+)?/i
-
-function isMissingApiKeyErrorMessage(message: string): boolean {
-  return MISSING_API_KEY_ERROR_REGEX.test(message)
-}
 
 interface SessionTileProps {
   session: {
