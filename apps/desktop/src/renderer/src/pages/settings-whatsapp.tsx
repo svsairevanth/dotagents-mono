@@ -354,11 +354,11 @@ export function Component() {
                   scheduleAllowFromSave(nextDraft)
                 }}
                 onBlur={() => flushAllowFromSave(allowFromDraft)}
-                placeholder={streamerMode ? "••••••••••" : "14155551234, 98389177934034"}
+                placeholder={streamerMode ? "••••••••••" : "+14155551234, 98389177934034"}
                 className="w-full"
               />
               <div className="mt-2 text-xs text-muted-foreground space-y-1">
-                <p>Enter phone numbers or LIDs separated by commas (numbers only, no + sign)</p>
+                <p>Enter phone numbers or LIDs separated by commas. Phone numbers can include formatting like +, spaces, or punctuation.</p>
                 <details className="cursor-pointer">
                   <summary className="text-blue-600 dark:text-blue-400 hover:underline">
                     ℹ️ What are LIDs? How do I find them?

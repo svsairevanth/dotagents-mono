@@ -130,6 +130,8 @@ export function OverlayFollowUpInput({
 
     try {
       await sendMutation.mutateAsync(message)
+    } catch (error) {
+      console.error("Failed to submit overlay follow-up message:", error)
     } finally {
       submitInFlightRef.current = false
       setIsSubmitting(false)

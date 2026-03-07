@@ -3,6 +3,14 @@ function findNestedErrorMessage(error: unknown, seen: WeakSet<object>): string |
     return undefined
   }
 
+  if (error && typeof error === "object") {
+    if (seen.has(error)) {
+      return undefined
+    }
+
+    seen.add(error)
+  }
+
   if (error instanceof Error) {
     if (error.message) {
       return error.message
@@ -33,12 +41,6 @@ function findNestedErrorMessage(error: unknown, seen: WeakSet<object>): string |
   }
 
   if (error && typeof error === "object") {
-    if (seen.has(error)) {
-      return undefined
-    }
-
-    seen.add(error)
-
     const candidate = error as {
       message?: unknown
       error?: unknown

@@ -19,6 +19,7 @@ describe("desktop follow-up input submit guardrails", () => {
       "pending: sendMutation.isPending || isSubmitting || submitInFlightRef.current",
     )
     expect(overlaySource).toContain("await sendMutation.mutateAsync(message)")
+    expect(overlaySource).toContain("console.error(\"Failed to submit overlay follow-up message:\", error)")
     expect(overlaySource).toContain(
       "const isDisabled = isSubmitting || sendMutation.isPending || (isSessionActive && !isQueueEnabled)",
     )
@@ -31,6 +32,7 @@ describe("desktop follow-up input submit guardrails", () => {
       "pending: sendMutation.isPending || isSubmitting || submitInFlightRef.current",
     )
     expect(tileSource).toContain("await sendMutation.mutateAsync(message)")
+    expect(tileSource).toContain("console.error(\"Failed to submit tile follow-up message:\", error)")
     expect(tileSource).toMatch(/isInitializingSession \|\|\s+isSubmitting \|\|\s+sendMutation\.isPending/)
   })
 })

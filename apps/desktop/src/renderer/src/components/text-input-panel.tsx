@@ -92,6 +92,8 @@ export const TextInputPanel = forwardRef<TextInputPanelRef, TextInputPanelProps>
         setText("")
         setImageAttachments([])
       }
+    } catch (error) {
+      console.error("Failed to submit text input panel message:", error)
     } finally {
       submitInFlightRef.current = false
       setIsSubmitting(false)

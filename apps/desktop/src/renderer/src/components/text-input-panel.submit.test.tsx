@@ -191,4 +191,36 @@ describe("TextInputPanel submit behavior", () => {
     const clearedTextarea = findTextarea(tree)
     expect(clearedTextarea.props.value).toBe("")
   })
+
+  it("keeps the draft and clears busy state when the async submit handler rejects", async () => {
+    const runtime = createHookRuntime()
+    const { TextInputPanel } = await loadTextInputPanel(runtime)
+    const error = new Error("submit failed")
+    const onSubmit = vi.fn(async () => {
+      throw error
+    })
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
+    const props = {
+      onSubmit,
+      onCancel: vi.fn(),
+      selectedAgentId: null,
+      onSelectAgent: vi.fn(),
+      initialText: "Retry me",
+    }
+
+    let tree = runtime.render(TextInputPanel, props as any)
+    const sendButton = findNode(tree, (node) => node.type === "button" && getText(node) === "Send")
+    sendButton.props.onClick()
+    await flushPromises()
+
+    tree = runtime.render(TextInputPanel, props as any)
+    const textarea = findTextarea(tree)
+    const retrySendButton = findNode(tree, (node) => node.type === "button" && getText(node) === "Send")
+
+    expect(onSubmit).toHaveBeenCalledOnce()
+    expect(textarea.props.value).toBe("Retry me")
+    expect(textarea.props.disabled).toBe(false)
+    expect(retrySendButton.props.disabled).toBe(false)
+    expect(consoleError).toHaveBeenCalledWith("Failed to submit text input panel message:", error)
+  })
 })

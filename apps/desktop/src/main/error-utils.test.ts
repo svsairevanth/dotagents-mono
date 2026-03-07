@@ -25,6 +25,20 @@ describe("error-utils", () => {
     expect(getErrorMessage(aggregateLikeError, "Fallback message")).toBe("Primary provider unavailable")
   })
 
+  it("uses the fallback when Error.cause forms a cycle", () => {
+    const error = new Error("") as Error & { cause?: unknown }
+    error.cause = error
+
+    expect(getErrorMessage(error, "Fallback message")).toBe("Fallback message")
+  })
+
+  it("skips cyclic Error.errors entries and still finds later nested messages", () => {
+    const error = new Error("") as Error & { errors?: unknown[] }
+    error.errors = [error, new Error("Primary provider unavailable")]
+
+    expect(getErrorMessage(error, "Fallback message")).toBe("Primary provider unavailable")
+  })
+
   it("uses the fallback when a blank Error only stringifies to its constructor name", () => {
     expect(getErrorMessage(new Error(""), "Fallback message")).toBe("Fallback message")
     expect(getErrorMessage(new TypeError(""), "Fallback message")).toBe("Fallback message")

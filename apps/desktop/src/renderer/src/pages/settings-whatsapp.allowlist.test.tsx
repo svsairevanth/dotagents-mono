@@ -101,6 +101,21 @@ function findInput(node: any) {
   return findNode(node, (candidate) => candidate.type === "Input")
 }
 
+function collectText(node: any, results: string[] = []): string[] {
+  if (typeof node === "string") {
+    results.push(node)
+    return results
+  }
+  if (Array.isArray(node)) {
+    for (const child of node) collectText(child, results)
+    return results
+  }
+  if (node && typeof node === "object") {
+    collectText(node.props?.children, results)
+  }
+  return results
+}
+
 async function flushPromises() {
   await Promise.resolve()
   await Promise.resolve()
@@ -213,6 +228,19 @@ afterEach(() => {
 })
 
 describe("desktop WhatsApp settings allowlist", () => {
+  it("shows guidance that formatted phone numbers are accepted", async () => {
+    const runtime = createHookRuntime()
+    const { Component } = await loadSettingsWhatsApp(runtime)
+
+    const tree = runtime.render(Component, {} as any)
+    runtime.commitEffects()
+    await flushPromises()
+
+    const input = findInput(tree)
+    expect(input.props.placeholder).toBe("+14155551234, 98389177934034")
+    expect(collectText(tree)).toContain("Enter phone numbers or LIDs separated by commas. Phone numbers can include formatting like +, spaces, or punctuation.")
+  })
+
   it("keeps a local draft and debounces config saves while editing", async () => {
     const runtime = createHookRuntime()
     const { Component, mutate, getCurrentConfig } = await loadSettingsWhatsApp(runtime)

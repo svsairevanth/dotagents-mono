@@ -121,6 +121,8 @@ export function TileFollowUpInput({
 
     try {
       await sendMutation.mutateAsync(message)
+    } catch (error) {
+      console.error("Failed to submit tile follow-up message:", error)
     } finally {
       submitInFlightRef.current = false
       setIsSubmitting(false)
