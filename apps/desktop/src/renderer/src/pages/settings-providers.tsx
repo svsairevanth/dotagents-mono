@@ -42,6 +42,7 @@ import {
   getBuiltInModelPresets,
   DEFAULT_MODEL_PRESET_ID,
 } from "@shared/index"
+import { getSelectableMainAcpAgents } from "./settings-general-main-agent-options"
 
 // Badge component to show which features are using this provider
 function ActiveProviderBadge({ label, icon: Icon }: { label: string; icon: React.ElementType }) {
@@ -856,6 +857,7 @@ export function Component() {
   const activeProviders = useMemo(() => {
     if (!configQuery.data) return { openai: [], groq: [], gemini: [], parakeet: [], kitten: [], supertonic: [] }
 
+    const isMainAgentAcpMode = configQuery.data.mainAgentMode === "acp"
     const stt = configQuery.data.sttProviderId || "openai"
     const transcript = configQuery.data.transcriptPostProcessingProviderId || "openai"
     const mcp = configQuery.data.mcpToolsProviderId || "openai"
@@ -865,18 +867,18 @@ export function Component() {
       openai: [
         ...(stt === "openai" ? [{ label: "STT", icon: Mic }] : []),
         ...(transcript === "openai" ? [{ label: "Transcript", icon: FileText }] : []),
-        ...(mcp === "openai" ? [{ label: "Agent", icon: Bot }] : []),
+        ...(mcp === "openai" && !isMainAgentAcpMode ? [{ label: "Agent", icon: Bot }] : []),
         ...(tts === "openai" ? [{ label: "TTS", icon: Volume2 }] : []),
       ],
       groq: [
         ...(stt === "groq" ? [{ label: "STT", icon: Mic }] : []),
         ...(transcript === "groq" ? [{ label: "Transcript", icon: FileText }] : []),
-        ...(mcp === "groq" ? [{ label: "Agent", icon: Bot }] : []),
+        ...(mcp === "groq" && !isMainAgentAcpMode ? [{ label: "Agent", icon: Bot }] : []),
         ...(tts === "groq" ? [{ label: "TTS", icon: Volume2 }] : []),
       ],
       gemini: [
         ...(transcript === "gemini" ? [{ label: "Transcript", icon: FileText }] : []),
-        ...(mcp === "gemini" ? [{ label: "Agent", icon: Bot }] : []),
+        ...(mcp === "gemini" && !isMainAgentAcpMode ? [{ label: "Agent", icon: Bot }] : []),
         ...(tts === "gemini" ? [{ label: "TTS", icon: Volume2 }] : []),
       ],
       parakeet: [
@@ -890,6 +892,19 @@ export function Component() {
       ],
     }
   }, [configQuery.data])
+
+  const selectableMainAcpAgents = useMemo(
+    () => getSelectableMainAcpAgents(configQuery.data?.agentProfiles || [], configQuery.data?.acpAgents || []),
+    [configQuery.data?.agentProfiles, configQuery.data?.acpAgents]
+  )
+
+  const selectedMainAcpAgentDisplayName = useMemo(() => {
+    const selectedAgentName = configQuery.data?.mainAgentName?.trim()
+    if (!selectedAgentName) return null
+    return selectableMainAcpAgents.find(agent => agent.name === selectedAgentName)?.displayName || selectedAgentName
+  }, [configQuery.data?.mainAgentName, selectableMainAcpAgents])
+
+  const isMainAgentAcpMode = configQuery.data?.mainAgentMode === "acp"
 
   // Determine which providers are active (selected for at least one feature)
   const isGroqActive = activeProviders.groq.length > 0
@@ -944,6 +959,21 @@ export function Component() {
             </p>
           </div>
 
+          {isMainAgentAcpMode && (
+            <div className="mx-3 my-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs">
+              <div className="flex items-center gap-1.5 font-medium text-primary">
+                <Bot className="h-3.5 w-3.5" />
+                ACP Main Agent:{" "}
+                <span className="text-foreground">
+                  {selectedMainAcpAgentDisplayName || "Not selected"}
+                </span>
+              </div>
+              <p className="mt-1 text-muted-foreground">
+                In ACP mode, this agent handles chat submissions. API provider selection below for Agent/MCP tools applies in API mode.
+              </p>
+            </div>
+          )}
+
           <ProviderSelector
             label="Voice Transcription (STT)"
             tooltip="Choose which provider to use for speech-to-text transcription."
@@ -963,8 +993,10 @@ export function Component() {
           />
 
           <ProviderSelector
-            label="Agent/MCP Tools"
-            tooltip="Choose which provider to use for agent mode and MCP tool calling."
+            label={isMainAgentAcpMode ? "Agent/MCP Tools (API mode)" : "Agent/MCP Tools"}
+            tooltip={isMainAgentAcpMode
+              ? "Main Agent Mode is ACP. This provider applies when running in API mode."
+              : "Choose which provider to use for agent mode and MCP tool calling."}
             value={configQuery.data.mcpToolsProviderId || "openai"}
             onChange={(value) => saveConfig({ mcpToolsProviderId: value as CHAT_PROVIDER_ID })}
             providers={CHAT_PROVIDERS}
