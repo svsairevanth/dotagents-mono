@@ -42,10 +42,12 @@ export function OverlayFollowUpInput({
   onStopSession,
 }: OverlayFollowUpInputProps) {
   const [isStoppingSession, setIsStoppingSession] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [text, setText] = useState("")
   const [imageAttachments, setImageAttachments] = useState<MessageImageAttachment[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const submitInFlightRef = useRef(false)
   const configQuery = useConfigQuery()
 
   // Message queuing is enabled by default. While config is loading, treat as enabled
@@ -105,7 +107,7 @@ export function OverlayFollowUpInput({
     },
   })
 
-  const handleSubmit = (e?: React.FormEvent) => {
+  const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault()
     const message = buildMessageWithImages(text, imageAttachments)
     logUI("[OverlayFollowUpInput] submit requested", {
@@ -114,14 +116,23 @@ export function OverlayFollowUpInput({
       messageLength: message.length,
       isSessionActive,
       isQueueEnabled,
-      pending: sendMutation.isPending,
+      pending: sendMutation.isPending || isSubmitting || submitInFlightRef.current,
     })
 
     // Allow submission if:
     // 1. Not already pending
     // 2. Either session is not active OR queue is enabled
-    if (message && !sendMutation.isPending && (!isSessionActive || isQueueEnabled)) {
-      sendMutation.mutate(message)
+    if (!message || sendMutation.isPending || isSubmitting || submitInFlightRef.current) return
+    if (isSessionActive && !isQueueEnabled) return
+
+    submitInFlightRef.current = true
+    setIsSubmitting(true)
+
+    try {
+      await sendMutation.mutateAsync(message)
+    } finally {
+      submitInFlightRef.current = false
+      setIsSubmitting(false)
     }
   }
 
@@ -234,12 +245,12 @@ export function OverlayFollowUpInput({
 
   // When queue is enabled, allow TEXT input even when session is active
   // When queue is disabled, don't allow input while session is active
-  const isDisabled = sendMutation.isPending || (isSessionActive && !isQueueEnabled)
+  const isDisabled = isSubmitting || sendMutation.isPending || (isSessionActive && !isQueueEnabled)
 
   // When queue is enabled, allow voice recording even when session is active
   // The transcript will be queued after transcription completes
   // When queue is disabled, don't allow voice input while session is active
-  const isVoiceDisabled = sendMutation.isPending || (isSessionActive && !isQueueEnabled)
+  const isVoiceDisabled = isSubmitting || sendMutation.isPending || (isSessionActive && !isQueueEnabled)
   const hasMessageContent = text.trim().length > 0 || imageAttachments.length > 0
 
   // Show appropriate placeholder based on state

@@ -7,6 +7,7 @@ Track small, shippable product improvements. Review this file before each iterat
 - 2026-03-07: Initial setup. No prior investigation log existed.
 - 2026-03-07: Desktop main-process session shutdown guardrails (`apps/desktop/src/main/state.ts`).
 - 2026-03-07: Desktop text composer submission resilience (`apps/desktop/src/renderer/src/components/text-input-panel.tsx`).
+- 2026-03-07: Desktop follow-up composer duplicate-submit guardrails (`apps/desktop/src/renderer/src/components/overlay-follow-up-input.tsx`, `apps/desktop/src/renderer/src/components/tile-follow-up-input.tsx`).
 
 ### 2026-03-07 — Desktop session shutdown guardrails
 - Date:
@@ -60,6 +61,32 @@ Track small, shippable product improvements. Review this file before each iterat
 - Follow-up checks:
   - inspect `overlay-follow-up-input.tsx` and `tile-follow-up-input.tsx` for similar resilience gaps around send-error feedback and queued/active-session edge states
   - decide whether the currently unused `session-input.tsx` should be removed, revived, or brought under test to avoid future drift
+
+### 2026-03-07 — Desktop follow-up composer duplicate-submit guardrails
+- Date:
+  - 2026-03-07
+- Area / screen / subsystem:
+  - desktop session follow-up composers in `apps/desktop/src/renderer/src/components/overlay-follow-up-input.tsx`
+  - desktop session-tile follow-up composer in `apps/desktop/src/renderer/src/components/tile-follow-up-input.tsx`
+- Why it was chosen:
+  - the previous composer-resilience pass explicitly called out these follow-up inputs as the next likely seam for the same duplicate-submit race
+  - these components continue active conversations, so accidental duplicate sends degrade a core ongoing-session workflow
+- What was inspected:
+  - `apps/desktop/src/renderer/src/components/overlay-follow-up-input.tsx`
+  - `apps/desktop/src/renderer/src/components/tile-follow-up-input.tsx`
+  - `apps/desktop/src/renderer/src/components/agent-progress.tsx` to confirm how tile and overlay follow-up inputs are mounted, including pending-session behavior
+  - `apps/mobile/src/screens/ChatScreen.tsx` for renderer/mobile parity; confirmed mobile uses a different primary-composer path rather than these desktop-specific follow-up components
+- Improvement made:
+  - added a local `isSubmitting` state plus `submitInFlightRef` guard to both desktop follow-up composers
+  - switched both submit handlers to `mutateAsync(...)` so the guard spans the full async send lifecycle instead of depending only on React Query state propagation
+  - disabled follow-up text and voice controls immediately during local submit startup, closing the rapid double-click / double-Enter race window before `isPending` re-renders
+  - added focused regression coverage in `apps/desktop/src/renderer/src/components/follow-up-input.submit.test.ts`
+- Tests / verification:
+  - `pnpm --filter @dotagents/desktop exec vitest run src/renderer/src/components/follow-up-input.submit.test.ts`
+  - `pnpm --filter @dotagents/desktop typecheck:web`
+- Follow-up checks:
+  - inspect whether these follow-up composers should surface clearer user-visible error feedback when async sends fail
+  - inspect the mobile `ChatScreen` primary composer separately for similar duplicate-submit risks, since it uses a different send path and was not changed in this pass
 
 ### Iteration Template
 - Date:
