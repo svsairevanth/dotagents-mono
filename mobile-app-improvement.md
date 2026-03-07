@@ -8,6 +8,37 @@
 
 ## Recent Iterations
 
+### 2026-03-07 — Iteration 4: make the chat composer Send control accessible on mobile web
+
+- Status: completed
+- Area:
+  - chat composer action row in `apps/mobile/src/screens/ChatScreen.tsx`
+  - live flow inspected in Expo Web: `Settings -> Go to Chats -> New Chat`
+- Why this area:
+  - the ledger already covered Connection follow-ups, so this pass avoided repeating that work and moved to a fresh chat composer issue.
+  - fresh Expo Web inspection reproduced a concrete usability/accessibility bug: the composer `Send` control rendered as a tiny clickable `div` instead of a clearly exposed button.
+- What was investigated:
+  - current composer markup/styles in `ChatScreen.tsx`
+  - live Expo Web accessibility tree and rendered box sizing for the composer controls
+- Findings:
+  - `Send` was missing explicit button semantics in the composer row, so Expo Web did not expose it as a button in the accessibility tree
+  - the enabled control measured about `48x23`, which is too small for a reliable mobile tap target
+- Change made:
+  - added `accessibilityRole`, label, hint, and disabled state metadata to the composer `Send` control
+  - increased the composer `Send` control to a 44px minimum height with centered content and a wider tap target
+  - added `apps/mobile/tests/chat-composer-accessibility.test.js` to lock the semantics and touch-target guardrails
+- Verification:
+  - `pnpm --filter @dotagents/mobile exec tsc --noEmit`
+  - `node --test apps/mobile/tests/chat-composer-accessibility.test.js apps/mobile/tests/navigation-header.test.js apps/mobile/tests/connection-settings-validation.test.js`
+  - live Expo Web verification at `http://localhost:8092`:
+    - confirmed the empty composer exposes `Send message` as a disabled button
+    - confirmed typing a draft keeps `Send message` exposed as a button
+    - confirmed the rendered `Send` control measures `64x44`
+- Follow-up checks:
+  - investigate the adjacent chat composer accessory controls (`Attach images`, `Edit before send`), which still render at roughly `32x32` in Expo Web
+  - investigate the unrelated Settings warning after reconnecting: `⚠️ Failed to load: settings`
+  - investigate the Expo Web runtime errors noted in earlier passes, especially `normalizeApiBaseUrl is not a function` and `Unexpected text node ... child of a <View>`
+
 ### 2026-03-07 — Iteration 3: strengthen Connection inline action accessibility
 
 - Status: completed

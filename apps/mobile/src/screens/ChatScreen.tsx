@@ -3309,7 +3309,12 @@ export default function ChatScreen({ route, navigation }: any) {
 	            <TouchableOpacity
 	              style={[styles.sendButton, !composerHasContent && styles.sendButtonDisabled]}
 	              onPress={sendComposerInput}
+	              activeOpacity={0.7}
 	              disabled={!composerHasContent}
+	              accessibilityRole="button"
+	              accessibilityLabel="Send message"
+	              accessibilityHint="Sends the current message to the selected agent."
+	              accessibilityState={{ disabled: !composerHasContent }}
 	            >
               <Text style={styles.sendButtonText}>Send</Text>
             </TouchableOpacity>
@@ -3588,9 +3593,13 @@ function createStyles(theme: Theme, screenHeight: number) {
     },
     sendButton: {
       backgroundColor: theme.colors.primary,
-      paddingHorizontal: spacing.sm,
-      paddingVertical: spacing.xs,
+      minHeight: 44,
+      minWidth: 64,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
       borderRadius: radius.md,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     sendButtonDisabled: {
       opacity: 0.5,
