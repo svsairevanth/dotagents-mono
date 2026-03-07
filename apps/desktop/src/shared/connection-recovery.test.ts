@@ -14,6 +14,14 @@ describe("normalizeApiBaseUrl", () => {
     expect(normalizeApiBaseUrl("[fd12:3456::5]:3210")).toBe("http://[fd12:3456::5]:3210/v1")
   })
 
+  it("uses http for bracketed local IPv6 ULA URLs with short first hextets", () => {
+    expect(normalizeApiBaseUrl("[fd1::1]:3210")).toBe("http://[fd1::1]:3210/v1")
+  })
+
+  it("does not treat malformed bracketed IPv6 URLs without a closing bracket as local", () => {
+    expect(normalizeApiBaseUrl("[fd12::1")).toBe("https://[fd12::1")
+  })
+
   it("preserves existing /v1 paths", () => {
     expect(normalizeApiBaseUrl("http://127.0.0.1:3210/v1")).toBe("http://127.0.0.1:3210/v1")
   })
