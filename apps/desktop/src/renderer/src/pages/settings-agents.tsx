@@ -423,20 +423,20 @@ export function SettingsAgents() {
   return (
     <div className="modern-panel h-full overflow-y-auto overflow-x-hidden px-6 py-4">
       {!editing && (
-        <div className="flex flex-wrap items-center justify-end gap-2 mb-4">
-          <Button variant="outline" className="gap-2" onClick={() => handleImportDialogOpenChange(true)}>
+        <div className="mb-3 flex flex-wrap items-center justify-end gap-1.5">
+          <Button size="sm" variant="outline" className="h-8 gap-1.5 whitespace-nowrap px-2.5" onClick={() => handleImportDialogOpenChange(true)}>
             <Upload className="h-4 w-4" />Import Bundle
           </Button>
-          <Button variant="outline" className="gap-2" onClick={() => setIsExportDialogOpen(true)}>
+          <Button size="sm" variant="outline" className="h-8 gap-1.5 whitespace-nowrap px-2.5" onClick={() => setIsExportDialogOpen(true)}>
             <Download className="h-4 w-4" />Export Bundle
           </Button>
-          <Button variant="outline" className="gap-2" onClick={() => setIsPublishDialogOpen(true)}>
+          <Button size="sm" variant="outline" className="h-8 gap-1.5 whitespace-nowrap px-2.5" onClick={() => setIsPublishDialogOpen(true)}>
             <Globe className="h-4 w-4" />Export for Hub
           </Button>
-          <Button variant="outline" className="gap-2" onClick={async () => { await tipcClient.reloadAgentProfiles(); loadAgents(); queryClient.invalidateQueries({ queryKey: ["agentProfilesSidebar"] }) }}>
+          <Button size="sm" variant="outline" className="h-8 gap-1.5 whitespace-nowrap px-2.5" onClick={async () => { await tipcClient.reloadAgentProfiles(); loadAgents(); queryClient.invalidateQueries({ queryKey: ["agentProfilesSidebar"] }) }}>
             <RefreshCw className="h-4 w-4" />Rescan Files
           </Button>
-          <Button className="gap-2" onClick={handleCreate}><Plus className="h-4 w-4" />Add Agent</Button>
+          <Button size="sm" className="h-8 gap-1.5 whitespace-nowrap px-2.5" onClick={handleCreate}><Plus className="h-4 w-4" />Add Agent</Button>
         </div>
       )}
       {editing ? renderEditForm() : renderAgentList()}
