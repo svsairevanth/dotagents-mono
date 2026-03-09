@@ -100,6 +100,38 @@ Evidence
 - Verification commands/run results: `node --test apps/mobile/tests/*.test.js` ✅ (19/19 passing); `git diff --check` ✅; `pnpm --filter @dotagents/mobile web --port 8097` ❌ (`node_modules` missing, `expo: command not found`).
 - Blockers/remaining uncertainty: No live before/after visual evidence this iteration because Expo Web cannot start in the current worktree. Remaining uncertainty is limited to the exact runtime spacing, description wrapping, and scroll depth of the new `AgentEdit` connection rows until dependencies are available.
 
+### 2026-03-09 — QA remediation 1: stop hidden AgentEdit base-URL persistence and add real switch/save coverage
+
+- Status: completed with targeted source + behavior verification; live Expo Web remained blocked by missing dependencies in this worktree
+- Area:
+  - `AgentEdit` connection-type switching and save payload construction in `apps/mobile/src/screens/AgentEditScreen.tsx`
+  - agent-profile connection persistence sanitization in `apps/desktop/src/main/remote-server.ts`
+- Why this area:
+  - QA found that the earlier ACP/remote fix improved the visible form fields, but hidden `Base URL` state could still survive a remote-to-ACP change or an edit of an already-stale ACP profile because the mobile save path still submitted `connectionBaseUrl` too broadly and the server preserved `baseUrl` regardless of connection type
+  - QA also found the earlier regression test only matched source text/layout and did not exercise the switch/save persistence path
+- Findings:
+  - `AgentEdit` only changed `connectionType` on tap, so hidden remote URL state could linger in form state after switching away from `remote`
+  - the save payload still populated all connection fields, so hidden values could continue crossing connection modes
+  - the desktop remote server rebuilt `connection` objects by mixing request fields with existing saved fields without dropping type-incompatible properties, which let stale `baseUrl` survive ACP saves
+- Change made:
+  - added a small mobile connection helper that clears hidden remote URL state when leaving `remote` and only sends type-appropriate connection fields during save
+  - added a small desktop sanitization helper so create/update persistence keeps only fields valid for the chosen connection type and treats blank visible inputs as explicit clears instead of silently preserving stale saved values
+  - added behavior-focused tests for the mobile switch/save path and the desktop connection sanitization path, while keeping the earlier narrow-layout/source guardrails test
+- Verification:
+  - `node --experimental-strip-types --test apps/mobile/tests/agent-edit-connection-types.test.js apps/mobile/tests/agent-edit-connection-persistence.test.mjs apps/desktop/src/main/agent-profile-connection-sanitize.test.mjs`
+  - `git diff --check`
+- Follow-up checks:
+  - once dependencies are available, verify in Expo Web that switching `Remote -> ACP` clears the remote-only field value and that saving an existing ACP profile with previously stale hidden URL data does not rehydrate that URL in the form
+  - keep future mobile coverage widening outside `AgentEdit` after this QA pass, especially `MemoryEdit` and broader loading/error states, instead of returning to the same subsection without a new finding
+
+Evidence
+- Scope: QA remediation for `AgentEdit` connection-type switch/save persistence and desktop agent-profile connection sanitization
+- Before evidence: QA findings documented that `AgentEditScreen.tsx` still saved `connectionBaseUrl` for every connection type and only changed `connectionType` on selection, while `apps/desktop/src/main/remote-server.ts` preserved `baseUrl` during updates even for ACP profiles. The existing `apps/mobile/tests/agent-edit-connection-types.test.js` only regex-matched source text/layout and would not fail on hidden-field persistence.
+- Change: Added `apps/mobile/src/screens/agent-edit-connection-utils.ts` to clear stale remote URL state on type switches and build type-specific save payloads, wired `AgentEditScreen.tsx` through that helper, added `apps/desktop/src/main/agent-profile-connection-sanitize.ts` so the server drops type-incompatible connection fields during create/update, and added focused behavior tests for both paths.
+- After evidence: The mobile helper now clears `connectionBaseUrl` whenever the form leaves `remote` and only includes `connectionBaseUrl` in save payloads for `remote`. The desktop sanitization helper now returns `{ type: 'acp' | 'stdio' }` connections without `baseUrl`, returns `{ type: 'remote' }` connections without local command fields, and removes blank visible values instead of preserving stale saved ones. The new behavior tests directly cover remote-to-ACP switching, ACP save payload shaping, remote save payload shaping, stale `baseUrl` removal for ACP persistence, remote-only persistence, and explicit remote URL clearing.
+- Verification commands/run results: `node --experimental-strip-types --test apps/mobile/tests/agent-edit-connection-types.test.js apps/mobile/tests/agent-edit-connection-persistence.test.mjs apps/desktop/src/main/agent-profile-connection-sanitize.test.mjs` ✅ (9/9 passing; Node emitted a non-blocking `MODULE_TYPELESS_PACKAGE_JSON` warning while importing the new mobile `.ts` helper directly for the test run); `git diff --check` ✅.
+- Blockers/remaining uncertainty: Expo Web is still unavailable in this worktree because dependencies are missing, so this remediation pass has no new live visual evidence. Remaining uncertainty is limited to runtime web/mobile form behavior until the existing dependency blocker is cleared.
+
 ### 2026-03-09 — Iteration 8: make LoopEdit profile selection readable and tappable on narrow screens
 
 - Status: completed with source-backed verification; live Expo Web inspection was blocked by missing dependencies in this worktree

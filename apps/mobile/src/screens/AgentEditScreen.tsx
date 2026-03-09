@@ -5,6 +5,7 @@ import { useTheme } from '../ui/ThemeProvider';
 import { spacing, radius } from '../ui/theme';
 import { ExtendedSettingsApiClient, AgentProfileFull, AgentProfileCreateRequest, AgentProfileUpdateRequest } from '../lib/settingsApi';
 import { createButtonAccessibilityLabel, createMinimumTouchTargetStyle } from '../lib/accessibility';
+import { applyConnectionTypeChange, buildAgentConnectionRequestFields, type AgentConnectionFormFields, type ConnectionType } from './agent-edit-connection-utils';
 import { useConfigContext } from '../store/config';
 
 const CONNECTION_TYPES = [
@@ -30,18 +31,11 @@ const CONNECTION_TYPES = [
   },
 ] as const;
 
-type ConnectionType = 'internal' | 'acp' | 'stdio' | 'remote';
-
-interface AgentFormData {
+interface AgentFormData extends AgentConnectionFormFields {
   displayName: string;
   description: string;
   systemPrompt: string;
   guidelines: string;
-  connectionType: ConnectionType;
-  connectionCommand: string;
-  connectionArgs: string;
-  connectionBaseUrl: string;
-  connectionCwd: string;
   enabled: boolean;
   autoSpawn: boolean;
 }
@@ -131,6 +125,8 @@ export default function AgentEditScreen({ navigation, route }: any) {
     setError(null);
 
     try {
+      const connectionFields = buildAgentConnectionRequestFields(formData);
+
       if (isEditing && agentId) {
         const updateData: AgentProfileUpdateRequest = originalProfile?.isBuiltIn
           ? {
@@ -143,11 +139,7 @@ export default function AgentEditScreen({ navigation, route }: any) {
             description: formData.description.trim() || undefined,
             systemPrompt: formData.systemPrompt.trim() || undefined,
             guidelines: formData.guidelines.trim() || undefined,
-            connectionType: formData.connectionType,
-            connectionCommand: formData.connectionCommand.trim() || undefined,
-            connectionArgs: formData.connectionArgs.trim() || undefined,
-            connectionBaseUrl: formData.connectionBaseUrl.trim() || undefined,
-            connectionCwd: formData.connectionCwd.trim() || undefined,
+            ...connectionFields,
             enabled: formData.enabled,
             autoSpawn: formData.autoSpawn,
           };
@@ -158,11 +150,7 @@ export default function AgentEditScreen({ navigation, route }: any) {
           description: formData.description.trim() || undefined,
           systemPrompt: formData.systemPrompt.trim() || undefined,
           guidelines: formData.guidelines.trim() || undefined,
-          connectionType: formData.connectionType,
-          connectionCommand: formData.connectionCommand.trim() || undefined,
-          connectionArgs: formData.connectionArgs.trim() || undefined,
-          connectionBaseUrl: formData.connectionBaseUrl.trim() || undefined,
-          connectionCwd: formData.connectionCwd.trim() || undefined,
+          ...connectionFields,
           enabled: formData.enabled,
           autoSpawn: formData.autoSpawn,
         };
@@ -179,6 +167,10 @@ export default function AgentEditScreen({ navigation, route }: any) {
 
   const updateField = useCallback(<K extends keyof AgentFormData>(key: K, value: AgentFormData[K]) => {
     setFormData(prev => ({ ...prev, [key]: value }));
+  }, []);
+
+  const handleConnectionTypeSelect = useCallback((connectionType: ConnectionType) => {
+    setFormData(prev => applyConnectionTypeChange(prev, connectionType));
   }, []);
 
   const isBuiltInAgent = originalProfile?.isBuiltIn === true;
@@ -245,7 +237,7 @@ export default function AgentEditScreen({ navigation, route }: any) {
               styles.connectionTypeOption,
               formData.connectionType === ct.value && styles.connectionTypeOptionActive,
             ]}
-            onPress={() => updateField('connectionType', ct.value)}
+            onPress={() => handleConnectionTypeSelect(ct.value)}
             accessibilityRole="button"
             accessibilityLabel={createButtonAccessibilityLabel(`Use ${ct.label} connection for this agent`)}
             accessibilityHint={formData.connectionType === ct.value ? `Currently selected. ${ct.description}` : ct.description}
