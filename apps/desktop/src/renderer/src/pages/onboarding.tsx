@@ -221,21 +221,21 @@ export function Component() {
 // Welcome Step
 function WelcomeStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }) {
   return (
-    <div className="text-center">
-      <div className="mb-6">
-        <span className="i-mingcute-mic-fill text-6xl text-primary"></span>
+    <div className="mx-auto max-w-xl text-center">
+      <div className="mb-4">
+        <span className="i-mingcute-mic-fill text-5xl text-primary sm:text-6xl"></span>
       </div>
-      <h1 className="text-3xl font-extrabold mb-4">
+      <h1 className="mb-3 text-2xl font-bold tracking-tight sm:text-3xl">
         Welcome to {process.env.PRODUCT_NAME}!
       </h1>
-      <p className="text-lg text-muted-foreground mb-8">
+      <p className="mx-auto mb-6 max-w-xl text-base text-muted-foreground sm:text-lg">
         Let's get you set up with voice dictation and AI-powered tools in just a few steps.
       </p>
-      <div className="flex flex-col gap-3 items-center">
-        <Button size="lg" onClick={onNext} className="w-64">
+      <div className="flex flex-col items-center gap-2.5">
+        <Button size="lg" onClick={onNext} className="w-full max-w-56">
           Get Started
         </Button>
-        <Button variant="ghost" onClick={onSkip} className="text-muted-foreground">
+        <Button variant="ghost" size="sm" onClick={onSkip} className="text-muted-foreground">
           Skip Tutorial
         </Button>
       </div>

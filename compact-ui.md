@@ -5,6 +5,7 @@
 - [x] Desktop setup / first-run permissions window (`apps/desktop/src/renderer/src/pages/setup.tsx`) — source-level constrained-window review only this iteration because Electron runtime is still blocked before first renderer capture.
 - [x] Desktop sessions empty state (`apps/desktop/src/renderer/src/pages/sessions.tsx`) — source-level review only this iteration because Electron runtime is still blocked before first renderer capture.
 - [x] Desktop settings: general → `Modular config (.agents)` (`apps/desktop/src/renderer/src/pages/settings-general.tsx`) — source-level review only this iteration because Electron runtime is still blocked before first renderer capture; mobile has no equivalent `.agents` settings surface, so this coverage is desktop-specific.
+- [x] Desktop onboarding welcome step (`apps/desktop/src/renderer/src/pages/onboarding.tsx`) — source-level first-run review only this iteration because no Electron renderer target was available for screenshot capture; mobile currently routes first-run users straight into `Settings`, so this welcome-surface coverage is desktop-specific rather than shared.
 
 ### Mobile checked screens / flows / states
 - [x] Mobile Settings root screen on initial app launch (`App.tsx` initial route `Settings`) — source-level review only this iteration because Expo web runtime was blocked before launch.
@@ -13,7 +14,7 @@
 - [x] Mobile Connection settings default disconnected/error + QR scanner close-action states (`ConnectionSettingsScreen`) — source-level review only this iteration because Expo web runtime is still blocked before launch.
 
 ### Not yet checked
-- [ ] Desktop onboarding welcome / API key / dictation / agent steps, plus live runtime validation of the setup permissions window
+- [ ] Desktop onboarding API key / dictation / agent steps, plus live runtime validation of the welcome and setup-permissions surfaces
 - [ ] Desktop sessions active tiles / dense action rows / hover states
 - [ ] Desktop settings: general remaining rows + live runtime validation of the `.agents` group
 - [ ] Desktop settings: providers + models
@@ -40,6 +41,7 @@
 - [x] Desktop setup / first-run permissions used a negative top offset (`-mt-20`) and hard-coded `grid-cols-2` permission rows, creating avoidable empty space and fragile action sizing on narrow or short setup windows.
 - [x] Desktop sessions empty state used oversized decorative chrome — a large muted icon bubble, full-size selector/prompts chrome, and generous vertical gaps that pushed the primary start controls lower than necessary on a high-frequency surface; the mobile `SessionListScreen` empty state is already text-only, so this issue is desktop-specific rather than shared.
 - [x] Desktop settings general `Modular config (.agents)` used both a top-level `endDescription` and an in-card explanatory paragraph, then split related folder/file actions across separate `Open` and `Reveal files in Finder/Explorer` rows, adding avoidable vertical chrome on an already dense settings page; mobile has no equivalent `.agents` surface, so this issue is desktop-specific rather than shared.
+- [x] Desktop onboarding welcome used oversized hero chrome for a one-action first-run surface: a `text-6xl` mic icon, `text-3xl`/`font-extrabold` headline, large paragraph spacing, and a fixed-width `w-64` primary CTA left extra empty space before the user could move into onboarding; mobile has no equivalent welcome screen today, so this issue is desktop-specific rather than shared.
 
 ### Improved
 - [x] Removed the duplicate in-content `Settings` title from the mobile root settings surface to reduce non-informational vertical space and let the connection card surface sooner.
@@ -52,6 +54,7 @@
 - [x] Tightened the desktop setup shell, made the first-run permissions surface scroll-safe for short windows, and changed permission rows to stack by default with full-width action buttons on constrained widths before splitting into label/action columns on wider screens.
 - [x] Tightened the desktop sessions empty state by shrinking the decorative icon treatment, switching the agent selector to its existing compact mode, reducing secondary-control spacing, using the smaller predefined-prompts trigger, and pulling recent sessions closer to the primary actions without shrinking the main text/voice buttons.
 - [x] Tightened the desktop `.agents` settings block by merging its explanatory copy into one helper paragraph and consolidating folder/file buttons into a single wrap-safe `Open folders & files` row with shorter button labels.
+- [x] Tightened the desktop onboarding welcome hero by bounding it to a narrower content width, reducing the mic icon / headline / paragraph spacing, replacing the fixed-width primary CTA with a full-width capped button, and shrinking the skip action so the next step appears sooner without removing orientation.
 
 ### Verified
 - [x] Source-level regression coverage added in `apps/mobile/tests/settings-screen-density.test.js`.
@@ -71,6 +74,8 @@
 - [x] Targeted desktop source verification passed: `node --test apps/desktop/tests/sessions-empty-state-density.test.mjs`.
 - [x] Dependency-free desktop `.agents` density regression coverage added in `apps/desktop/tests/settings-general-modular-config-density.test.mjs`.
 - [x] Targeted desktop source verification passed: `node --test apps/desktop/tests/settings-general-modular-config-density.test.mjs`.
+- [x] Dependency-free desktop onboarding welcome density regression coverage added in `apps/desktop/tests/onboarding-welcome-density.test.mjs`.
+- [x] Targeted desktop source verification passed: `node --test apps/desktop/tests/onboarding-welcome-density.test.mjs`.
 
 ### Blocked
 - [x] Live mobile runtime inspection blocked: `pnpm --filter @dotagents/mobile web` failed with `node_modules missing`, `expo: command not found`, and `ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL`.
@@ -79,10 +84,12 @@
 - [x] Live desktop renderer inspection remained blocked this iteration: `REMOTE_DEBUGGING_PORT=9333 ELECTRON_EXTRA_LAUNCH_ARGS="--inspect=9339" pnpm dev -- -dui` failed during `@dotagents/shared build` with `tsup: command not found`, `spawn ENOENT`, and `node_modules missing` warnings.
 - [x] Targeted desktop Vitest execution remained blocked for the same reason: `pnpm --filter @dotagents/desktop test:run -- src/renderer/src/components/ui/control.test.tsx` failed before Vitest ran because `pnpm -w run build:shared` could not find `tsup`.
 - [x] The same targeted Vitest command is still blocked after this QA remediation pass because `pnpm -w run build:shared` fails before Vitest startup with `tsup: command not found` and `node_modules missing` warnings.
+- [x] Live desktop onboarding inspection is still blocked in this worktree: `electron_execute_electron-native` returned `Failed to list CDP targets. Make sure Electron is running with --inspect flag.`, and earlier `pnpm dev` attempts in this worktree still fail before launch because the shared/desktop toolchain dependencies are unavailable.
 
 ### Still uncertain
 - [ ] Desktop renderer / Electron surfaces still need first live attachment and screenshot evidence once dependencies are installed.
 - [ ] Desktop setup / first-run permissions are denser in source, but the real setup window still needs screenshot-backed validation at short heights and narrow widths once Electron can launch.
+- [ ] Desktop onboarding welcome is denser in source, but the real first-run window still needs screenshot-backed validation for above-the-fold balance, CTA prominence, and skip-button visibility once Electron can launch.
 - [ ] Desktop sessions empty state is denser in source and keeps primary actions higher, but the real renderer still needs screenshot-backed validation for above-the-fold balance, empty-state readability, and recent-sessions proximity once Electron can launch.
 - [ ] Desktop settings helper-tooltip hover occlusion remains un-reproduced in a live renderer; the current coverage is shared-component/source-level only until the desktop runtime can launch for screenshot-backed review.
 - [ ] Desktop settings surfaces remain unchecked at runtime; the shared settings-row audit is not a substitute for live renderer coverage.
@@ -193,3 +200,12 @@ Evidence
 - After evidence: Source now presents the desktop `.agents` settings block with one explanatory paragraph followed by path rows and a single compact actions row (`Global Folder`, `Workspace Folder`, `System Prompt`, `Guidelines`), reducing redundant chrome without changing the underlying actions.
 - Verification commands/run results: `REMOTE_DEBUGGING_PORT=9333 ELECTRON_EXTRA_LAUNCH_ARGS="--inspect=9339" pnpm dev -- -dui` → failed before Electron launch (`tsup: command not found`, `spawn ENOENT`, `node_modules missing`, exit 1). `pnpm dev:mobile -- --web` → failed before Expo launch (`expo: command not found`, `ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL`, `node_modules missing`, exit 1). `node --test apps/desktop/tests/settings-general-modular-config-density.test.mjs` → initially failed because the first assertion searched the whole file for `endDescription={` instead of scoping to the `.agents` block; after tightening the test to the extracted `Modular config (.agents)` block, the command passed (2 tests, 0 failures, exit 0).
 - Blockers/remaining uncertainty: No before/after screenshots were possible because desktop/mobile runtimes still cannot launch in this worktree without installed dependencies, so live renderer validation of button wrapping, path readability, and real narrow-width behavior remains pending once runtime access is restored.
+
+#### Iteration 12
+Evidence
+- Scope: Desktop onboarding welcome-step density on the first-run surface, with a cross-check for whether mobile has an equivalent welcome screen.
+- Before evidence: Live inspection remained blocked — `electron_execute_electron-native` returned `Failed to list CDP targets. Make sure Electron is running with --inspect flag.`, and earlier `pnpm dev` attempts in this worktree already failed before Electron launch because `tsup` / other desktop dependencies were unavailable. Source-backed observation: `apps/desktop/src/renderer/src/pages/onboarding.tsx` rendered the welcome step with a `text-6xl` mic icon, `text-3xl font-extrabold` heading, `mb-8` paragraph spacing, and a fixed-width `w-64` primary CTA, which spent a lot of vertical and horizontal chrome on a one-action intro screen. Cross-check: mobile currently starts on `Settings` (`apps/mobile/App.tsx` initial route) and has no equivalent dedicated welcome screen, so this issue is desktop-specific rather than shared.
+- Change: Tightened the desktop onboarding welcome hero in `apps/desktop/src/renderer/src/pages/onboarding.tsx` by bounding the content width, reducing icon/headline/paragraph spacing, replacing the fixed-width CTA with a full-width capped button, shrinking the secondary skip action, and adding `apps/desktop/tests/onboarding-welcome-density.test.mjs` to preserve those compactness choices.
+- After evidence: Source now renders the welcome step as a narrower, denser hero (`mx-auto max-w-xl`, `text-5xl sm:text-6xl`, `text-2xl font-bold`, `mb-6` copy, `w-full max-w-56` CTA, `size="sm"` skip button), which should keep the first actionable step higher in constrained onboarding windows without removing orientation.
+- Verification commands/run results: `electron_execute_electron-native` → failed (`Failed to list CDP targets. Make sure Electron is running with --inspect flag.`). `node --test apps/desktop/tests/onboarding-welcome-density.test.mjs` → passed (2 tests, 0 failures, exit 0).
+- Blockers/remaining uncertainty: No before/after screenshots were possible because no live Electron renderer target was available in this worktree and desktop launch remains dependency-blocked; visual validation of the real onboarding window's balance, CTA prominence, and any downstream step spacing remains pending once runtime access is restored.
