@@ -8,7 +8,7 @@ import { Button } from "./ui/button"
 import { Badge } from "./ui/badge"
 import { tipcClient } from "@renderer/lib/tipc-client"
 import { copyTextToClipboard } from "@renderer/lib/clipboard"
-import { useAgentStore, useConversationStore, useMessageQueue, useIsQueuePaused } from "@renderer/stores"
+import { useAgentStore, useMessageQueue, useIsQueuePaused } from "@renderer/stores"
 import { AudioPlayer } from "@renderer/components/audio-player"
 import { useConfigQuery } from "@renderer/lib/queries"
 import { useTheme } from "@renderer/contexts/theme-context"
@@ -24,6 +24,7 @@ import { AgentSummaryView } from "./agent-summary-view"
 import { hasTTSPlayed, markTTSPlayed, removeTTSKey } from "@renderer/lib/tts-tracking"
 import { ttsManager } from "@renderer/lib/tts-manager"
 import { sanitizeMessageContentForSpeech } from "@shared/message-display-utils"
+import { toast } from "sonner"
 
 interface AgentProgressProps {
   progress: AgentProgressUpdate | null
@@ -163,6 +164,17 @@ function extractRespondToUserResponsesFromMessages(
 
 const COLLAPSED_USER_RESPONSE_SCAN_LIMIT = 2048
 const COLLAPSED_USER_RESPONSE_PREVIEW_LIMIT = 160
+const TILE_PREVIEW_ITEM_LIMIT = 12
+
+function messageStableId(message: { timestamp: number; role: string }): string {
+  return `${message.timestamp}-${message.role}`
+}
+
+function getActionErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.trim()) return error.message.trim()
+  if (typeof error === "string" && error.trim()) return error.trim()
+  return fallback
+}
 
 function buildCollapsedUserResponsePreview(userResponse: string): string {
   const boundedResponse = userResponse.slice(0, COLLAPSED_USER_RESPONSE_SCAN_LIMIT)
@@ -188,8 +200,7 @@ function buildCollapsedUserResponsePreview(userResponse: string): string {
 }
 
 
-// Compact message component for space efficiency
-const CompactMessage: React.FC<{
+type CompactMessageProps = {
   message: {
     role: "user" | "assistant" | "tool"
     content: string
@@ -210,7 +221,10 @@ const CompactMessage: React.FC<{
   variant?: "default" | "overlay" | "tile"
   /** Session ID for tracking TTS playback across remounts */
   sessionId?: string
-}> = ({ message, ttsText, isLast, isComplete, hasErrors, wasStopped = false, isExpanded, onToggleExpand, variant = "default", sessionId }) => {
+}
+
+// Compact message component for space efficiency
+const CompactMessageBase: React.FC<CompactMessageProps> = ({ message, ttsText, isLast, isComplete, hasErrors, wasStopped = false, isExpanded, onToggleExpand, variant = "default", sessionId }) => {
   const [audioData, setAudioData] = useState<ArrayBuffer | null>(null)
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false)
   const [ttsError, setTtsError] = useState<string | null>(null)
@@ -643,6 +657,18 @@ const CompactMessage: React.FC<{
     </div>
   )
 }
+
+const CompactMessage = React.memo(CompactMessageBase, (prev, next) => (
+  prev.message === next.message &&
+  prev.ttsText === next.ttsText &&
+  prev.isLast === next.isLast &&
+  prev.isComplete === next.isComplete &&
+  prev.hasErrors === next.hasErrors &&
+  prev.wasStopped === next.wasStopped &&
+  prev.isExpanded === next.isExpanded &&
+  prev.variant === next.variant &&
+  prev.sessionId === next.sessionId
+))
 
 // Helper to extract execute_command display info
 function getExecuteCommandDisplay(call: { name: string; arguments: any }, result?: { success: boolean; content: string; error?: string }) {
@@ -2329,11 +2355,8 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
   // Tab state for Chat/Summary view toggle (only relevant when dual-model is enabled)
   const [activeTab, setActiveTab] = useState<"chat" | "summary">("chat")
 
-  // Get current conversation ID for deep-linking and session focus control
-  const currentConversationId = useConversationStore((s) => s.currentConversationId)
   const setFocusedSessionId = useAgentStore((s) => s.setFocusedSessionId)
   const setSessionSnoozed = useAgentStore((s) => s.setSessionSnoozed)
-  const agentProgressById = useAgentStore((s) => s.agentProgressById)
 
   // Get queued messages for this conversation (used in overlay variant)
   const queuedMessages = useMessageQueue(progress?.conversationId)
@@ -2433,7 +2456,9 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
     try {
       const thisId = progress?.sessionId
       const hasOtherVisible = thisId
-        ? Array.from(agentProgressById?.values() ?? []).some(p => p && p.sessionId !== thisId && !p.isSnoozed)
+        ? Array.from(useAgentStore.getState().agentProgressById.values()).some(
+            (p) => p && p.sessionId !== thisId && !p.isSnoozed,
+          )
         : false
 
       if (thisId && hasOtherVisible) {
@@ -2549,9 +2574,9 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
   const wasStopped = finalContent?.includes("emergency kill switch") ||
                     steps?.some(step => step.title === "Agent stopped" ||
                                step.description?.includes("emergency kill switch"))
+  const shouldAutoScrollContent = variant !== "tile" || !!isFocused || !!isExpanded
 
-  // Use conversation history if available, otherwise fall back to extracting from steps
-  let messages: Array<{
+  const messages = useMemo<Array<{
     role: "user" | "assistant" | "tool"
     content: string
     isComplete: boolean
@@ -2559,152 +2584,167 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
     isThinking: boolean
     toolCalls?: Array<{ name: string; arguments: any }>
     toolResults?: Array<{ success: boolean; content: string; error?: string }>
-  }> = []
+  }>>(() => {
+    const nextMessages: Array<{
+      role: "user" | "assistant" | "tool"
+      content: string
+      isComplete: boolean
+      timestamp: number
+      isThinking: boolean
+      toolCalls?: Array<{ name: string; arguments: any }>
+      toolResults?: Array<{ success: boolean; content: string; error?: string }>
+    }> = []
+    const fallbackBaseTimestamp =
+      conversationHistory?.[conversationHistory.length - 1]?.timestamp ??
+      steps[steps.length - 1]?.timestamp ??
+      0
 
-  if (conversationHistory && conversationHistory.length > 0) {
-    // Use only the portion of the conversation history that belongs to this session
-    const startIndex =
-      typeof sessionStartIndex === "number" && sessionStartIndex > 0
-        ? Math.min(sessionStartIndex, conversationHistory.length)
-        : 0
-    const historyForSession =
-      startIndex > 0 ? conversationHistory.slice(startIndex) : conversationHistory
+    if (conversationHistory && conversationHistory.length > 0) {
+      const startIndex =
+        typeof sessionStartIndex === "number" && sessionStartIndex > 0
+          ? Math.min(sessionStartIndex, conversationHistory.length)
+          : 0
+      const historyForSession =
+        startIndex > 0 ? conversationHistory.slice(startIndex) : conversationHistory
 
-    // Filter internal nudges from the visible history (fallback for older persisted data).
-    // The main process now marks completion nudges as ephemeral and filters them before
-    // returning or persisting conversation history, but this fallback catches any that
-    // might appear in older conversation data.
-    const isCompletionNudge = (c: string) => {
-      const trimmed = c.trim()
-      // Only filter the exact completion nudge text to avoid false positives
-      return trimmed === INTERNAL_COMPLETION_NUDGE_TEXT
-    }
+      const isCompletionNudge = (content: string) => content.trim() === INTERNAL_COMPLETION_NUDGE_TEXT
 
-    messages = historyForSession
-      .filter((entry) => !(entry.role === "user" && isCompletionNudge(entry.content)))
-      .map((entry) => ({
-        role: entry.role,
-        content: entry.content,
-        isComplete: true,
-        timestamp: entry.timestamp || Date.now(),
-        isThinking: false,
-        toolCalls: entry.toolCalls,
-        toolResults: entry.toolResults,
-      }))
+      historyForSession
+        .filter((entry) => !(entry.role === "user" && isCompletionNudge(entry.content)))
+        .forEach((entry, index) => {
+          nextMessages.push({
+            role: entry.role,
+            content: entry.content,
+            isComplete: true,
+            timestamp: entry.timestamp ?? fallbackBaseTimestamp + index,
+            isThinking: false,
+            toolCalls: entry.toolCalls,
+            toolResults: entry.toolResults,
+          })
+        })
 
-    // Add any in-progress thinking from current steps (only when not complete)
-    const currentThinkingStep = !isComplete
-      ? steps.find(
-          (step) => step.type === "thinking" && step.status === "in_progress",
-        )
-      : undefined
-    if (currentThinkingStep) {
-      // Don't show assistant message from thinking step when streaming is active
-      // to avoid duplicate content (streaming bubble already shows the text)
-      const isStreaming = progress.streamingContent?.isStreaming
-      const latestAssistantHistoryMessage = [...messages]
-        .reverse()
-        .find(
-          (message) =>
+      const currentThinkingStep = !isComplete
+        ? steps.find((step) => step.type === "thinking" && step.status === "in_progress")
+        : undefined
+
+      if (currentThinkingStep) {
+        const isStreaming = progress.streamingContent?.isStreaming
+        let latestAssistantHistoryMessage: (typeof nextMessages)[number] | undefined
+        for (let i = nextMessages.length - 1; i >= 0; i--) {
+          const message = nextMessages[i]
+          if (
             message.role === "assistant" &&
             !message.toolCalls?.length &&
             !message.toolResults?.length &&
-            message.content.trim().length > 0,
-        )
-      const historyAlreadyContainsThinking = !!(
-        currentThinkingStep.llmContent &&
-        latestAssistantHistoryMessage?.content &&
-        currentThinkingStep.llmContent.endsWith(latestAssistantHistoryMessage.content)
-      )
+            message.content.trim().length > 0
+          ) {
+            latestAssistantHistoryMessage = message
+            break
+          }
+        }
 
-      if (
-        !isStreaming &&
-        !historyAlreadyContainsThinking &&
-        currentThinkingStep.llmContent &&
-        currentThinkingStep.llmContent.trim().length > 0
-      ) {
-        messages.push({
-          role: "assistant",
-          content: currentThinkingStep.llmContent,
-          isComplete: false,
-          timestamp: currentThinkingStep.timestamp,
-          isThinking: false,
-        })
-      } else if (!isStreaming) {
-        // Skip adding a fake "thinking" message for verification steps
-        // These steps don't have LLM content and would hide the actual LLM response
-        const isVerificationStep = currentThinkingStep.title?.toLowerCase().includes("verifying")
-        if (!isVerificationStep) {
-          messages.push({
+        const historyAlreadyContainsThinking = !!(
+          currentThinkingStep.llmContent &&
+          latestAssistantHistoryMessage?.content &&
+          currentThinkingStep.llmContent.endsWith(latestAssistantHistoryMessage.content)
+        )
+
+        if (
+          !isStreaming &&
+          !historyAlreadyContainsThinking &&
+          currentThinkingStep.llmContent &&
+          currentThinkingStep.llmContent.trim().length > 0
+        ) {
+          nextMessages.push({
             role: "assistant",
-            content: currentThinkingStep.description || "Agent is thinking...",
+            content: currentThinkingStep.llmContent,
             isComplete: false,
             timestamp: currentThinkingStep.timestamp,
-            isThinking: true,
-          })
-        }
-      }
-    }
-  } else {
-    // Fallback to old behavior - extract from thinking steps
-    steps
-      .filter((step) => step.type === "thinking")
-      .forEach((step) => {
-        if (step.llmContent && step.llmContent.trim().length > 0) {
-          messages.push({
-            role: "assistant",
-            content: step.llmContent,
-            isComplete: step.status === "completed",
-            timestamp: step.timestamp,
             isThinking: false,
           })
-        } else if (step.status === "in_progress" && !isComplete) {
-          // Only show in-progress thinking when task is not complete
-          // Skip verification steps as they would hide the actual LLM response
-          const isVerificationStep = step.title?.toLowerCase().includes("verifying")
+        } else if (!isStreaming) {
+          const isVerificationStep = currentThinkingStep.title?.toLowerCase().includes("verifying")
           if (!isVerificationStep) {
-            messages.push({
+            nextMessages.push({
               role: "assistant",
-              content: step.description || "Agent is thinking...",
+              content: currentThinkingStep.description || "Agent is thinking...",
               isComplete: false,
-              timestamp: step.timestamp,
+              timestamp: currentThinkingStep.timestamp,
               isThinking: true,
             })
           }
         }
-      })
-
-    // Add final content if available and different from last thinking step
-      if (finalContent && finalContent.trim().length > 0) {
-      const lastMessage = messages[messages.length - 1]
-      if (!lastMessage || lastMessage.content !== finalContent) {
-        messages.push({
-          role: "assistant",
-          content: finalContent,
-          isComplete: true,
-          timestamp: Date.now(),
-          isThinking: false,
+      }
+    } else {
+      steps
+        .filter((step) => step.type === "thinking")
+        .forEach((step, index) => {
+          if (step.llmContent && step.llmContent.trim().length > 0) {
+            nextMessages.push({
+              role: "assistant",
+              content: step.llmContent,
+              isComplete: step.status === "completed",
+              timestamp: step.timestamp ?? fallbackBaseTimestamp + index,
+              isThinking: false,
+            })
+          } else if (step.status === "in_progress" && !isComplete) {
+            const isVerificationStep = step.title?.toLowerCase().includes("verifying")
+            if (!isVerificationStep) {
+              nextMessages.push({
+                role: "assistant",
+                content: step.description || "Agent is thinking...",
+                isComplete: false,
+                timestamp: step.timestamp ?? fallbackBaseTimestamp + index,
+                isThinking: true,
+              })
+            }
+          }
         })
+
+      if (finalContent && finalContent.trim().length > 0) {
+        const lastMessage = nextMessages[nextMessages.length - 1]
+        if (!lastMessage || lastMessage.content !== finalContent) {
+          nextMessages.push({
+            role: "assistant",
+            content: finalContent,
+            isComplete: true,
+            timestamp: lastMessage?.timestamp ?? fallbackBaseTimestamp,
+            isThinking: false,
+          })
+        }
       }
     }
-  }
 
-  // Sort by timestamp to ensure chronological order
-  messages.sort((a, b) => a.timestamp - b.timestamp)
+    if (nextMessages.length > 1) {
+      nextMessages.sort((a, b) => a.timestamp - b.timestamp)
+    }
 
-  const fallbackRespondToUserResponses = progress.userResponse
-    ? []
-    : extractRespondToUserResponsesFromMessages(messages)
-  const effectiveUserResponse = progress.userResponse
-    ?? fallbackRespondToUserResponses[fallbackRespondToUserResponses.length - 1]
-  const effectiveUserResponseHistory = progress.userResponseHistory
-    ?? (fallbackRespondToUserResponses.length > 1
-      ? fallbackRespondToUserResponses.slice(0, -1)
-      : undefined)
-  const primaryAgentLabel = acpSessionInfo?.agentTitle
-    ?? acpSessionInfo?.agentName
-    ?? profileName
-    ?? "Agent"
+    return nextMessages
+  }, [conversationHistory, finalContent, isComplete, progress.streamingContent?.isStreaming, sessionStartIndex, steps])
+
+  const fallbackRespondToUserResponses = useMemo(
+    () => (progress.userResponse ? [] : extractRespondToUserResponsesFromMessages(messages)),
+    [messages, progress.userResponse],
+  )
+  const effectiveUserResponse = useMemo(
+    () => progress.userResponse ?? fallbackRespondToUserResponses[fallbackRespondToUserResponses.length - 1],
+    [fallbackRespondToUserResponses, progress.userResponse],
+  )
+  const effectiveUserResponseHistory = useMemo(
+    () => progress.userResponseHistory
+      ?? (fallbackRespondToUserResponses.length > 1
+        ? fallbackRespondToUserResponses.slice(0, -1)
+        : undefined),
+    [fallbackRespondToUserResponses, progress.userResponseHistory],
+  )
+  const primaryAgentLabel = useMemo(
+    () => acpSessionInfo?.agentTitle ?? acpSessionInfo?.agentName ?? profileName ?? "Agent",
+    [acpSessionInfo?.agentName, acpSessionInfo?.agentTitle, profileName],
+  )
+  const toolCallSteps = useMemo(
+    () => steps.filter((step) => step.type === "tool_call" && step.executionStats),
+    [steps],
+  )
 
   if (!progress.userResponse && effectiveUserResponse) {
     const logKey = `${progress.sessionId}:${effectiveUserResponse.length}:${effectiveUserResponseHistory?.length || 0}`
@@ -2722,211 +2762,168 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
     lastDerivedUserResponseLogKeyRef.current = null
   }
 
-  // Helper function to generate a stable ID for tool executions based on content and timestamp
-  const generateToolExecutionId = (calls: Array<{ name: string; arguments: any }>, timestamp: number) => {
-    // Create a stable hash from tool call names, a subset of arguments, and timestamp for uniqueness
-    const signature = calls.map(c => {
-      const argsStr = c.arguments ? JSON.stringify(c.arguments) : ''
-      return `${c.name}:${argsStr.substring(0, 50)}`
-    }).join('|') + `@${timestamp}`
-    // Simple hash function
-    let hash = 0
-    for (let i = 0; i < signature.length; i++) {
-      const char = signature.charCodeAt(i)
-      hash = ((hash << 5) - hash) + char
-      hash = hash & hash // Convert to 32bit integer
-    }
-    return Math.abs(hash).toString(36)
-  }
-
-  // Stable string hash for IDs (32-bit -> base36)
-  const hashString = (s: string) => {
-    let h = 0
-    for (let i = 0; i < s.length; i++) {
-      h = ((h << 5) - h) + s.charCodeAt(i)
-      h |= 0
-    }
-    return Math.abs(h).toString(36)
-  }
-
-  // Stable message id independent of streaming content; timestamp+role is sufficient
-  const messageStableId = (m: { timestamp: number; role: string; content: string }) => {
-    return `${m.timestamp}-${m.role}`
-  }
-
-  // Build unified display items that combine tool calls with subsequent results
-  const displayItems: DisplayItem[] = []
-  const roleCounters: Record<'user' | 'assistant' | 'tool', number> = { user: 0, assistant: 0, tool: 0 }
-  for (let i = 0; i < messages.length; i++) {
-    const m = messages[i]
-    if (m.role === "assistant" && m.toolCalls && m.toolCalls.length > 0) {
-      const next = messages[i + 1]
-      const results = next && next.role === "tool" && next.toolResults ? next.toolResults : []
-      // Create unified assistant + tools item (combines thought and tool execution)
-      const aIndex = ++roleCounters.assistant
-      const execTimestamp = next?.timestamp ?? m.timestamp
-      const toolExecId = generateToolExecutionId(m.toolCalls, execTimestamp)
-
-      // Look for a matching step with executionStats (match by tool name from tool_call steps)
-      // or find the most recent tool_call step with stats
-      const toolCallNames = m.toolCalls.map(c => c.name)
-      const matchingStep = steps?.find(
-        step =>
-          step.type === "tool_call" &&
-          step.executionStats &&
-          (step.title?.includes(toolCallNames[0]) || toolCallNames.some(name => step.title?.includes(name)))
-      )
-
-      // Suppress the LLM's inline thought text when respond_to_user already
-      // provided the user-facing response. The LLM often emits filler like
-      // "(No further action needed — work is already complete)" alongside
-      // completion tool calls, which is redundant noise for both UI and TTS.
-      const hasCompletionTool = m.toolCalls.some(
-        c => c.name === RESPOND_TO_USER_TOOL || c.name === MARK_WORK_COMPLETE_TOOL
-      )
-      const suppressThought = hasCompletionTool && !!effectiveUserResponse
-
-      displayItems.push({
-        kind: "assistant_with_tools",
-        id: `assistant-tools-${aIndex}-${toolExecId}`,
-        data: {
-          thought: suppressThought ? "" : (m.content || ""),
-          timestamp: m.timestamp,
-          isComplete: m.isComplete,
-          calls: m.toolCalls,
-          results,
-          // Attach executionStats from the matching step if found
-          executionStats: matchingStep?.executionStats ? {
-            durationMs: matchingStep.executionStats.durationMs,
-            totalTokens: matchingStep.executionStats.totalTokens,
-            model: matchingStep.subagentId,
-          } : undefined,
-        },
-      })
-      if (next && next.role === "tool" && next.toolResults) {
-        i++ // skip the tool result message, already included
+  const displayItems = useMemo<DisplayItem[]>(() => {
+    const generateToolExecutionId = (calls: Array<{ name: string; arguments: any }>, timestamp: number) => {
+      const signature = calls
+        .map((call) => `${call.name}:${call.arguments ? JSON.stringify(call.arguments).substring(0, 50) : ""}`)
+        .join("|") + `@${timestamp}`
+      let hash = 0
+      for (let i = 0; i < signature.length; i++) {
+        hash = ((hash << 5) - hash) + signature.charCodeAt(i)
+        hash &= hash
       }
-    } else if (
-      m.role === "tool" &&
-      m.toolResults &&
-      !(i > 0 && messages[i - 1].role === "assistant" && (messages[i - 1].toolCalls?.length ?? 0) > 0)
-    ) {
-      // Standalone tool result without a preceding assistant call in sequence
-      const tIndex = ++roleCounters.tool
-      displayItems.push({ kind: "tool_execution", id: `exec-standalone-${tIndex}` , data: { timestamp: m.timestamp, calls: [], results: m.toolResults } })
-    } else {
-      // Regular message (user/assistant/tool) with stable ordinal per role
-      const idx = ++roleCounters[m.role]
-      displayItems.push({ kind: "message", id: `msg-${m.role}-${idx}`, data: m })
+      return Math.abs(hash).toString(36)
     }
-  }
 
-  // NOTE: Tool approval is now rendered separately outside the scroll area for visibility
-  // It is NOT added to displayItems anymore to ensure it stays visible regardless of scroll position
+    const getItemTimestamp = (item: DisplayItem): number | null => {
+      switch (item.kind) {
+        case "message":
+        case "tool_execution":
+        case "assistant_with_tools":
+          return item.data.timestamp
+        case "delegation":
+          return item.data.startTime
+        case "retry_status":
+          return item.data.startedAt
+        case "tool_approval":
+        case "streaming":
+        case "mid_turn_response":
+          return null
+      }
+    }
 
-  // Add retry status to display items if present
-  if (progress.retryInfo && progress.retryInfo.isRetrying) {
-    displayItems.push({
-      kind: "retry_status",
-      id: `retry-${progress.retryInfo.startedAt}`,
-      data: progress.retryInfo,
-    })
-  }
+    const items: DisplayItem[] = []
+    const roleCounters: Record<'user' | 'assistant' | 'tool', number> = { user: 0, assistant: 0, tool: 0 }
 
-  // Add streaming content to display items if present and actively streaming
-  if (progress.streamingContent && progress.streamingContent.isStreaming && progress.streamingContent.text) {
-    const latestAssistantText = [...messages]
-      .reverse()
-      .find(
-        (message) =>
+    for (let i = 0; i < messages.length; i++) {
+      const message = messages[i]
+      if (message.role === "assistant" && message.toolCalls && message.toolCalls.length > 0) {
+        const next = messages[i + 1]
+        const results = next && next.role === "tool" && next.toolResults ? next.toolResults : []
+        const assistantIndex = ++roleCounters.assistant
+        const execTimestamp = next?.timestamp ?? message.timestamp
+        const toolExecId = generateToolExecutionId(message.toolCalls, execTimestamp)
+        const toolCallNames = message.toolCalls.map((call) => call.name)
+        const matchingStep = toolCallSteps.find(
+          (step) => step.title?.includes(toolCallNames[0]) || toolCallNames.some((name) => step.title?.includes(name)),
+        )
+        const hasCompletionTool = message.toolCalls.some(
+          (call) => call.name === RESPOND_TO_USER_TOOL || call.name === MARK_WORK_COMPLETE_TOOL,
+        )
+        const suppressThought = hasCompletionTool && !!effectiveUserResponse
+
+        items.push({
+          kind: "assistant_with_tools",
+          id: `assistant-tools-${assistantIndex}-${toolExecId}`,
+          data: {
+            thought: suppressThought ? "" : (message.content || ""),
+            timestamp: message.timestamp,
+            isComplete: message.isComplete,
+            calls: message.toolCalls,
+            results,
+            executionStats: matchingStep?.executionStats ? {
+              durationMs: matchingStep.executionStats.durationMs,
+              totalTokens: matchingStep.executionStats.totalTokens,
+              model: matchingStep.subagentId,
+            } : undefined,
+          },
+        })
+
+        if (next && next.role === "tool" && next.toolResults) {
+          i++
+        }
+      } else if (
+        message.role === "tool" &&
+        message.toolResults &&
+        !(i > 0 && messages[i - 1].role === "assistant" && (messages[i - 1].toolCalls?.length ?? 0) > 0)
+      ) {
+        const toolIndex = ++roleCounters.tool
+        items.push({
+          kind: "tool_execution",
+          id: `exec-standalone-${toolIndex}`,
+          data: { timestamp: message.timestamp, calls: [], results: message.toolResults },
+        })
+      } else {
+        const roleIndex = ++roleCounters[message.role]
+        items.push({ kind: "message", id: `msg-${message.role}-${roleIndex}`, data: message })
+      }
+    }
+
+    if (progress.retryInfo?.isRetrying) {
+      items.push({
+        kind: "retry_status",
+        id: `retry-${progress.retryInfo.startedAt}`,
+        data: progress.retryInfo,
+      })
+    }
+
+    if (progress.streamingContent?.isStreaming && progress.streamingContent.text) {
+      let latestAssistantText: (typeof messages)[number] | undefined
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const message = messages[i]
+        if (
           message.role === "assistant" &&
           !message.toolCalls?.length &&
           !message.toolResults?.length &&
-          message.content.trim().length > 0,
+          message.content.trim().length > 0
+        ) {
+          latestAssistantText = message
+          break
+        }
+      }
+
+      const historyAlreadyContainsStream = !!(
+        latestAssistantText?.content &&
+        progress.streamingContent.text.endsWith(latestAssistantText.content)
       )
-    const historyAlreadyContainsStream = !!(
-      latestAssistantText?.content &&
-      progress.streamingContent.text.endsWith(latestAssistantText.content)
-    )
 
-    if (!historyAlreadyContainsStream) {
-      displayItems.push({
-        kind: "streaming",
-        id: "streaming-content",
-        data: progress.streamingContent,
+      if (!historyAlreadyContainsStream) {
+        items.push({ kind: "streaming", id: "streaming-content", data: progress.streamingContent })
+      }
+    }
+
+    if (effectiveUserResponse) {
+      items.push({
+        kind: "mid_turn_response",
+        id: "mid-turn-response",
+        data: {
+          userResponse: effectiveUserResponse,
+          pastResponses: effectiveUserResponseHistory,
+        },
       })
     }
-  }
 
-  // Add mid-turn user response to display items if present
-  // This shows the userResponse from respond_to_user tool prominently (both mid-turn and after completion)
-  if (effectiveUserResponse) {
-    displayItems.push({
-      kind: "mid_turn_response",
-      id: "mid-turn-response",
-      data: {
-        userResponse: effectiveUserResponse,
-        pastResponses: effectiveUserResponseHistory,
-      },
-    })
-  }
-
-  // Add delegation progress items from steps
-  for (const step of progress.steps) {
-    if (step.delegation) {
-      displayItems.push({
-        kind: "delegation",
-        id: `delegation-${step.delegation.runId}`,
-        data: step.delegation,
-      })
+    for (const step of progress.steps) {
+      if (step.delegation) {
+        items.push({
+          kind: "delegation",
+          id: `delegation-${step.delegation.runId}`,
+          data: step.delegation,
+        })
+      }
     }
-  }
 
-  // Sort all display items by timestamp to ensure delegations appear in chronological order
-  // Items without timestamps (tool_approval, streaming) will be handled separately
-  const getItemTimestamp = (item: DisplayItem): number | null => {
-    switch (item.kind) {
-      case "message":
-        return item.data.timestamp
-      case "tool_execution":
-        return item.data.timestamp
-      case "assistant_with_tools":
-        return item.data.timestamp
-      case "delegation":
-        return item.data.startTime
-      case "retry_status":
-        return item.data.startedAt
-      case "tool_approval":
-      case "streaming":
-      case "mid_turn_response":
-        // These represent current state and should stay at the end
-        return null
-    }
-  }
+    const timestampedItems = items.filter((item) => getItemTimestamp(item) !== null)
+    const currentStateItems = items.filter((item) => getItemTimestamp(item) === null)
 
-  // Separate items with timestamps from "current state" items (approval, streaming)
-  const timestampedItems = displayItems.filter(item => getItemTimestamp(item) !== null)
-  const currentStateItems = displayItems.filter(item => getItemTimestamp(item) === null)
+    timestampedItems.sort((a, b) => (getItemTimestamp(a) ?? 0) - (getItemTimestamp(b) ?? 0))
+    return [...timestampedItems, ...currentStateItems]
+  }, [effectiveUserResponse, effectiveUserResponseHistory, messages, progress.retryInfo, progress.steps, progress.streamingContent, toolCallSteps])
 
-  // Sort timestamped items chronologically
-  timestampedItems.sort((a, b) => {
-    const tsA = getItemTimestamp(a) ?? 0
-    const tsB = getItemTimestamp(b) ?? 0
-    return tsA - tsB
-  })
+  const visibleDisplayItems = useMemo(
+    () => variant === "tile" && !isFocused && !isExpanded
+      ? displayItems.slice(-TILE_PREVIEW_ITEM_LIMIT)
+      : displayItems,
+    [displayItems, isExpanded, isFocused, variant],
+  )
 
-  // Replace displayItems with sorted items, keeping current state items at the end
-  displayItems.length = 0
-  displayItems.push(...timestampedItems, ...currentStateItems)
-
-  // Determine the last assistant message among display items (by position, not timestamp)
-  const lastAssistantDisplayIndex = (() => {
-    for (let i = displayItems.length - 1; i >= 0; i--) {
-      const it = displayItems[i]
-      if (it.kind === "message" && it.data.role === "assistant") return i
+  const lastAssistantDisplayIndex = useMemo(() => {
+    for (let i = visibleDisplayItems.length - 1; i >= 0; i--) {
+      const item = visibleDisplayItems[i]
+      if (item.kind === "message" && item.data.role === "assistant") return i
     }
     return -1
-  })()
+  }, [visibleDisplayItems])
 
   // Reset auto-scroll tracking refs when session changes
   // This prevents stale high-water marks from blocking auto-scroll after a clear/new session
@@ -2946,6 +2943,7 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
   // Using useLayoutEffect here avoids a one-frame lag where new content renders above
   // the fold and the scroll position only catches up on the next animation frame.
   useLayoutEffect(() => {
+    if (!shouldAutoScrollContent) return
     const scrollContainer = scrollContainerRef.current
     if (!scrollContainer) return
 
@@ -2963,34 +2961,35 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
     // displayItems includes tool executions, tool approvals, retry status, and streaming content
     const hasNewMessages = messages.length > lastMessageCountRef.current
     const hasContentChanged = totalContentLength > lastContentLengthRef.current
-    const hasNewDisplayItems = displayItems.length > lastDisplayItemsCountRef.current
+    const hasNewDisplayItems = visibleDisplayItems.length > lastDisplayItemsCountRef.current
 
     // Also detect when counts decrease (e.g., streaming item removed) and reset refs
     // This ensures auto-scroll works correctly when items are removed and new ones added
     const hasMessagesDecreased = messages.length < lastMessageCountRef.current
-    const hasDisplayItemsDecreased = displayItems.length < lastDisplayItemsCountRef.current
+    const hasDisplayItemsDecreased = visibleDisplayItems.length < lastDisplayItemsCountRef.current
 
     if (hasMessagesDecreased || hasDisplayItemsDecreased) {
       // Reset refs when counts decrease to avoid high-water mark issues
       lastMessageCountRef.current = messages.length
       lastContentLengthRef.current = totalContentLength
-      lastDisplayItemsCountRef.current = displayItems.length
+      lastDisplayItemsCountRef.current = visibleDisplayItems.length
     }
 
     if (hasNewMessages || hasContentChanged || hasNewDisplayItems) {
       lastMessageCountRef.current = messages.length
       lastContentLengthRef.current = totalContentLength
-      lastDisplayItemsCountRef.current = displayItems.length
+      lastDisplayItemsCountRef.current = visibleDisplayItems.length
 
       // Only auto-scroll if we should (user hasn't manually scrolled up)
       if (shouldAutoScroll) {
         scrollToBottom()
       }
     }
-  }, [messages.length, shouldAutoScroll, messages, progress.streamingContent?.text, displayItems.length, displayItems])
+  }, [messages, progress.streamingContent?.text, shouldAutoScroll, shouldAutoScrollContent, visibleDisplayItems])
 
   // Initial scroll to bottom on mount and when first display item appears
   useEffect(() => {
+    if (!shouldAutoScrollContent) return
     const scrollContainer = scrollContainerRef.current
     if (!scrollContainer) return
 
@@ -3010,7 +3009,7 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
     })
 
     return clearPendingInitialScrollAttempts
-  }, [clearPendingInitialScrollAttempts, displayItems.length > 0])
+  }, [clearPendingInitialScrollAttempts, shouldAutoScrollContent, visibleDisplayItems.length > 0])
 
   // Make panel focusable when agent completes (overlay variant only)
   // This enables the continue conversation input to receive focus and be interactable
@@ -3022,6 +3021,7 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
 
   // Handle scroll events to detect user interaction
   const handleScroll = () => {
+    if (!shouldAutoScrollContent) return
     const scrollContainer = scrollContainerRef.current
     if (!scrollContainer) return
 
@@ -3264,9 +3264,14 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
                 onScroll={handleScroll}
                 className="h-full overflow-y-auto scrollbar-hide-until-hover"
               >
-                {displayItems.length > 0 ? (
+                {visibleDisplayItems.length > 0 ? (
                   <div className="space-y-1 p-2">
-                    {displayItems.map((item, index) => {
+                    {displayItems.length > visibleDisplayItems.length && (
+                      <div className="px-2 pb-1 text-[10px] uppercase tracking-wide text-muted-foreground/70">
+                        Showing latest {visibleDisplayItems.length} updates
+                      </div>
+                    )}
+                    {visibleDisplayItems.map((item, index) => {
                       const itemKey = item.id
                       // Final assistant message should be expanded by default when agent is complete
                       // Tool executions should be collapsed by default to reduce visual clutter
@@ -3635,9 +3640,14 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
           onScroll={handleScroll}
           className="h-full overflow-y-auto"
         >
-          {displayItems.length > 0 ? (
+          {visibleDisplayItems.length > 0 ? (
             <div className="space-y-1 p-2">
-              {displayItems.map((item, index) => {
+              {displayItems.length > visibleDisplayItems.length && (
+                <div className="px-2 pb-1 text-[10px] uppercase tracking-wide text-muted-foreground/70">
+                  Showing latest {visibleDisplayItems.length} updates
+                </div>
+              )}
+              {visibleDisplayItems.map((item, index) => {
                 const itemKey = item.id || (item.kind === "message"
                   ? `msg-${messageStableId(item.data as any)}`
                   : item.kind === "tool_approval"

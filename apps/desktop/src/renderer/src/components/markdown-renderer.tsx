@@ -259,7 +259,7 @@ const parseThinkSections = (content: string) => {
   return parts
 }
 
-export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
+const MarkdownRendererBase: React.FC<MarkdownRendererProps> = ({
   content,
   className,
   getThinkKey,
@@ -343,3 +343,11 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
     </div>
   )
 }
+
+export const MarkdownRenderer = React.memo(MarkdownRendererBase, (prev, next) => (
+  prev.content === next.content &&
+  prev.className === next.className &&
+  prev.getThinkKey === next.getThinkKey &&
+  prev.isThinkExpanded === next.isThinkExpanded &&
+  prev.onToggleThink === next.onToggleThink
+))

@@ -88,6 +88,37 @@ REMOTE_DEBUGGING_PORT=9222 pnpm dev -- -d
 
 ---
 
+## Renderer performance capture to disk
+
+For rendering slowdowns, run the app with renderer CDP enabled and record metrics/trace artifacts into `apps/desktop/tmp/perf/`:
+
+```bash
+# Terminal 1: run the app with renderer + main-process debugging enabled
+REMOTE_DEBUGGING_PORT=9333 ELECTRON_EXTRA_LAUNCH_ARGS="--inspect=9339" pnpm dev -- -dui -dapp
+
+# Terminal 2: record renderer metrics until you stop it
+pnpm --filter @dotagents/desktop perf:renderer:record -- --port 9333 --duration-seconds 0 --metrics-interval-ms 1000
+
+# Optional: capture a focused 20s DevTools trace while reproducing jank
+pnpm --filter @dotagents/desktop perf:renderer:record -- --port 9333 --trace-seconds 20 --label session-stream
+```
+
+Artifacts written per run:
+
+- `*.metrics.jsonl` → sampled CDP `Performance.getMetrics()` output plus page metadata
+- `*.trace.json` → Chrome trace events ready for Perfetto/DevTools (when `--trace-seconds` is used)
+- `*.meta.json` → target/port/session metadata for the capture
+
+Recommended workflow:
+
+1. Start the app with `REMOTE_DEBUGGING_PORT` enabled.
+2. Start the metrics recorder.
+3. Reproduce the slowdown with multiple long conversations active.
+4. Run a short `--trace-seconds 20` capture during the janky window.
+5. Compare heap, node count, `TaskDuration`, `ScriptDuration`, `LayoutDuration`, and the trace flame chart.
+
+---
+
 ## IPC Methods (Testing from DevTools Console)
 
 Once connected to a renderer window via `chrome://inspect`:

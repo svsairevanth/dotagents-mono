@@ -438,13 +438,16 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   },
 }))
 
+const EMPTY_MESSAGE_QUEUE: QueuedMessage[] = []
+
 // Computed selectors
+export const useAgentSessionProgress = (sessionId: string | null | undefined) => {
+  return useAgentStore((state) => (sessionId ? state.agentProgressById.get(sessionId) ?? null : null))
+}
+
 export const useAgentProgress = () => {
   const focusedSessionId = useAgentStore((state) => state.focusedSessionId)
-  const agentProgressById = useAgentStore((state) => state.agentProgressById)
-  
-  if (!focusedSessionId) return null
-  return agentProgressById.get(focusedSessionId) ?? null
+  return useAgentSessionProgress(focusedSessionId)
 }
 
 export const useIsAgentProcessing = () => {
@@ -454,9 +457,11 @@ export const useIsAgentProcessing = () => {
 
 // Hook to get message queue for a specific conversation
 export const useMessageQueue = (conversationId: string | undefined) => {
-  const messageQueuesByConversation = useAgentStore((state) => state.messageQueuesByConversation)
-  if (!conversationId) return []
-  return messageQueuesByConversation.get(conversationId) || []
+  return useAgentStore((state) => (
+    conversationId
+      ? state.messageQueuesByConversation.get(conversationId) || EMPTY_MESSAGE_QUEUE
+      : EMPTY_MESSAGE_QUEUE
+  ))
 }
 
 // Hook to check if a conversation's queue is paused

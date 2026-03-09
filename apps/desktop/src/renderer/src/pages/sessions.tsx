@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import { useQueryClient, useQuery } from "@tanstack/react-query"
 import { useParams, useOutletContext } from "react-router-dom"
 import { tipcClient } from "@renderer/lib/tipc-client"
-import { useAgentStore } from "@renderer/stores"
+import { useAgentStore, useAgentSessionProgress } from "@renderer/stores"
 import { SessionGrid, SessionTileWrapper, type TileLayoutMode } from "@renderer/components/session-grid"
 import { clearPersistedSize } from "@renderer/hooks/use-resizable"
 import { AgentProgress } from "@renderer/components/agent-progress"
@@ -43,6 +43,103 @@ function formatTimestamp(timestamp: number): string {
 
 const RECENT_SESSIONS_LIMIT = 8
 const PENDING_CONTINUATION_TIMEOUT_MS = 20_000
+
+type SessionAgentTileProps = {
+  sessionId: string
+  index: number
+  isCollapsed: boolean
+  isDragTarget: boolean
+  isDragging: boolean
+  showTileMaximize: boolean
+  tileLayoutMode: TileLayoutMode
+  onCollapsedChange: (sessionId: string, collapsed: boolean) => void
+  onDragStart: (sessionId: string, index: number) => void
+  onDragOver: (index: number) => void
+  onDragEnd: () => void
+  onMaximizeTile: (sessionId?: string) => void
+}
+
+const SessionAgentTile = React.memo(function SessionAgentTile({
+  sessionId,
+  index,
+  isCollapsed,
+  isDragTarget,
+  isDragging,
+  showTileMaximize,
+  tileLayoutMode,
+  onCollapsedChange,
+  onDragStart,
+  onDragOver,
+  onDragEnd,
+  onMaximizeTile,
+}: SessionAgentTileProps) {
+  const progress = useAgentSessionProgress(sessionId)
+  const focusedSessionId = useAgentStore((state) => state.focusedSessionId)
+  const setFocusedSessionId = useAgentStore((state) => state.setFocusedSessionId)
+  const queryClient = useQueryClient()
+  const isFocused = focusedSessionId === sessionId
+
+  const handleFocusSession = useCallback(async () => {
+    setFocusedSessionId(sessionId)
+    try {
+      await tipcClient.focusAgentSession({ sessionId })
+      await tipcClient.setPanelMode({ mode: "agent" })
+      await tipcClient.showPanelWindow({})
+    } catch (error) {
+      console.error("Failed to show panel window:", error)
+    }
+  }, [sessionId, setFocusedSessionId])
+
+  const handleDismissSession = useCallback(async () => {
+    const currentProgress = useAgentStore.getState().agentProgressById.get(sessionId)
+    logUI('[Sessions] Dismiss/hide session clicked:', {
+      sessionId,
+      status: currentProgress?.isComplete ? 'complete' : 'active',
+      conversationTitle: currentProgress?.conversationHistory?.[0]?.content?.substring(0, 50),
+      conversationId: currentProgress?.conversationId,
+    })
+    await tipcClient.clearAgentSessionProgress({ sessionId })
+    queryClient.invalidateQueries({ queryKey: ["agentSessions"] })
+  }, [queryClient, sessionId])
+
+  const handleCollapsedChange = useCallback((collapsed: boolean) => {
+    onCollapsedChange(sessionId, collapsed)
+  }, [onCollapsedChange, sessionId])
+
+  const handleMaximize = useCallback(() => {
+    onMaximizeTile(sessionId)
+  }, [onMaximizeTile, sessionId])
+
+  if (!progress) {
+    return null
+  }
+
+  return (
+    <SessionTileWrapper
+      sessionId={sessionId}
+      index={index}
+      isCollapsed={isCollapsed}
+      isDraggable={tileLayoutMode !== "1x1"}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragEnd={onDragEnd}
+      isDragTarget={isDragTarget}
+      isDragging={isDragging}
+    >
+      <AgentProgress
+        progress={progress}
+        variant="tile"
+        isFocused={isFocused}
+        onFocus={handleFocusSession}
+        onDismiss={handleDismissSession}
+        isCollapsed={isCollapsed}
+        onCollapsedChange={handleCollapsedChange}
+        onExpand={showTileMaximize ? handleMaximize : undefined}
+        isExpanded={isFocused && tileLayoutMode === "1x1"}
+      />
+    </SessionTileWrapper>
+  )
+})
 
 function EmptyState({ onTextClick, onVoiceClick, onSelectPrompt, onPastSessionClick, onOpenPastSessionsDialog, textInputShortcut, voiceInputShortcut, dictationShortcut, selectedAgentId, onSelectAgent }: {
   onTextClick: () => void
@@ -153,7 +250,6 @@ function EmptyState({ onTextClick, onVoiceClick, onSelectPrompt, onPastSessionCl
 }
 
 export function Component() {
-  const queryClient = useQueryClient()
   const { id: routeHistoryItemId } = useParams<{ id: string }>()
   const { onOpenPastSessionsDialog, sidebarWidth } = (useOutletContext<LayoutContext>() ?? {}) as Partial<LayoutContext>
   const agentProgressById = useAgentStore((s) => s.agentProgressById)
@@ -541,30 +637,6 @@ export function Component() {
     await tipcClient.showPanelWindowWithTextInput({ initialText: content })
   }
 
-  const handleFocusSession = async (sessionId: string) => {
-    setFocusedSessionId(sessionId)
-    // Also show the panel window with this session focused
-    try {
-      await tipcClient.focusAgentSession({ sessionId })
-      await tipcClient.setPanelMode({ mode: "agent" })
-      await tipcClient.showPanelWindow({})
-    } catch (error) {
-      console.error("Failed to show panel window:", error)
-    }
-  }
-
-  const handleDismissSession = async (sessionId: string) => {
-    const progress = agentProgressById.get(sessionId)
-    logUI('[Sessions] Dismiss/hide session clicked:', {
-      sessionId,
-      status: progress?.isComplete ? 'complete' : 'active',
-      conversationTitle: progress?.conversationHistory?.[0]?.content?.substring(0, 50),
-      conversationId: progress?.conversationId,
-    })
-    await tipcClient.clearAgentSessionProgress({ sessionId })
-    queryClient.invalidateQueries({ queryKey: ["agentSessions"] })
-  }
-
   // Drag and drop handlers
   const handleDragStart = useCallback((sessionId: string, _index: number) => {
     setDraggedSessionId(sessionId)
@@ -818,7 +890,7 @@ export function Component() {
                 </SessionTileWrapper>
               )}
               {/* Regular sessions */}
-              {allProgressEntries.map(([sessionId, progress], index) => {
+              {allProgressEntries.map(([sessionId], index) => {
                 const isCollapsed = collapsedSessions[sessionId] ?? false
                 const adjustedIndex = hasPendingTile ? index + 1 : index
                 return (
@@ -826,28 +898,20 @@ export function Component() {
                     key={sessionId}
                     ref={(el) => { sessionRefs.current[sessionId] = el }}
                   >
-                    <SessionTileWrapper
+                    <SessionAgentTile
                       sessionId={sessionId}
                       index={adjustedIndex}
                       isCollapsed={isCollapsed}
+                      isDragTarget={dragTargetIndex === adjustedIndex && draggedSessionId !== sessionId}
+                      isDragging={draggedSessionId === sessionId}
+                      showTileMaximize={showTileMaximize}
+                      tileLayoutMode={tileLayoutMode}
+                      onCollapsedChange={handleCollapsedChange}
                       onDragStart={handleDragStart}
                       onDragOver={handleDragOver}
                       onDragEnd={handleDragEnd}
-                      isDragTarget={dragTargetIndex === adjustedIndex && draggedSessionId !== sessionId}
-                      isDragging={draggedSessionId === sessionId}
-                    >
-                      <AgentProgress
-                        progress={progress}
-                        variant="tile"
-                        isFocused={focusedSessionId === sessionId}
-                        onFocus={() => handleFocusSession(sessionId)}
-                        onDismiss={() => handleDismissSession(sessionId)}
-                        isCollapsed={isCollapsed}
-                        onCollapsedChange={(collapsed) => handleCollapsedChange(sessionId, collapsed)}
-                        onExpand={showTileMaximize ? () => handleMaximizeTile(sessionId) : undefined}
-                        isExpanded={tileLayoutMode === "1x1"}
-                      />
-                    </SessionTileWrapper>
+                      onMaximizeTile={handleMaximizeTile}
+                    />
                   </div>
                 )
               })}

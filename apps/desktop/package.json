@@ -21,6 +21,7 @@
     "predev": "corepack pnpm --filter @dotagents/shared build && npx tsx scripts/ensure-rust-binary.ts",
     "dev": "npx tsx scripts/dev-with-sherpa.ts",
     "dev:no-sherpa": "electron-vite dev --watch --",
+    "perf:renderer:record": "npx tsx scripts/renderer-perf-recorder.ts",
     "prebuild": "npx tsx scripts/ensure-build-dirs.ts",
     "build": "pnpm run typecheck && pnpm run test:run && electron-vite build && pnpm run build-rs",
     "postinstall": "node scripts/postinstall.cjs",
