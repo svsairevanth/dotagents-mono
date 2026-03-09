@@ -4,6 +4,7 @@
 - No desktop surfaces have screenshot-backed live verification yet in this loop; renderer startup remains blocked before first capture.
 - [x] Desktop setup / first-run permissions window (`apps/desktop/src/renderer/src/pages/setup.tsx`) — source-level constrained-window review only this iteration because Electron runtime is still blocked before first renderer capture.
 - [x] Desktop sessions empty state (`apps/desktop/src/renderer/src/pages/sessions.tsx`) — source-level review only this iteration because Electron runtime is still blocked before first renderer capture.
+- [x] Desktop settings: general → `Modular config (.agents)` (`apps/desktop/src/renderer/src/pages/settings-general.tsx`) — source-level review only this iteration because Electron runtime is still blocked before first renderer capture; mobile has no equivalent `.agents` settings surface, so this coverage is desktop-specific.
 
 ### Mobile checked screens / flows / states
 - [x] Mobile Settings root screen on initial app launch (`App.tsx` initial route `Settings`) — source-level review only this iteration because Expo web runtime was blocked before launch.
@@ -14,7 +15,7 @@
 ### Not yet checked
 - [ ] Desktop onboarding welcome / API key / dictation / agent steps, plus live runtime validation of the setup permissions window
 - [ ] Desktop sessions active tiles / dense action rows / hover states
-- [ ] Desktop settings: general
+- [ ] Desktop settings: general remaining rows + live runtime validation of the `.agents` group
 - [ ] Desktop settings: providers + models
 - [ ] Desktop settings: capabilities
 - [ ] Desktop settings: agents
@@ -38,6 +39,7 @@
 - [x] Mobile Connection settings used decorative emoji in already-labeled UI (`⚠️` error banner copy, `📷 Scan QR Code`, `✕ Close`), adding narrow-width chrome without improving orientation.
 - [x] Desktop setup / first-run permissions used a negative top offset (`-mt-20`) and hard-coded `grid-cols-2` permission rows, creating avoidable empty space and fragile action sizing on narrow or short setup windows.
 - [x] Desktop sessions empty state used oversized decorative chrome — a large muted icon bubble, full-size selector/prompts chrome, and generous vertical gaps that pushed the primary start controls lower than necessary on a high-frequency surface; the mobile `SessionListScreen` empty state is already text-only, so this issue is desktop-specific rather than shared.
+- [x] Desktop settings general `Modular config (.agents)` used both a top-level `endDescription` and an in-card explanatory paragraph, then split related folder/file actions across separate `Open` and `Reveal files in Finder/Explorer` rows, adding avoidable vertical chrome on an already dense settings page; mobile has no equivalent `.agents` surface, so this issue is desktop-specific rather than shared.
 
 ### Improved
 - [x] Removed the duplicate in-content `Settings` title from the mobile root settings surface to reduce non-informational vertical space and let the connection card surface sooner.
@@ -49,6 +51,7 @@
 - [x] Removed decorative emoji chrome from the mobile Connection settings error banner and QR scanner actions, while adding an explicit accessibility label for the scanner close control.
 - [x] Tightened the desktop setup shell, made the first-run permissions surface scroll-safe for short windows, and changed permission rows to stack by default with full-width action buttons on constrained widths before splitting into label/action columns on wider screens.
 - [x] Tightened the desktop sessions empty state by shrinking the decorative icon treatment, switching the agent selector to its existing compact mode, reducing secondary-control spacing, using the smaller predefined-prompts trigger, and pulling recent sessions closer to the primary actions without shrinking the main text/voice buttons.
+- [x] Tightened the desktop `.agents` settings block by merging its explanatory copy into one helper paragraph and consolidating folder/file buttons into a single wrap-safe `Open folders & files` row with shorter button labels.
 
 ### Verified
 - [x] Source-level regression coverage added in `apps/mobile/tests/settings-screen-density.test.js`.
@@ -66,6 +69,8 @@
 - [x] Targeted desktop source verification passed: `node --test apps/desktop/tests/setup-permission-density.test.mjs`.
 - [x] Dependency-free desktop sessions empty-state regression coverage added in `apps/desktop/tests/sessions-empty-state-density.test.mjs`.
 - [x] Targeted desktop source verification passed: `node --test apps/desktop/tests/sessions-empty-state-density.test.mjs`.
+- [x] Dependency-free desktop `.agents` density regression coverage added in `apps/desktop/tests/settings-general-modular-config-density.test.mjs`.
+- [x] Targeted desktop source verification passed: `node --test apps/desktop/tests/settings-general-modular-config-density.test.mjs`.
 
 ### Blocked
 - [x] Live mobile runtime inspection blocked: `pnpm --filter @dotagents/mobile web` failed with `node_modules missing`, `expo: command not found`, and `ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL`.
@@ -81,6 +86,7 @@
 - [ ] Desktop sessions empty state is denser in source and keeps primary actions higher, but the real renderer still needs screenshot-backed validation for above-the-fold balance, empty-state readability, and recent-sessions proximity once Electron can launch.
 - [ ] Desktop settings helper-tooltip hover occlusion remains un-reproduced in a live renderer; the current coverage is shared-component/source-level only until the desktop runtime can launch for screenshot-backed review.
 - [ ] Desktop settings surfaces remain unchecked at runtime; the shared settings-row audit is not a substitute for live renderer coverage.
+- [ ] Desktop settings general `.agents` cleanup is denser in source, but the real renderer still needs screenshot-backed validation for button-wrap behavior, path/action alignment, and narrow-width scanability once Electron can launch.
 - [ ] The repaired `control.test.tsx` assertion now renders `ControlLabel` correctly in source, but the component-level Vitest test still has not been executed in this environment because the desktop/shared toolchain is unavailable.
 - [ ] Mobile Chats list row density is improved in source, but the stub-session title/date balance still needs live Expo web or device screenshot review at small-phone and larger mobile-web widths.
 - [ ] Mobile chat composer, header action row, and voice-related controls still need live narrow-width review for density and possible control crowding.
@@ -178,3 +184,12 @@ Evidence
 - After evidence: Source now keeps the desktop sessions empty state more compact around the primary actions while preserving the main text/voice buttons and recent sessions affordance; mobile remains unchanged because its equivalent empty state was already minimal.
 - Verification commands/run results: `pnpm dev:mobile -- --web` → failed before launch (`expo: command not found`, `node_modules missing`, `ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL`, exit 1). `REMOTE_DEBUGGING_PORT=9333 ELECTRON_EXTRA_LAUNCH_ARGS="--inspect=9339" pnpm dev -- -dui` → failed before Electron launch (`tsup: command not found`, `spawn ENOENT`, `node_modules missing`, exit 1). `node --test apps/desktop/tests/sessions-empty-state-density.test.mjs` → passed (2 tests, 0 failures, exit 0).
 - Blockers/remaining uncertainty: No before/after screenshots were possible because desktop/mobile runtimes still cannot launch in this worktree without installed dependencies, so real renderer validation of visual balance, actual above-the-fold action placement, and recent-sessions spacing remains pending once runtime access is restored.
+
+#### Iteration 11
+Evidence
+- Scope: Desktop settings general `.agents` block density, with a cross-check for whether mobile has an equivalent modular-config surface.
+- Before evidence: Source-backed observation only because runtime was blocked — `REMOTE_DEBUGGING_PORT=9333 ELECTRON_EXTRA_LAUNCH_ARGS="--inspect=9339" pnpm dev -- -dui` failed during `@dotagents/shared build` with `tsup: command not found`, `spawn ENOENT`, and `node_modules missing` warnings before any renderer target or screenshot capture, and `pnpm dev:mobile -- --web` failed with `expo: command not found`, `ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL`, and `node_modules missing` warnings before Expo web could launch. In `apps/desktop/src/renderer/src/pages/settings-general.tsx`, the `Modular config (.agents)` group used both a top-level `endDescription` and an in-card helper paragraph, then split closely related folder/file actions across `Open` and `Reveal files in Finder/Explorer` rows. Cross-check: codebase retrieval found no equivalent mobile `.agents` / workspace-folder settings surface, so this issue is desktop-specific rather than shared.
+- Change: Removed the extra `endDescription`, merged the `.agents` explanation into a single helper paragraph, consolidated the folder/file buttons into one wrap-safe `Open folders & files` row with shorter labels, and added `apps/desktop/tests/settings-general-modular-config-density.test.mjs` to keep that density contract in place.
+- After evidence: Source now presents the desktop `.agents` settings block with one explanatory paragraph followed by path rows and a single compact actions row (`Global Folder`, `Workspace Folder`, `System Prompt`, `Guidelines`), reducing redundant chrome without changing the underlying actions.
+- Verification commands/run results: `REMOTE_DEBUGGING_PORT=9333 ELECTRON_EXTRA_LAUNCH_ARGS="--inspect=9339" pnpm dev -- -dui` → failed before Electron launch (`tsup: command not found`, `spawn ENOENT`, `node_modules missing`, exit 1). `pnpm dev:mobile -- --web` → failed before Expo launch (`expo: command not found`, `ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL`, `node_modules missing`, exit 1). `node --test apps/desktop/tests/settings-general-modular-config-density.test.mjs` → initially failed because the first assertion searched the whole file for `endDescription={` instead of scoping to the `.agents` block; after tightening the test to the extracted `Modular config (.agents)` block, the command passed (2 tests, 0 failures, exit 0).
+- Blockers/remaining uncertainty: No before/after screenshots were possible because desktop/mobile runtimes still cannot launch in this worktree without installed dependencies, so live renderer validation of button wrapping, path readability, and real narrow-width behavior remains pending once runtime access is restored.

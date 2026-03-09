@@ -640,15 +640,11 @@ export function Component() {
           collapsible
           defaultCollapsed
           title="Modular config (.agents)"
-          endDescription={
-            <div>
-              Workspace overlay is enabled when a <span className="font-mono">.agents</span> folder exists in your workspace
-              (or when <span className="font-mono">DOTAGENTS_WORKSPACE_DIR</span> is set).
-            </div>
-          }
         >
-          <div className="px-3 py-2 text-sm text-muted-foreground">
-            Advanced configuration can be stored as files in <span className="font-mono">.agents</span>. Skills live in{" "}
+          <div className="px-3 py-2 text-sm leading-5 text-muted-foreground">
+            Advanced configuration can live in <span className="font-mono">.agents</span>. Workspace{" "}
+            <span className="font-mono">.agents</span> overrides the global layer when present (or when{" "}
+            <span className="font-mono">DOTAGENTS_WORKSPACE_DIR</span> is set). Skills live in{" "}
             <span className="font-mono">skills/&lt;id&gt;/skill.md</span> and memories in{" "}
             <span className="font-mono">memories/&lt;id&gt;.md</span>. Frontmatter uses simple{" "}
             <span className="font-mono">key: value</span> lines (not YAML).
@@ -676,11 +672,11 @@ export function Component() {
                 : ""}
             </div>
           </Control>
-          <Control label="Open" className="px-3">
+          <Control label="Open folders & files" className="px-3">
             <div className="flex flex-wrap justify-end gap-2">
               <Button variant="outline" size="sm" className="gap-1.5" onClick={openGlobalAgentsFolder}>
                 <FolderOpen className="h-3 w-3" />
-                Open Global
+                Global Folder
               </Button>
               <Button
                 variant="outline"
@@ -690,19 +686,15 @@ export function Component() {
                 disabled={!agentsFoldersQuery.data?.workspace?.agentsDir}
               >
                 <FolderUp className="h-3 w-3" />
-                Open Workspace
+                Workspace Folder
               </Button>
-            </div>
-          </Control>
-          <Control label="Reveal files in Finder/Explorer" className="px-3">
-            <div className="flex flex-wrap justify-end gap-2">
               <Button variant="outline" size="sm" className="gap-1.5" onClick={openSystemPromptFile}>
                 <FileText className="h-3 w-3" />
-                Reveal System Prompt
+                System Prompt
               </Button>
               <Button variant="outline" size="sm" className="gap-1.5" onClick={openAgentsGuidelinesFile}>
                 <FileText className="h-3 w-3" />
-                Reveal Guidelines
+                Guidelines
               </Button>
             </div>
           </Control>
