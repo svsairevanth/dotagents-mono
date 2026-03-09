@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 import { EventEmitter } from 'expo-modules-core';
 import type { VoiceDebugLog } from './voiceDebug';
+import { mergeVoiceText } from './mergeVoiceText';
 
 export type VoiceFinalizationMode = 'edit' | 'send' | 'handsfree';
 
@@ -29,31 +30,6 @@ const HANDS_FREE_DEBOUNCE_MS = 1500;
 const MIN_HOLD_MS = 200;
 
 const normalizeVoiceText = (text?: string) => (text || '').replace(/\s+/g, ' ').trim();
-
-function mergeVoiceText(finalText: string, liveText: string): string {
-  const finalClean = normalizeVoiceText(finalText);
-  const liveClean = normalizeVoiceText(liveText);
-
-  if (!finalClean) return liveClean;
-  if (!liveClean) return finalClean;
-  if (liveClean === finalClean) return finalClean;
-  if (liveClean.startsWith(finalClean)) return liveClean;
-  if (finalClean.startsWith(liveClean)) return finalClean;
-
-  const finalWords = finalClean.split(' ');
-  const liveWords = liveClean.split(' ');
-  const maxOverlap = Math.min(finalWords.length, liveWords.length);
-
-  for (let overlap = maxOverlap; overlap > 0; overlap -= 1) {
-    const finalTail = finalWords.slice(finalWords.length - overlap).join(' ');
-    const liveHead = liveWords.slice(0, overlap).join(' ');
-    if (finalTail === liveHead) {
-      return `${finalClean} ${liveWords.slice(overlap).join(' ')}`.trim();
-    }
-  }
-
-  return `${finalClean} ${liveClean}`.trim();
-}
 
 export function useSpeechRecognizer(options: UseSpeechRecognizerOptions) {
   const { handsFree, willCancel, onVoiceFinalized, onRecognizerError, onPermissionDenied, log } = options;
@@ -191,9 +167,7 @@ export function useSpeechRecognizer(options: UseSpeechRecognizerOptions) {
             clearHandsFreeDebounce();
             const final = finalText.trim();
             if (final) {
-              pendingHandsFreeFinalRef.current = pendingHandsFreeFinalRef.current
-                ? `${pendingHandsFreeFinalRef.current} ${final}`
-                : final;
+              pendingHandsFreeFinalRef.current = mergeVoiceText(pendingHandsFreeFinalRef.current, final);
               handsFreeDebounceRef.current = setTimeout(() => {
                 const textToSend = pendingHandsFreeFinalRef.current.trim();
                 pendingHandsFreeFinalRef.current = '';
@@ -316,9 +290,7 @@ export function useSpeechRecognizer(options: UseSpeechRecognizerOptions) {
                   clearHandsFreeDebounce();
                   const final = text.trim();
                   if (final) {
-                    pendingHandsFreeFinalRef.current = pendingHandsFreeFinalRef.current
-                      ? `${pendingHandsFreeFinalRef.current} ${final}`
-                      : final;
+                    pendingHandsFreeFinalRef.current = mergeVoiceText(pendingHandsFreeFinalRef.current, final);
                     handsFreeDebounceRef.current = setTimeout(() => {
                       const textToSend = pendingHandsFreeFinalRef.current.trim();
                       pendingHandsFreeFinalRef.current = '';
