@@ -15,12 +15,20 @@ const shortcutsGroup = settingsGeneralSource.match(
 test('desktop shortcuts helper keeps cancel guidance visible without a hover-only tooltip', () => {
   assert.ok(shortcutsGroup, 'expected to find the desktop shortcuts settings group')
   assert.match(
-    shortcutsGroup,
+    settingsGeneralSource,
+    /const customRecordingShortcutDisplay = effectiveRecordingShortcut[\s\S]*?\? formatKeyComboForDisplay\(effectiveRecordingShortcut\)[\s\S]*?: "your custom shortcut"/,
+  )
+  assert.match(
+    settingsGeneralSource,
     /shortcut === "hold-ctrl"[\s\S]*?"Hold Ctrl to record, release it to finish, and press any other key to cancel\."/,
   )
   assert.match(
+    settingsGeneralSource,
+    /shortcut === "custom"[\s\S]*?recordingShortcutMode === "toggle"[\s\S]*?`Press \$\{customRecordingShortcutDisplay\} to start and finish recording\. Press Esc to cancel\.`[\s\S]*?: `Hold \$\{customRecordingShortcutDisplay\} to record, release it to finish, and press any other key to cancel\.`[\s\S]*?: "Press Ctrl\+\/ to start and finish recording\. Press Esc to cancel\."/,
+  )
+  assert.match(
     shortcutsGroup,
-    /: "Press Ctrl\+\/ to start and finish recording\. Press Esc to cancel\."/,
+    /endDescription=\{[\s\S]*?\{recordingShortcutHelperText\}[\s\S]*?<\/div>/,
   )
   assert.doesNotMatch(shortcutsGroup, /<TooltipProvider/)
   assert.doesNotMatch(shortcutsGroup, /i-mingcute-information-fill/)

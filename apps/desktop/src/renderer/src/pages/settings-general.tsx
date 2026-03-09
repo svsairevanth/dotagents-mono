@@ -395,6 +395,18 @@ export function Component() {
     (configQuery.data as any)?.sttProviderId || "openai"
   const shortcut = (configQuery.data as any)?.shortcut || "hold-ctrl"
   const textInputShortcut = (configQuery.data as any)?.textInputShortcut || "ctrl-t"
+  const recordingShortcutMode = cfg?.customShortcutMode || "hold"
+  const effectiveRecordingShortcut = getEffectiveShortcut(shortcut, cfg?.customShortcut)
+  const customRecordingShortcutDisplay = effectiveRecordingShortcut
+    ? formatKeyComboForDisplay(effectiveRecordingShortcut)
+    : "your custom shortcut"
+  const recordingShortcutHelperText = shortcut === "hold-ctrl"
+    ? "Hold Ctrl to record, release it to finish, and press any other key to cancel."
+    : shortcut === "custom"
+      ? recordingShortcutMode === "toggle"
+        ? `Press ${customRecordingShortcutDisplay} to start and finish recording. Press Esc to cancel.`
+        : `Hold ${customRecordingShortcutDisplay} to record, release it to finish, and press any other key to cancel.`
+      : "Press Ctrl+/ to start and finish recording. Press Esc to cancel."
 
 
   if (!configQuery.data) return null
@@ -700,9 +712,7 @@ export function Component() {
           title="Shortcuts"
           endDescription={
             <div className="leading-relaxed">
-              {shortcut === "hold-ctrl"
-                ? "Hold Ctrl to record, release it to finish, and press any other key to cancel."
-                : "Press Ctrl+/ to start and finish recording. Press Esc to cancel."}
+              {recordingShortcutHelperText}
             </div>
           }
         >
