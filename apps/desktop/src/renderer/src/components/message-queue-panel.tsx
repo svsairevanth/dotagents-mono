@@ -155,14 +155,14 @@ function QueuedMessageItem({
         </div>
       ) : (
         // View mode
-        <div className="flex min-w-0 flex-wrap items-start gap-2">
+        <div className="flex min-w-0 items-start gap-2">
           {isFailed && (
             <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
           )}
           {isProcessing && (
             <Loader2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5 animate-spin" />
           )}
-          <div className="flex-1 min-w-0">
+          <div className="flex min-w-0 flex-1 flex-col">
             <p
               className={cn(
                 "text-sm",
@@ -207,45 +207,45 @@ function QueuedMessageItem({
                 </Button>
               )}
             </div>
+            {/* Hide action buttons when processing */}
+            {!isProcessing && (
+              <div className="mt-2 flex w-full flex-wrap items-center gap-1.5">
+                {isFailed && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs text-primary hover:bg-primary/10 hover:text-primary"
+                    onClick={() => retryMutation.mutate()}
+                    disabled={retryMutation.isPending}
+                    title="Retry message"
+                  >
+                    {retryMutation.isPending ? "Retrying…" : "Retry"}
+                  </Button>
+                )}
+                {!isAddedToHistory && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs"
+                    onClick={() => setIsEditing(true)}
+                    title="Edit message"
+                  >
+                    Edit
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => removeMutation.mutate()}
+                  disabled={removeMutation.isPending}
+                  title="Remove from queue"
+                >
+                  Remove
+                </Button>
+              </div>
+            )}
           </div>
-          {/* Hide action buttons when processing */}
-          {!isProcessing && (
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              {isFailed && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 px-2 text-xs text-primary hover:bg-primary/10 hover:text-primary"
-                  onClick={() => retryMutation.mutate()}
-                  disabled={retryMutation.isPending}
-                  title="Retry message"
-                >
-                  {retryMutation.isPending ? "Retrying…" : "Retry"}
-                </Button>
-              )}
-              {!isAddedToHistory && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 px-2 text-xs"
-                  onClick={() => setIsEditing(true)}
-                  title="Edit message"
-                >
-                  Edit
-                </Button>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-                onClick={() => removeMutation.mutate()}
-                disabled={removeMutation.isPending}
-                title="Remove from queue"
-              >
-                Remove
-              </Button>
-            </div>
-          )}
         </div>
       )}
     </div>

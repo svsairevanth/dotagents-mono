@@ -12,7 +12,12 @@ const queuedMessageItemSource = queuePanelSource.match(/function QueuedMessageIt
 
 test('desktop queued-message rows keep stable text-first actions instead of a hover-only side rail', () => {
   assert.ok(queuedMessageItemSource, 'expected to find the queued message item component')
-  assert.match(queuedMessageItemSource, /<div className="mt-2 flex flex-wrap items-center gap-1\.5">/)
+  assert.match(queuedMessageItemSource, /<div className="flex min-w-0 items-start gap-2">/)
+  assert.match(queuedMessageItemSource, /<div className="flex min-w-0 flex-1 flex-col">/)
+  assert.match(
+    queuedMessageItemSource,
+    /<div className="mt-1 flex flex-wrap items-center gap-2">[\s\S]*?<\/div>\s*\{\/\* Hide action buttons when processing \*\/\}\s*\{!isProcessing && \(\s*<div className="mt-2 flex w-full flex-wrap items-center gap-1\.5">/
+  )
   assert.match(queuedMessageItemSource, />\s*\{retryMutation\.isPending \? "Retrying…" : "Retry"\}\s*<\//)
   assert.match(queuedMessageItemSource, />\s*Edit\s*<\//)
   assert.match(queuedMessageItemSource, />\s*Remove\s*<\//)
