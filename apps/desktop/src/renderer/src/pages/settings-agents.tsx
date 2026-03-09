@@ -556,14 +556,14 @@ export function SettingsAgents() {
     const isInternal = editing.connectionType === "internal"
 
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>{isCreating ? "Create Agent" : `Edit: ${editing.displayName}`}</CardTitle>
+      <Card className="max-w-5xl">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg">{isCreating ? "Create Agent" : `Edit: ${editing.displayName}`}</CardTitle>
           <CardDescription>Configure agent identity, behavior, model, and capabilities.</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <Tabs defaultValue="general" className="w-full">
-            <TabsList className="mb-4 flex-wrap h-auto gap-1">
+            <TabsList className="mb-3 h-auto flex-wrap gap-1">
               <TabsTrigger value="general" className="gap-1.5"><Settings2 className="h-3.5 w-3.5" />General</TabsTrigger>
               {isInternal && <TabsTrigger value="model" className="gap-1.5"><Brain className="h-3.5 w-3.5" />Model</TabsTrigger>}
               <TabsTrigger value="capabilities" className="gap-1.5"><Wrench className="h-3.5 w-3.5" />Capabilities</TabsTrigger>
