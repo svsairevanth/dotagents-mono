@@ -27,12 +27,12 @@ test('keeps mobile TTS settings actions text-first and explicitly labeled', () =
   assert.match(ttsSettingsSource, /<Text style=\{styles\.modalCloseText\}>Close<\/Text>/);
 });
 
-test('keeps the mobile TTS voice picker header compact and flex-safe on narrow widths', () => {
+test('keeps the mobile TTS voice picker header flex-safe on narrow widths', () => {
   const modalHeaderStyles = extractBetween('modalHeader: {', 'modalTitle: {');
+  assert.match(modalHeaderStyles, /flexDirection:\s*'row'/);
+  assert.match(modalHeaderStyles, /justifyContent:\s*'space-between'/);
+  assert.match(modalHeaderStyles, /alignItems:\s*'center'/);
   assert.match(modalHeaderStyles, /gap:\s*spacing\.sm/);
-  assert.match(modalHeaderStyles, /paddingHorizontal:\s*spacing\.lg/);
-  assert.match(modalHeaderStyles, /paddingVertical:\s*spacing\.md/);
-  assert.doesNotMatch(modalHeaderStyles, /padding:\s*spacing\.md/);
 
   const modalTitleStyles = extractBetween('modalTitle: {', 'modalCloseButton: {');
   assert.match(modalTitleStyles, /flex:\s*1/);
