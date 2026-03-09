@@ -440,163 +440,154 @@ Write your skill instructions here.
   return (
     <div className="modern-panel h-full min-w-0 overflow-y-auto overflow-x-hidden px-6 py-4">
       <div className="min-w-0 space-y-6">
-        {/* Header */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <Sparkles className="h-5 w-5 shrink-0 text-primary" />
-            <h2 className="text-lg font-semibold">Agent Skills</h2>
-          </div>
-          <div className="flex flex-wrap justify-end gap-2">
-            {isSelectMode ? (
-              <>
+        <div className="flex flex-wrap justify-end gap-2">
+          {isSelectMode ? (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={toggleSelectAll}
+              >
+                {selectedSkillIds.size === skills.length && skills.length > 0 ? (
+                  <CheckSquare className="h-3 w-3" />
+                ) : (
+                  <Square className="h-3 w-3" />
+                )}
+                {selectedSkillIds.size === skills.length && skills.length > 0 ? "Deselect All" : "Select All"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={handleExportSelectedBundle}
+                disabled={selectedSkillIds.size === 0 || exportBundleMutation.isPending}
+              >
+                {exportBundleMutation.isPending ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Download className="h-3 w-3" />
+                )}
+                Export Bundle {selectedSkillIds.size > 0 ? `(${selectedSkillIds.size})` : ""}
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                className="gap-1.5"
+                onClick={handleDeleteSelected}
+                disabled={selectedSkillIds.size === 0 || deleteSkillsMutation.isPending}
+              >
+                {deleteSkillsMutation.isPending ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3 w-3" />
+                )}
+                Delete {selectedSkillIds.size > 0 ? `(${selectedSkillIds.size})` : "Selected"}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1.5"
+                onClick={exitSelectMode}
+              >
+                <X className="h-3 w-3" />
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <>
+              {skills.length > 0 && (
                 <Button
                   variant="outline"
                   size="sm"
                   className="gap-1.5"
-                  onClick={toggleSelectAll}
+                  onClick={() => setIsSelectMode(true)}
                 >
-                  {selectedSkillIds.size === skills.length && skills.length > 0 ? (
-                    <CheckSquare className="h-3 w-3" />
-                  ) : (
-                    <Square className="h-3 w-3" />
-                  )}
-                  {selectedSkillIds.size === skills.length && skills.length > 0 ? "Deselect All" : "Select All"}
+                  <CheckSquare className="h-3 w-3" />
+                  Select
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={handleExportSelectedBundle}
-                  disabled={selectedSkillIds.size === 0 || exportBundleMutation.isPending}
-                >
-                  {exportBundleMutation.isPending ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    <Download className="h-3 w-3" />
-                  )}
-                  Export Bundle {selectedSkillIds.size > 0 ? `(${selectedSkillIds.size})` : ""}
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={handleDeleteSelected}
-                  disabled={selectedSkillIds.size === 0 || deleteSkillsMutation.isPending}
-                >
-                  {deleteSkillsMutation.isPending ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    <Trash2 className="h-3 w-3" />
-                  )}
-                  Delete {selectedSkillIds.size > 0 ? `(${selectedSkillIds.size})` : "Selected"}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={exitSelectMode}
-                >
-                  <X className="h-3 w-3" />
-                  Cancel
-                </Button>
-              </>
-            ) : (
-              <>
-                {skills.length > 0 && (
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => openSkillsFolderMutation.mutate()}
+              >
+                <FolderOpen className="h-3 w-3" />
+                Open Folder
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => openWorkspaceSkillsFolderMutation.mutate()}
+                disabled={!agentsFoldersQuery.data?.workspace?.skillsDir || openWorkspaceSkillsFolderMutation.isPending}
+              >
+                <FolderUp className="h-3 w-3" />
+                Workspace
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => scanSkillsFolderMutation.mutate()}
+                disabled={scanSkillsFolderMutation.isPending}
+              >
+                <RefreshCw className={`h-3 w-3 ${scanSkillsFolderMutation.isPending ? 'animate-spin' : ''}`} />
+                Scan Folder
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
                   <Button
                     variant="outline"
                     size="sm"
                     className="gap-1.5"
-                    onClick={() => setIsSelectMode(true)}
+                    disabled={importSkillMutation.isPending || importSkillFolderMutation.isPending || importSkillsFromParentFolderMutation.isPending || importSkillFromGitHubMutation.isPending}
                   >
-                    <CheckSquare className="h-3 w-3" />
-                    Select
+                    <Upload className="h-3 w-3" />
+                    Import
+                    <ChevronDown className="h-3 w-3" />
                   </Button>
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={() => openSkillsFolderMutation.mutate()}
-                >
-                  <FolderOpen className="h-3 w-3" />
-                  Open Folder
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={() => openWorkspaceSkillsFolderMutation.mutate()}
-                  disabled={!agentsFoldersQuery.data?.workspace?.skillsDir || openWorkspaceSkillsFolderMutation.isPending}
-                >
-                  <FolderUp className="h-3 w-3" />
-                  Workspace
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={() => scanSkillsFolderMutation.mutate()}
-                  disabled={scanSkillsFolderMutation.isPending}
-                >
-                  <RefreshCw className={`h-3 w-3 ${scanSkillsFolderMutation.isPending ? 'animate-spin' : ''}`} />
-                  Scan Folder
-                </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5"
-                      disabled={importSkillMutation.isPending || importSkillFolderMutation.isPending || importSkillsFromParentFolderMutation.isPending || importSkillFromGitHubMutation.isPending}
-                    >
-                      <Upload className="h-3 w-3" />
-                      Import
-                      <ChevronDown className="h-3 w-3" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => setIsBundleImportDialogOpen(true)}>
-                      <Package />
-                      Import Bundle
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setIsGitHubDialogOpen(true)}>
-                      <Github />
-                      Import from GitHub
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => importSkillMutation.mutate()}>
-                      <Upload />
-                      Import SKILL.md File
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => importSkillFolderMutation.mutate()}>
-                      <FolderOpen />
-                      Import Skill Folder
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => importSkillsFromParentFolderMutation.mutate()}>
-                      <FolderUp />
-                      Bulk Import from Folder
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                <Button
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={() => setIsCreateDialogOpen(true)}
-                >
-                  <Plus className="h-3 w-3" />
-                  New Skill
-                </Button>
-              </>
-            )}
-          </div>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setIsBundleImportDialogOpen(true)}>
+                    <Package />
+                    Import Bundle
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setIsGitHubDialogOpen(true)}>
+                    <Github />
+                    Import from GitHub
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => importSkillMutation.mutate()}>
+                    <Upload />
+                    Import SKILL.md File
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => importSkillFolderMutation.mutate()}>
+                    <FolderOpen />
+                    Import Skill Folder
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => importSkillsFromParentFolderMutation.mutate()}>
+                    <FolderUp />
+                    Bulk Import from Folder
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button
+                size="sm"
+                className="gap-1.5"
+                onClick={() => setIsCreateDialogOpen(true)}
+              >
+                <Plus className="h-3 w-3" />
+                New Skill
+              </Button>
+            </>
+          )}
         </div>
 
-        <div className="flex items-center gap-2">
-          <p className="text-sm text-muted-foreground">
-            Skills are specialized instructions that improve AI performance on specific tasks.
-            Enable skills to include their instructions in the system prompt.
-          </p>
-        </div>
+        <p className="text-sm text-muted-foreground">
+          Skills are specialized instructions that improve AI performance on specific tasks.
+          Enable skills to include their instructions in the system prompt.
+        </p>
 
         <details className="rounded-lg border bg-card">
           <summary className="cursor-pointer select-none px-4 py-3 text-sm font-medium">
