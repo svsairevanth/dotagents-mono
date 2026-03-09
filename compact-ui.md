@@ -8,6 +8,7 @@
 - [x] Desktop onboarding welcome step (`apps/desktop/src/renderer/src/pages/onboarding.tsx`) — source-level first-run review only this iteration because no Electron renderer target was available for screenshot capture; mobile currently routes first-run users straight into `Settings`, so this welcome-surface coverage is desktop-specific rather than shared.
 - [x] Desktop settings: capabilities → `MCP Servers` tab shell (`apps/desktop/src/renderer/src/pages/settings-mcp-tools.tsx`) — source-level review only this iteration because Electron runtime is still blocked before first renderer capture; mobile has inline skills/server sections inside `SettingsScreen` rather than a dedicated capabilities tab, so this wrapper-chrome issue is desktop-specific.
 - [x] Desktop settings: providers + models → `Provider Selection` group (`apps/desktop/src/renderer/src/pages/settings-providers.tsx`) — source-level review only this iteration because Electron runtime is still blocked before first renderer capture; mobile `SettingsScreen` `Provider Selection` was cross-checked and this redundant helper-copy issue is shared across both platforms.
+- [x] Desktop memories page empty/search-miss state (`apps/desktop/src/renderer/src/pages/memories.tsx`) — source-level review only this iteration because Electron runtime is still blocked before first renderer capture; mobile `SettingsScreen` has a memories subsection, but its empty state is already text-only, so this oversized empty-state chrome issue is desktop-specific rather than shared.
 
 ### Mobile checked screens / flows / states
 - [x] Mobile Settings root screen on initial app launch (`App.tsx` initial route `Settings`) — source-level review only this iteration because Expo web runtime was blocked before launch.
@@ -15,6 +16,7 @@
 - [x] Mobile chat screen default header + composer state (`ChatScreen`) — source-level review only this iteration because Expo web runtime was blocked before launch, but the header agent selector and default composer chrome were audited for density.
 - [x] Mobile Connection settings default disconnected/error + QR scanner close-action states (`ConnectionSettingsScreen`) — source-level review only this iteration because Expo web runtime is still blocked before launch.
 - [x] Mobile Desktop Settings → `Provider Selection` + `Profile & Model` subsections (`SettingsScreen`) — source-level review only this iteration because Expo web runtime is still blocked before launch; desktop `settings-providers.tsx` was cross-checked, with the earlier decorative-emoji / action-label issue remaining mobile-specific while the redundant `Provider Selection` helper-copy issue is shared across both platforms.
+- [x] Mobile Settings → `Memories` subsection (`SettingsScreen`) — source-level cross-check only this iteration because Expo web runtime is still blocked before launch; the subsection's empty state is already text-first, so the reviewed empty-state chrome issue remains desktop-specific.
 
 ### Not yet checked
 - [ ] Desktop onboarding API key / dictation / agent steps, plus live runtime validation of the welcome and setup-permissions surfaces
@@ -24,7 +26,7 @@
 - [ ] Desktop settings: capabilities → Skills tab, deeper MCP Tools & Servers content states, and live runtime validation of the MCP Servers tab shell
 - [ ] Desktop settings: agents
 - [ ] Desktop settings: repeat tasks
-- [ ] Desktop settings: memories
+- [ ] Desktop memories page remaining list rows / selection bar / edit-delete dialogs, plus live runtime validation of the empty/search-miss states
 - [ ] Desktop panel window
 - [ ] Desktop modals / dialogs / tooltips / popovers / menus
 - [ ] Desktop narrow window / awkward aspect ratios / zoom
@@ -32,6 +34,7 @@
 - [ ] Mobile onboarding / setup / welcome / first run
 - [ ] Mobile chat follow-up flows, voice overlay states, queued-message panel, retry banner, and long-message states at small-phone and larger mobile web widths
 - [ ] Mobile settings subsections beyond the root settings screen — appearance, notifications, and remote desktop settings groups beyond `Provider Selection` / `Profile & Model`; the reviewed remote groups still need live runtime validation once Expo web is available
+- [ ] Mobile settings: memories subsection longer lists, delete/create actions, and live runtime validation of the empty/populated states
 - [ ] Mobile sheets / menus / tooltips / helper UI
 - [ ] Mobile empty / loading / error / success / disabled / long-content states
 - [ ] Mobile small phone width / larger mobile web width
@@ -48,6 +51,7 @@
 - [x] Desktop onboarding welcome used oversized hero chrome for a one-action first-run surface: a `text-6xl` mic icon, `text-3xl`/`font-extrabold` headline, large paragraph spacing, and a fixed-width `w-64` primary CTA left extra empty space before the user could move into onboarding; mobile has no equivalent welcome screen today, so this issue is desktop-specific rather than shared.
 - [x] Desktop settings `Capabilities → MCP Servers` added a redundant intro paragraph and separate `border-t pt-6` wrapper above `MCPConfigManager`, even though the tab bar already labeled the surface and the manager itself already opens with its own `MCP Tools & Servers` heading; mobile keeps capabilities inline inside `SettingsScreen`, so this top-chrome issue is desktop-specific rather than shared.
 - [x] Desktop settings `Provider Selection` and mobile `SettingsScreen` `Provider Selection` both inserted helper copy that restated the section title and immediately repeated the nearby provider labels, pushing the first actionable provider control lower without adding new orientation.
+- [x] Desktop memories page empty/search-miss state used oversized hero chrome — a large `Brain` icon, `py-12` centered empty-state block, and wider copy — even though the page already has a `Memories` title, search/filter controls, and a collapsed file-template helper above it; the mobile `SettingsScreen` memories subsection already uses a text-only empty message, so this density issue is desktop-specific rather than shared.
 
 ### Improved
 - [x] Removed the duplicate in-content `Settings` title from the mobile root settings surface to reduce non-informational vertical space and let the connection card surface sooner.
@@ -64,6 +68,7 @@
 - [x] Tightened the desktop onboarding welcome hero by bounding it to a narrower content width, reducing the mic icon / headline / paragraph spacing, replacing the fixed-width primary CTA with a full-width capped button, and shrinking the skip action so the next step appears sooner without removing orientation.
 - [x] Tightened the desktop `Capabilities → MCP Servers` tab shell by removing the redundant intro paragraph and top divider wrapper above `MCPConfigManager`, so the manager heading and primary tools/server controls appear sooner under the tab bar.
 - [x] Removed the redundant `Provider Selection` helper sentence from both desktop `settings-providers.tsx` and mobile `SettingsScreen.tsx`, so the first provider control appears immediately under the section title while keeping the desktop ACP note and all provider labels/actions intact.
+- [x] Tightened the desktop memories empty/search-miss state by replacing the centered hero treatment with a compact dashed panel and smaller title/copy block, so the empty result sits more quietly under the existing page title, file-template helper, and search/filter controls.
 
 ### Verified
 - [x] Source-level regression coverage added in `apps/mobile/tests/settings-screen-density.test.js`.
@@ -92,6 +97,8 @@
 - [x] Dependency-free desktop provider-selection density regression coverage added in `apps/desktop/tests/settings-providers-selection-density.test.mjs`.
 - [x] Updated `apps/mobile/tests/settings-remote-provider-density.test.js` to keep the mobile `Provider Selection` subsection free of redundant helper copy.
 - [x] Targeted cross-platform source verification passed: `node --test apps/desktop/tests/settings-providers-selection-density.test.mjs apps/mobile/tests/settings-remote-provider-density.test.js`.
+- [x] Dependency-free desktop memories empty-state density regression coverage added in `apps/desktop/tests/memories-empty-state-density.test.mjs`.
+- [x] Targeted desktop source verification passed: `node --test apps/desktop/tests/memories-empty-state-density.test.mjs`.
 
 ### Blocked
 - [x] Live mobile runtime inspection blocked: `pnpm --filter @dotagents/mobile web` failed with `node_modules missing`, `expo: command not found`, and `ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL`.
@@ -103,6 +110,7 @@
 - [x] The same targeted Vitest command is still blocked after this QA remediation pass because `pnpm -w run build:shared` fails before Vitest startup with `tsup: command not found` and `node_modules missing` warnings.
 - [x] Live desktop onboarding inspection is still blocked in this worktree: `electron_execute_electron-native` returned `Failed to list CDP targets. Make sure Electron is running with --inspect flag.`, and earlier `pnpm dev` attempts in this worktree still fail before launch because the shared/desktop toolchain dependencies are unavailable.
 - [x] Live provider-settings inspection remained blocked this iteration: `list-processes` found no running app surfaces, `electron_execute_electron-native` returned `Failed to list CDP targets. Make sure Electron is running with --inspect flag.`, and `test -d node_modules` reported `NODE_MODULES_MISSING`, so no screenshot-backed desktop/mobile provider-selection review was possible.
+- [x] Live memories-surface inspection remained blocked this iteration: `pwd && test -d node_modules && echo NODE_MODULES_PRESENT || echo NODE_MODULES_MISSING && ls node_modules/.bin/expo node_modules/.bin/tsup 2>/dev/null || true` reported `NODE_MODULES_MISSING`, so there was no available desktop renderer or Expo web launch path for screenshot-backed review of the desktop memories page or the mobile memories subsection.
 
 ### Still uncertain
 - [ ] Desktop renderer / Electron surfaces still need first live attachment and screenshot evidence once dependencies are installed.
@@ -115,11 +123,13 @@
 - [ ] Desktop settings general `.agents` cleanup is denser in source, but the real renderer still needs screenshot-backed validation for button-wrap behavior, path/action alignment, and narrow-width scanability once Electron can launch.
 - [ ] Desktop `Capabilities → MCP Servers` shell is denser in source, but the real renderer still needs screenshot-backed validation for the tab-to-heading rhythm, initial above-the-fold card visibility, and awkward-height behavior once Electron can launch.
 - [ ] The repaired `control.test.tsx` assertion now renders `ControlLabel` correctly in source, but the component-level Vitest test still has not been executed in this environment because the desktop/shared toolchain is unavailable.
+- [ ] Desktop memories empty/search-miss state is denser in source, but the real renderer still needs screenshot-backed validation for the dashed-panel balance, search-miss readability, and surrounding spacing under narrow or short windows once Electron can launch.
 - [ ] Mobile Chats list row density is improved in source, but the stub-session title/date balance still needs live Expo web or device screenshot review at small-phone and larger mobile-web widths.
 - [ ] Mobile chat composer, header action row, and voice-related controls still need live narrow-width review for density and possible control crowding.
 - [ ] Mobile chat header badge and composer now avoid duplicate agent-selection chrome in source, but the real small-phone header truncation, keyboard-open layout, and agent-selector sheet entry flow still need live screenshot-backed validation.
 - [ ] Mobile Connection settings now use plain-text error/scan/close labels in source, but the real Expo-web or device layout still needs screenshot-backed review for scanner modal overlay placement, close-button hit safety, and disconnected-state density.
 - [ ] Mobile Desktop Settings `Provider Selection` + `Profile & Model` are cleaner in source, but Expo web or device screenshots are still needed to validate provider-chip wrapping, the reduced top-of-section rhythm after the helper-copy removal, profile-action balance, and the compact model-action row at small-phone and larger mobile-web widths.
+- [ ] Mobile Settings `Memories` subsection still needs live screenshot-backed validation for row density, delete-action hit safety, tag wrapping, and the create/edit flow once Expo web or device runtime access is restored.
 
 ### Iterations
 
@@ -257,3 +267,12 @@ Evidence
 - After evidence: Source now places the first provider control immediately under `Provider Selection` on both platforms, while desktop still retains ACP-specific orientation copy and mobile keeps the same provider labels and action chips.
 - Verification commands/run results: `list-processes` → no processes found. `electron_execute_electron-native` → failed (`Failed to list CDP targets. Make sure Electron is running with --inspect flag.`). `pwd && test -d node_modules && echo NODE_MODULES_PRESENT || echo NODE_MODULES_MISSING && ls node_modules/.bin/expo node_modules/.bin/tsup 2>/dev/null || true` → `NODE_MODULES_MISSING` (exit 0). `node --test apps/desktop/tests/settings-providers-selection-density.test.mjs apps/mobile/tests/settings-remote-provider-density.test.js` → passed (4 tests, 0 failures, exit 0).
 - Blockers/remaining uncertainty: No before/after screenshots were possible because there are no running app surfaces and the worktree has no local dependencies to launch them; desktop and mobile provider-selection spacing, scanability, and hit-target rhythm still need live screenshot-backed validation once runtime access is restored.
+
+#### Iteration 16
+Evidence
+- Scope: Desktop memories page empty/search-miss state density, with a cross-check against the mobile `SettingsScreen` memories subsection.
+- Before evidence: Source-backed observation only because runtime was blocked — `pwd && test -d node_modules && echo NODE_MODULES_PRESENT || echo NODE_MODULES_MISSING && ls node_modules/.bin/expo node_modules/.bin/tsup 2>/dev/null || true` reported `NODE_MODULES_MISSING`, so there was no desktop renderer or Expo web launch path for screenshot capture. In `apps/desktop/src/renderer/src/pages/memories.tsx`, the empty/search-miss branch rendered a centered hero block (`flex flex-col items-center justify-center py-12 text-center`) with a large `Brain` icon and wider copy even though the page already includes a `Memories` title, a collapsed `.agents` template helper, and search/filter controls above it. Cross-check: `apps/mobile/src/screens/SettingsScreen.tsx` already uses a text-only `No memories saved` empty state in its memories subsection, so this empty-state chrome issue is desktop-specific rather than shared.
+- Change: Tightened the desktop memories empty/search-miss state in `apps/desktop/src/renderer/src/pages/memories.tsx` by replacing the centered hero treatment with a compact dashed panel and smaller title/copy block, and added dependency-free regression coverage in `apps/desktop/tests/memories-empty-state-density.test.mjs` to keep the empty/search-miss state free of the old oversized hero chrome.
+- After evidence: Source now renders the desktop memories empty/search-miss state as a quieter dashed panel directly under the existing page controls, preserving both the generic empty copy and the search-miss copy while reducing decorative chrome; mobile remains unchanged because its equivalent empty state was already compact.
+- Verification commands/run results: `pwd && test -d node_modules && echo NODE_MODULES_PRESENT || echo NODE_MODULES_MISSING && ls node_modules/.bin/expo node_modules/.bin/tsup 2>/dev/null || true` → `NODE_MODULES_MISSING` (exit 0). `node --test apps/desktop/tests/memories-empty-state-density.test.mjs` → initially failed due to an unmatched regex in the new test file, then passed after fixing the test (2 tests, 0 failures, exit 0).
+- Blockers/remaining uncertainty: No before/after screenshots were possible because desktop/mobile runtimes still cannot launch in this worktree without local dependencies, so the real empty/search-miss spacing, dashed-panel balance, and surrounding layout rhythm still need screenshot-backed validation once runtime access is restored.
