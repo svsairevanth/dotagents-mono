@@ -2,6 +2,7 @@
 
 ### Desktop checked screens / flows / states
 - No desktop surfaces have screenshot-backed live verification yet in this loop; renderer startup remains blocked before first capture.
+- [x] Desktop setup / first-run permissions window (`apps/desktop/src/renderer/src/pages/setup.tsx`) — source-level constrained-window review only this iteration because Electron runtime is still blocked before first renderer capture.
 
 ### Mobile checked screens / flows / states
 - [x] Mobile Settings root screen on initial app launch (`App.tsx` initial route `Settings`) — source-level review only this iteration because Expo web runtime was blocked before launch.
@@ -10,7 +11,7 @@
 - [x] Mobile Connection settings default disconnected/error + QR scanner close-action states (`ConnectionSettingsScreen`) — source-level review only this iteration because Expo web runtime is still blocked before launch.
 
 ### Not yet checked
-- [ ] Desktop onboarding / setup / welcome / first run
+- [ ] Desktop onboarding welcome / API key / dictation / agent steps, plus live runtime validation of the setup permissions window
 - [ ] Desktop sessions empty state
 - [ ] Desktop sessions active tiles / dense action rows / hover states
 - [ ] Desktop settings: general
@@ -35,6 +36,7 @@
 - [x] Mobile Chats list stub session rows used both a leading `💻` emoji and the text suffix `· from desktop`, spending narrow-row space on duplicate provenance chrome instead of the session title.
 - [x] Mobile chat screen duplicated the current-agent affordance: the navigation header already exposed a clickable current-agent badge, while `ChatScreen` also rendered a second `🤖 Agent` chip row above the composer.
 - [x] Mobile Connection settings used decorative emoji in already-labeled UI (`⚠️` error banner copy, `📷 Scan QR Code`, `✕ Close`), adding narrow-width chrome without improving orientation.
+- [x] Desktop setup / first-run permissions used a negative top offset (`-mt-20`) and hard-coded `grid-cols-2` permission rows, creating avoidable empty space and fragile action sizing on narrow or short setup windows.
 
 ### Improved
 - [x] Removed the duplicate in-content `Settings` title from the mobile root settings surface to reduce non-informational vertical space and let the connection card surface sooner.
@@ -44,6 +46,7 @@
 - [x] Fixed `apps/desktop/src/renderer/src/components/ui/control.test.tsx` so the tooltip regression test now renders the nested `ControlLabel` component before traversing tooltip props, closing the QA-noted false-positive gap in the component-level assertion.
 - [x] Removed the duplicate mobile chat composer agent chip so the primary composer area goes straight from attachments into the action row, relying on the existing header badge as the single agent-selection affordance.
 - [x] Removed decorative emoji chrome from the mobile Connection settings error banner and QR scanner actions, while adding an explicit accessibility label for the scanner close control.
+- [x] Tightened the desktop setup shell, made the first-run permissions surface scroll-safe for short windows, and changed permission rows to stack by default with full-width action buttons on constrained widths before splitting into label/action columns on wider screens.
 
 ### Verified
 - [x] Source-level regression coverage added in `apps/mobile/tests/settings-screen-density.test.js`.
@@ -57,6 +60,8 @@
 - [x] Dependency-free desktop regression coverage added in `apps/desktop/tests/control-tooltip-density.test.mjs`.
 - [x] Targeted desktop source verification passed: `node --test apps/desktop/tests/control-tooltip-density.test.mjs`.
 - [x] Re-ran `node --test apps/desktop/tests/control-tooltip-density.test.mjs` after the QA remediation; all 3 desktop tooltip density assertions still passed.
+- [x] Dependency-free desktop setup regression coverage added in `apps/desktop/tests/setup-permission-density.test.mjs`.
+- [x] Targeted desktop source verification passed: `node --test apps/desktop/tests/setup-permission-density.test.mjs`.
 
 ### Blocked
 - [x] Live mobile runtime inspection blocked: `pnpm --filter @dotagents/mobile web` failed with `node_modules missing`, `expo: command not found`, and `ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL`.
@@ -68,6 +73,7 @@
 
 ### Still uncertain
 - [ ] Desktop renderer / Electron surfaces still need first live attachment and screenshot evidence once dependencies are installed.
+- [ ] Desktop setup / first-run permissions are denser in source, but the real setup window still needs screenshot-backed validation at short heights and narrow widths once Electron can launch.
 - [ ] Desktop settings helper-tooltip hover occlusion remains un-reproduced in a live renderer; the current coverage is shared-component/source-level only until the desktop runtime can launch for screenshot-backed review.
 - [ ] Desktop settings surfaces remain unchecked at runtime; the shared settings-row audit is not a substitute for live renderer coverage.
 - [ ] The repaired `control.test.tsx` assertion now renders `ControlLabel` correctly in source, but the component-level Vitest test still has not been executed in this environment because the desktop/shared toolchain is unavailable.
@@ -149,3 +155,12 @@ Evidence
 - After evidence: Source now uses plain-text `Scan QR Code`, plain-text error copy, and a plain `Close` scanner action with an explicit accessibility label, reducing decorative chrome while keeping the first-run connection flow understandable.
 - Verification commands/run results: `node --test apps/mobile/tests/connection-settings-density.test.js apps/mobile/tests/connection-settings-validation.test.js` → passed (6 tests, 0 failures, exit 0). Runtime validation remains blocked because `pnpm dev:mobile -- --web` fails before Expo launch with `expo: command not found`, `node_modules missing`, and `ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL`.
 - Blockers/remaining uncertainty: No before/after screenshots were possible because Expo web still cannot launch in this worktree without installed dependencies, so live validation of scanner modal layering, close-button overlap safety, and real small-phone spacing remains pending once runtime access is restored.
+
+#### Iteration 9
+Evidence
+- Scope: Desktop setup / first-run permissions window density and constrained-size safety.
+- Before evidence: Source-backed observation only because runtime was blocked — `REMOTE_DEBUGGING_PORT=9333 ELECTRON_EXTRA_LAUNCH_ARGS="--inspect=9339" pnpm dev -- -dui` failed during `@dotagents/shared build` with `tsup: command not found`, `spawn ENOENT`, and `node_modules missing` warnings before any renderer target or screenshot capture. In `apps/desktop/src/renderer/src/pages/setup.tsx`, the setup shell used a negative top offset (`-mt-20`), fixed `p-10` chrome, and `PermissionBlock` used `grid-cols-2 gap-5 p-3`, which left unnecessary empty space and a brittle split layout for narrow/short setup windows.
+- Change: Reworked the setup shell to use a tighter responsive container with `overflow-y-auto`, reduced the intro chrome, constrained the permission card width, and updated `PermissionBlock` to stack by default with full-width action buttons on constrained widths before switching to `md:grid-cols-[minmax(0,1fr)_auto]`; also added `apps/desktop/tests/setup-permission-density.test.mjs` to keep those density and sizing contracts in place.
+- After evidence: Source now keeps the first-run permissions page scroll-safe in short windows and makes each permission row denser and more resilient on constrained widths, while preserving the same actions and granted-state messaging.
+- Verification commands/run results: `node --test apps/desktop/tests/setup-permission-density.test.mjs` → passed (2 tests, 0 failures, exit 0). Runtime validation remains blocked because `REMOTE_DEBUGGING_PORT=9333 ELECTRON_EXTRA_LAUNCH_ARGS="--inspect=9339" pnpm dev -- -dui` still fails before Electron launch with `tsup: command not found`, `spawn ENOENT`, and `node_modules missing` warnings.
+- Blockers/remaining uncertainty: No before/after screenshots were possible because Electron still cannot launch in this worktree without installed dependencies, so real setup-window validation at narrow widths and short heights remains pending once desktop dependencies are available.
