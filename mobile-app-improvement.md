@@ -18,6 +18,7 @@
 - [x] Loop create/edit screen agent-profile selection section (source-backed in this worktree)
 - [x] Agent create/edit screen (`AgentEdit`) connection-type selection and mode-specific fields (source-backed in this worktree)
 - [x] Memory create/edit screen (`MemoryEdit`) importance selection section (source-backed in this worktree)
+- [x] Settings desktop partial-load warning / retry state (source-backed in this worktree)
 
 ### Not yet checked
 
@@ -27,7 +28,6 @@
 - [ ] Session loading, error, reconnect, and sync states
 - [ ] Modal/sheet surfaces on narrow web viewports (model picker, agent selector, voice pickers)
 - [ ] Large-text / awkward viewport behavior across Settings, Sessions, Chat, and edit screens
-- [ ] Settings reconnect warning state (`⚠️ Failed to load: settings`)
 
 ### Reproduced
 
@@ -38,6 +38,7 @@
 - [x] LoopEdit profile selection chips crowd narrow screens and hide selected state behind color alone
 - [x] AgentEdit connection-type chips crowd narrow screens, hide selected state behind color alone, and wrongly treat ACP like a remote URL mode
 - [x] MemoryEdit importance chips crowd narrow screens and communicate priority mostly through color-only state
+- [x] Settings desktop warning state squeezed long partial-load errors and a tiny text-only `Retry` action into one horizontal row
 
 ### Improved
 
@@ -49,10 +50,11 @@
 - [x] LoopEdit profile selection clarity, default-agent fallback copy, and touch targets
 - [x] AgentEdit connection-type clarity, touch targets, and ACP/remote field mapping
 - [x] MemoryEdit importance selection clarity, touch targets, and priority guidance
+- [x] Settings desktop partial-load warning clarity, retry affordance, and stale-data explanation
 
 ### Verified
 
-- [x] Source-backed regression coverage for navigation, connection validation, chat composer accessibility, session empty state, agent loop row actions, LoopEdit profile selection, AgentEdit connection types, and MemoryEdit importance selection
+- [x] Source-backed regression coverage for navigation, connection validation, chat composer accessibility, session empty state, agent loop row actions, LoopEdit profile selection, AgentEdit connection types, MemoryEdit importance selection, and the Settings desktop warning state
 
 ### Blocked
 
@@ -64,6 +66,43 @@
 - [ ] Narrow-screen usability of the rest of `MemoryEdit` and the remaining `AgentEdit` / `LoopEdit` fields outside the newly checked sections
 
 ## Recent Iterations
+
+### 2026-03-09 — Iteration 11: make the Settings desktop warning readable and actionable on narrow screens
+
+- Status: completed with source-backed verification; live Expo Web inspection was blocked by missing dependencies in this worktree
+- Area:
+  - `Settings` desktop partial-load warning in `apps/mobile/src/screens/SettingsScreen.tsx`
+  - warning state reached when some desktop settings endpoints fail but the app still has enough data to show the `Desktop Settings` section, e.g. `Failed to load: settings`
+- Why this area:
+  - the ledger still had the Settings reconnect/partial-load warning unchecked, and recent iterations had focused more on edit forms than on cross-cutting screen states
+  - source review showed a concrete narrow-screen/actionability problem: the warning crammed a long error message and a tiny text-only `Retry` action into one horizontal row with no explanation that some visible values might now be stale
+- What was investigated:
+  - current warning markup/styles and retry affordance in `SettingsScreen.tsx`
+  - nearby mobile button/touch-target patterns already used elsewhere in the app
+  - attempted Expo Web startup via the existing repo workflow
+- Findings:
+  - live runtime inspection is still blocked in this worktree because both root and `apps/mobile` `node_modules` are absent, so `pnpm --filter @dotagents/mobile web --port 8102` fails with `expo: command not found`
+  - the warning used a single horizontal row, which is fragile for longer partial-failure messages like `Failed to load: profiles, MCP servers, settings`
+  - the `Retry` affordance was rendered as small inline text instead of a clear full-width action, and the UI did not explain that desktop values might be temporarily out of date
+- Change made:
+  - reworked the Settings warning into a stacked alert card with a clear title, the raw failure detail, and a short stale-data explanation
+  - converted `Retry` into a full-width 44px minimum touch-target button with explicit accessibility label and hint
+  - added `apps/mobile/tests/settings-remote-warning-state.test.js` to lock the warning copy, retry semantics, and narrow-layout guardrails
+- Verification:
+  - `node --test apps/mobile/tests/settings-remote-warning-state.test.js apps/mobile/tests/agent-loops-actions.test.js`
+  - `git diff --check`
+  - attempted Expo Web verification via `pnpm --filter @dotagents/mobile web --port 8102`
+- Follow-up checks:
+  - once dependencies are available, verify in Expo Web that longer partial-load warnings wrap cleanly above the retry button without pushing the rest of `Desktop Settings` too far down on a narrow viewport
+  - continue widening coverage to session loading/error/sync states or modal/sheet surfaces rather than returning to already-improved settings subsections without a new finding
+
+Evidence
+- Scope: Settings desktop partial-load warning / retry state in `apps/mobile/src/screens/SettingsScreen.tsx`
+- Before evidence: Source review showed the warning rendering as `styles.warningContainer` with `flexDirection: 'row'`, `justifyContent: 'space-between'`, and `alignItems: 'center'`, containing only `⚠️ {remoteError}` plus a text-only `Retry` action. The retry affordance had no mobile-sized button styling, no `createMinimumTouchTargetStyle(...)`, and no explanation that partially loaded desktop settings may now be stale. Live Expo Web inspection was attempted with `pnpm --filter @dotagents/mobile web --port 8102`, but the command failed because both root and mobile `node_modules` are missing and `expo` was not found.
+- Change: Reworked the Settings warning into a stacked alert card with a title, raw error detail, stale-data guidance, and a full-width retry button using the shared 44px touch-target helper plus explicit accessibility metadata. Added a focused regression test file.
+- After evidence: Source now shows `styles.warningContainer` with `width: '100%'`, `gap: spacing.md`, and `alignItems: 'stretch'`; `styles.warningContent` groups the message copy; and the UI now includes `Desktop settings need attention` plus `Some desktop sections may be out of date until the retry finishes.`. The retry action now uses `styles.warningRetryButton` with `createMinimumTouchTargetStyle({ minSize: 44, horizontalMargin: 0, ... })`, `width: '100%'`, centered label text, and `createButtonAccessibilityLabel('Retry loading desktop settings')`. `apps/mobile/tests/settings-remote-warning-state.test.js` passes and locks those guardrails.
+- Verification commands/run results: `node --test apps/mobile/tests/settings-remote-warning-state.test.js apps/mobile/tests/agent-loops-actions.test.js` ✅ (4/4 passing); `git diff --check` ✅; `pnpm --filter @dotagents/mobile web --port 8102` ❌ (`node_modules` missing, `expo: command not found`).
+- Blockers/remaining uncertainty: No live before/after visual evidence this iteration because Expo Web still cannot start in the current worktree. Remaining uncertainty is limited to the exact runtime wrapping, vertical spacing, and visual prominence of the stacked warning card until dependencies are available.
 
 ### 2026-03-09 — Iteration 10: make MemoryEdit importance choices readable and tappable on narrow screens
 

@@ -1132,9 +1132,21 @@ export default function SettingsScreen({ navigation }: any) {
 
             {remoteError && (
               <View style={styles.warningContainer}>
-                <Text style={styles.warningText}>⚠️ {remoteError}</Text>
-                <TouchableOpacity onPress={fetchRemoteSettings} accessibilityRole="button" accessibilityLabel="Retry">
-                  <Text style={styles.retryText}>Retry</Text>
+                <View style={styles.warningContent}>
+                  <Text style={styles.warningTitle}>Desktop settings need attention</Text>
+                  <Text style={styles.warningText}>{remoteError}</Text>
+                  <Text style={styles.warningDetailText}>
+                    Some desktop sections may be out of date until the retry finishes.
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.warningRetryButton}
+                  onPress={fetchRemoteSettings}
+                  accessibilityRole="button"
+                  accessibilityLabel={createButtonAccessibilityLabel('Retry loading desktop settings')}
+                  accessibilityHint="Reloads the desktop settings section and refreshes stale values."
+                >
+                  <Text style={styles.warningRetryButtonText}>Retry loading</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -2803,20 +2815,46 @@ function createStyles(theme: ReturnType<typeof useTheme>['theme']) {
       borderColor: '#f59e0b', // amber-500
       borderRadius: radius.md,
       padding: spacing.md,
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
+      width: '100%' as const,
+      gap: spacing.md,
+      alignItems: 'stretch',
+    },
+    warningContent: {
+      gap: spacing.xs,
+    },
+    warningTitle: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: '#92400e', // amber-800
     },
     warningText: {
       color: '#d97706', // amber-600
       fontSize: 14,
-      flex: 1,
+      lineHeight: 20,
     },
-    retryText: {
-      color: theme.colors.primary,
+    warningDetailText: {
+      color: '#92400e', // amber-800
       fontSize: 14,
+      lineHeight: 20,
+    },
+    warningRetryButton: {
+      ...createMinimumTouchTargetStyle({
+        minSize: 44,
+        horizontalPadding: spacing.md,
+        verticalPadding: spacing.sm,
+        horizontalMargin: 0,
+      }),
+      width: '100%' as const,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: '#f59e0b',
+      backgroundColor: theme.colors.background,
+    },
+    warningRetryButtonText: {
+      color: theme.colors.primary,
+      textAlign: 'center',
       fontWeight: '600',
-      marginLeft: spacing.sm,
+      fontSize: 14,
     },
     profileList: {
       gap: spacing.xs,
