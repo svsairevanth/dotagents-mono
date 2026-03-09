@@ -17,10 +17,11 @@
 - [x] Settings -> Agent Loops list row actions (source-backed in this worktree)
 - [x] Loop create/edit screen agent-profile selection section (source-backed in this worktree)
 - [x] Agent create/edit screen (`AgentEdit`) connection-type selection and mode-specific fields (source-backed in this worktree)
+- [x] Memory create/edit screen (`MemoryEdit`) importance selection section (source-backed in this worktree)
 
 ### Not yet checked
 
-- [ ] Memory create/edit screen (`MemoryEdit`)
+- [ ] Memory create/edit loading, error, and runtime layout states beyond the importance selector
 - [ ] Agent create/edit remaining fields and built-in-agent limited-edit state outside the connection-type section
 - [ ] Loop create/edit live save flow, runtime layout, and remaining fields
 - [ ] Session loading, error, reconnect, and sync states
@@ -36,6 +37,7 @@
 - [x] Undersized Agent Loops `Run` / `Delete` actions in Settings source
 - [x] LoopEdit profile selection chips crowd narrow screens and hide selected state behind color alone
 - [x] AgentEdit connection-type chips crowd narrow screens, hide selected state behind color alone, and wrongly treat ACP like a remote URL mode
+- [x] MemoryEdit importance chips crowd narrow screens and communicate priority mostly through color-only state
 
 ### Improved
 
@@ -46,10 +48,11 @@
 - [x] Agent Loops row action clarity, touch targets, and destructive-action affordance
 - [x] LoopEdit profile selection clarity, default-agent fallback copy, and touch targets
 - [x] AgentEdit connection-type clarity, touch targets, and ACP/remote field mapping
+- [x] MemoryEdit importance selection clarity, touch targets, and priority guidance
 
 ### Verified
 
-- [x] Source-backed regression coverage for navigation, connection validation, chat composer accessibility, session empty state, agent loop row actions, LoopEdit profile selection, and AgentEdit connection types
+- [x] Source-backed regression coverage for navigation, connection validation, chat composer accessibility, session empty state, agent loop row actions, LoopEdit profile selection, AgentEdit connection types, and MemoryEdit importance selection
 
 ### Blocked
 
@@ -58,9 +61,47 @@
 ### Still uncertain
 
 - [ ] Runtime visual fit of source-backed fixes made while Expo Web is unavailable in this worktree
-- [ ] Narrow-screen usability of `MemoryEdit` and the remaining `AgentEdit` / `LoopEdit` fields outside the newly checked sections
+- [ ] Narrow-screen usability of the rest of `MemoryEdit` and the remaining `AgentEdit` / `LoopEdit` fields outside the newly checked sections
 
 ## Recent Iterations
+
+### 2026-03-09 — Iteration 10: make MemoryEdit importance choices readable and tappable on narrow screens
+
+- Status: completed with source-backed verification; live Expo Web inspection was blocked by missing dependencies in this worktree
+- Area:
+  - `MemoryEdit` importance selection in `apps/mobile/src/screens/MemoryEditScreen.tsx`
+  - create/edit flow reached from `Settings -> Memories -> + Create New Memory` or tapping an existing memory
+- Why this area:
+  - the ledger still had `MemoryEdit` uncovered, and recent iterations were concentrated on sessions, chat, loops, and agent setup rather than the memory-edit flow
+  - source review found a concrete narrow-screen/accessibility issue in a high-value decision control: importance was rendered as four small wrap chips with no explanatory copy, no explicit button semantics, and no selected-state metadata
+- What was investigated:
+  - current `MemoryEditScreen.tsx` markup/styles for the importance picker and save flow
+  - existing mobile narrow-screen selector patterns in `LoopEdit` and `AgentEdit`
+  - attempted Expo Web startup via the existing repo workflow
+- Findings:
+  - live runtime inspection is still blocked in this worktree because both root and `apps/mobile` `node_modules` are absent, so `pnpm --filter @dotagents/mobile web --port 8101` fails with `expo: command not found`
+  - the importance selector used a wrapping chip row with inline padding only, which is fragile on narrow mobile widths
+  - the chosen importance level was communicated mostly through color alone, and the UI did not explain how importance affects memory retrieval priority
+- Change made:
+  - converted the MemoryEdit importance selector into full-width stacked options with descriptive copy, explicit selected-state button semantics, and a visible checkmark for the chosen level
+  - enforced 44px minimum touch targets for each importance choice using the shared mobile accessibility helper
+  - added `apps/mobile/tests/memory-edit-importance-options.test.js` to lock the priority guidance copy, accessibility semantics, and narrow-layout guardrails
+- Verification:
+  - `node --test apps/mobile/tests/*.test.js`
+  - `git diff --check`
+  - attempted Expo Web verification via `pnpm --filter @dotagents/mobile web --port 8101`
+- Follow-up checks:
+  - once dependencies are available, verify `MemoryEdit` in Expo Web on a narrow viewport and confirm the stacked importance rows, helper descriptions, and save-button spacing remain readable without excessive scrolling
+  - inspect the rest of `MemoryEdit` next, especially loading/error states and large-text behavior for the title/content/tags fields, so memory coverage broadens beyond this selector subsection
+  - continue widening coverage to remaining modal/sheet and session-state surfaces instead of revisiting already-checked edit selectors without a new finding
+
+Evidence
+- Scope: `MemoryEdit` importance selection in `apps/mobile/src/screens/MemoryEditScreen.tsx`
+- Before evidence: Source review showed the importance control rendering as `styles.optionRow` (`flexDirection: 'row'`, `flexWrap: 'wrap'`) with each `styles.option` using only inline padding, no `createMinimumTouchTargetStyle(...)`, no explicit `accessibilityRole`, and no selected-state metadata. The UI exposed only `Low` / `Medium` / `High` / `Critical` labels with no guidance about how priority changes memory retrieval. Live Expo Web inspection was attempted with `pnpm --filter @dotagents/mobile web --port 8101`, but the command failed because both root and mobile `node_modules` are missing and `expo` was not found.
+- Change: Reworked the MemoryEdit importance selector into full-width descriptive rows, added 44px minimum touch-target styling plus explicit button labels/hints/selected-state metadata, added a visible checkmark for the selected option, and added a focused regression test file.
+- After evidence: Source now shows `styles.importanceOptions` with `width: '100%'`, `styles.importanceOption` using `createMinimumTouchTargetStyle({ minSize: 44, horizontalMargin: 0, ... })`, and each option exposing `accessibilityRole="button"` plus `accessibilityState={{ selected: isSelected, disabled: isSaving }}`. The screen now explains `Higher-priority memories are surfaced first when the agent loads context.` and each importance row includes a description, while the selected option also shows a `✓` checkmark so selection is not color-only. `apps/mobile/tests/memory-edit-importance-options.test.js` passes and locks those guardrails.
+- Verification commands/run results: `node --test apps/mobile/tests/*.test.js` ✅ (22/22 passing); `git diff --check` ✅; `pnpm --filter @dotagents/mobile web --port 8101` ❌ (`node_modules` missing, `expo: command not found`).
+- Blockers/remaining uncertainty: No live before/after visual evidence this iteration because Expo Web still cannot start in the current worktree. Remaining uncertainty is limited to the exact runtime spacing, copy wrapping, and scroll depth of the new MemoryEdit importance rows until dependencies are available.
 
 ### 2026-03-09 — Iteration 9: make AgentEdit connection modes mobile-readable and stop misrouting ACP setup
 
