@@ -26,15 +26,28 @@ describe("ControlLabel", () => {
     expect(textLabel.props.className).toContain("break-words")
   })
 
-  it("opens helper tooltips above the label so they do not spill into the control column", () => {
-    const tree = ControlLabel({ label: "Main Agent Mode", tooltip: "Helpful context" }) as React.ReactElement
+  it("keeps helper tooltips above the label in shared settings rows with right-aligned controls", () => {
+    const tree = Control({
+      label: <ControlLabel label="Main Agent Mode" tooltip="Helpful context" />,
+      children: <button type="button">API mode</button>,
+    }) as React.ReactElement
 
-    const provider = React.Children.toArray(tree.props.children)[1] as React.ReactElement
+    const sections = React.Children.toArray(tree.props.children) as React.ReactElement[]
+    const labelColumn = sections[0] as React.ReactElement
+    const controlColumn = sections[1] as React.ReactElement
+
+    expect(labelColumn.props.className).toContain("sm:max-w-[52%]")
+    expect(controlColumn.props.className).toContain("sm:max-w-[48%]")
+
+    const labelWrapper = labelColumn.props.children as React.ReactElement
+    const controlLabel = labelWrapper.props.children as React.ReactElement
+    const provider = React.Children.toArray(controlLabel.props.children)[1] as React.ReactElement
     const tooltip = provider.props.children as React.ReactElement
     const tooltipContent = React.Children.toArray(tooltip.props.children)[1] as React.ReactElement
 
     expect(tooltipContent.props.side).toBe("top")
     expect(tooltipContent.props.align).toBe("start")
     expect(tooltipContent.props.sideOffset).toBe(6)
+    expect((controlColumn.props.children as React.ReactElement).type).toBe("button")
   })
 })
