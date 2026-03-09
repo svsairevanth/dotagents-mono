@@ -8,6 +8,43 @@
 
 ## Recent Iterations
 
+### 2026-03-09 — Iteration 6: make the session empty state actionable in-place
+
+- Status: completed with source-backed verification; live Expo Web inspection was blocked by missing dependencies in this worktree
+- Area:
+  - session list empty state in `apps/mobile/src/screens/SessionListScreen.tsx`
+  - intended flow: `Settings -> Go to Chats` with zero existing sessions
+- Why this area:
+  - recent iterations heavily covered `Connection` and `Chat composer`, so this pass widened screen coverage to a different major surface and state
+  - the session empty state had explanatory copy, but no in-place primary action near the empty-state content, forcing first-time users to jump back to the header button to proceed
+- What was investigated:
+  - current session empty-state rendering and styles in `SessionListScreen.tsx`
+  - current mobile/web runner setup in `apps/mobile/package.json`
+  - attempted Expo Web startup via the existing repo workflow
+- Findings:
+  - the empty state only showed `No Sessions Yet` plus helper text, with no CTA embedded in the focal empty-state area
+  - on narrow mobile layouts, that weakens actionability and hierarchy because the only visible next step lives separately in the top header
+  - live runtime inspection was blocked because the workspace currently lacks `node_modules`, so `expo` could not start
+- Change made:
+  - updated the empty-state copy to clearer chat-focused language (`No chats yet`)
+  - added an in-place primary `Start first chat` CTA wired to the existing `handleCreateSession` flow
+  - constrained the empty-state content width and button width so the new CTA stays centered and readable on narrow mobile layouts
+  - added `apps/mobile/tests/session-list-empty-state.test.js` to lock the CTA wiring and layout guardrails
+- Verification:
+  - `node --test apps/mobile/tests/session-list-empty-state.test.js apps/mobile/tests/chat-composer-accessibility.test.js apps/mobile/tests/connection-settings-validation.test.js apps/mobile/tests/navigation-header.test.js`
+  - `git diff --check`
+- Follow-up checks:
+  - once dependencies are installed, verify the session empty state in Expo Web on narrow viewports and confirm the CTA remains above the Rapid Fire footer without crowding
+  - continue widening coverage to under-checked screens like `AgentEdit`, `MemoryEdit`, `LoopEdit`, and session loading/error/sync states
+
+Evidence
+- Scope: Session list empty state (`Settings -> Go to Chats` with no sessions) in `apps/mobile/src/screens/SessionListScreen.tsx`
+- Before evidence: Source review showed the empty state only rendered `No Sessions Yet` plus `Start a new chat to begin a conversation`, with no in-place CTA. Live Expo Web inspection was attempted with `pnpm --filter @dotagents/mobile web --port 8094` but failed because `node_modules` is missing and `expo` was not found.
+- Change: Added a centered `Start first chat` button inside the empty state, wired it to `handleCreateSession`, tightened empty-state width constraints for narrow layouts, and added a focused regression test file.
+- After evidence: Source now shows the empty state rendering `Start first chat` with button semantics and the existing create-session handler; `apps/mobile/tests/session-list-empty-state.test.js` passes and locks the CTA text, wiring, and width constraints.
+- Verification commands/run results: `node --test apps/mobile/tests/session-list-empty-state.test.js apps/mobile/tests/chat-composer-accessibility.test.js apps/mobile/tests/connection-settings-validation.test.js apps/mobile/tests/navigation-header.test.js` ✅ (11/11 passing); `git diff --check` ✅; `pnpm --filter @dotagents/mobile web --port 8094` ❌ (`node_modules` missing, `expo: command not found`).
+- Blockers/remaining uncertainty: No live Expo Web before/after visual evidence this iteration because dependencies are not installed in the worktree. Remaining uncertainty is limited to runtime spacing/visual fit of the new empty-state CTA until Expo Web can be launched.
+
 ### 2026-03-07 — Iteration 5: enlarge chat composer accessory controls and expose edit-toggle state on web
 
 - Status: completed
