@@ -8,6 +8,8 @@ const settingsLoopsSource = fs.readFileSync(
   'utf8',
 )
 
+const renderLoopListBlock = settingsLoopsSource.match(/const renderLoopList = \(\) => \(([\s\S]*?)\n  \)\n\n  const renderEditForm/)?.[1] ?? ''
+
 test('desktop repeat-task settings remove the dedicated page-title chrome from the list view', () => {
   assert.doesNotMatch(settingsLoopsSource, /<h1 className="text-lg font-semibold">Repeat Tasks<\/h1>/)
   assert.doesNotMatch(settingsLoopsSource, /Configure tasks to run automatically at regular intervals/)
@@ -21,4 +23,15 @@ test('desktop repeat-task settings keep the primary action in a compact top-righ
 test('desktop repeat-task settings keep add-task available while the edit form provides local orientation', () => {
   assert.doesNotMatch(settingsLoopsSource, /\{!editing && \(/)
   assert.match(settingsLoopsSource, /<CardTitle className="text-lg">\{isCreating \? "Add Repeat Task" : "Edit Repeat Task"\}<\/CardTitle>/)
+})
+
+test('desktop repeat-task list keeps runtime state compact by removing redundant active and startup badges', () => {
+  assert.ok(renderLoopListBlock, 'expected to find the desktop repeat-task list block')
+  assert.match(renderLoopListBlock, /\{isRunning \? \(/)
+  assert.match(renderLoopListBlock, /<Badge variant="secondary">Running<\/Badge>/)
+  assert.match(renderLoopListBlock, /\) : !loop\.enabled \? \(/)
+  assert.match(renderLoopListBlock, /<Badge variant="outline">Disabled<\/Badge>/)
+  assert.doesNotMatch(renderLoopListBlock, /<Badge variant="default">Active<\/Badge>/)
+  assert.doesNotMatch(renderLoopListBlock, /<Badge variant="secondary">Run on startup<\/Badge>/)
+  assert.match(renderLoopListBlock, /\{loop\.runOnStartup && <div>Runs on startup<\/div>\}/)
 })

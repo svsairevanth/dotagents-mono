@@ -248,11 +248,9 @@ export function SettingsLoops() {
                   <span className="truncate font-medium">{loop.name}</span>
                   {isRunning ? (
                     <Badge variant="secondary">Running</Badge>
-                  ) : loop.enabled ? (
-                    <Badge variant="default">Active</Badge>
-                  ) : (
+                  ) : !loop.enabled ? (
                     <Badge variant="outline">Disabled</Badge>
-                  )}
+                  ) : null}
                 </div>
                 <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">
                   {loop.prompt}
@@ -301,7 +299,7 @@ export function SettingsLoops() {
                 <Clock className="h-3.5 w-3.5" />
                 Every {formatInterval(loop.intervalMinutes)}
               </div>
-              {loop.runOnStartup && <Badge variant="secondary">Run on startup</Badge>}
+              {loop.runOnStartup && <div>Runs on startup</div>}
               {typeof nextRunAt === "number" && (
                 <div>Next run: {formatLastRun(nextRunAt)}</div>
               )}
