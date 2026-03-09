@@ -4880,8 +4880,7 @@ export const router = {
   saveLoop: t.procedure
     .input<{ loop: LoopConfig }>()
     .action(async ({ input }) => {
-      loopService.saveLoop(input.loop)
-      return { success: true }
+      return { success: loopService.saveLoop(input.loop) }
     }),
 
   deleteLoop: t.procedure
