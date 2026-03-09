@@ -3,6 +3,7 @@
 ### Desktop checked screens / flows / states
 - No desktop surfaces have screenshot-backed live verification yet in this loop; renderer startup remains blocked before first capture.
 - [x] Desktop setup / first-run permissions window (`apps/desktop/src/renderer/src/pages/setup.tsx`) — source-level constrained-window review only this iteration because Electron runtime is still blocked before first renderer capture.
+- [x] Desktop sessions empty state (`apps/desktop/src/renderer/src/pages/sessions.tsx`) — source-level review only this iteration because Electron runtime is still blocked before first renderer capture.
 
 ### Mobile checked screens / flows / states
 - [x] Mobile Settings root screen on initial app launch (`App.tsx` initial route `Settings`) — source-level review only this iteration because Expo web runtime was blocked before launch.
@@ -12,7 +13,6 @@
 
 ### Not yet checked
 - [ ] Desktop onboarding welcome / API key / dictation / agent steps, plus live runtime validation of the setup permissions window
-- [ ] Desktop sessions empty state
 - [ ] Desktop sessions active tiles / dense action rows / hover states
 - [ ] Desktop settings: general
 - [ ] Desktop settings: providers + models
@@ -37,6 +37,7 @@
 - [x] Mobile chat screen duplicated the current-agent affordance: the navigation header already exposed a clickable current-agent badge, while `ChatScreen` also rendered a second `🤖 Agent` chip row above the composer.
 - [x] Mobile Connection settings used decorative emoji in already-labeled UI (`⚠️` error banner copy, `📷 Scan QR Code`, `✕ Close`), adding narrow-width chrome without improving orientation.
 - [x] Desktop setup / first-run permissions used a negative top offset (`-mt-20`) and hard-coded `grid-cols-2` permission rows, creating avoidable empty space and fragile action sizing on narrow or short setup windows.
+- [x] Desktop sessions empty state used oversized decorative chrome — a large muted icon bubble, full-size selector/prompts chrome, and generous vertical gaps that pushed the primary start controls lower than necessary on a high-frequency surface; the mobile `SessionListScreen` empty state is already text-only, so this issue is desktop-specific rather than shared.
 
 ### Improved
 - [x] Removed the duplicate in-content `Settings` title from the mobile root settings surface to reduce non-informational vertical space and let the connection card surface sooner.
@@ -47,6 +48,7 @@
 - [x] Removed the duplicate mobile chat composer agent chip so the primary composer area goes straight from attachments into the action row, relying on the existing header badge as the single agent-selection affordance.
 - [x] Removed decorative emoji chrome from the mobile Connection settings error banner and QR scanner actions, while adding an explicit accessibility label for the scanner close control.
 - [x] Tightened the desktop setup shell, made the first-run permissions surface scroll-safe for short windows, and changed permission rows to stack by default with full-width action buttons on constrained widths before splitting into label/action columns on wider screens.
+- [x] Tightened the desktop sessions empty state by shrinking the decorative icon treatment, switching the agent selector to its existing compact mode, reducing secondary-control spacing, using the smaller predefined-prompts trigger, and pulling recent sessions closer to the primary actions without shrinking the main text/voice buttons.
 
 ### Verified
 - [x] Source-level regression coverage added in `apps/mobile/tests/settings-screen-density.test.js`.
@@ -62,6 +64,8 @@
 - [x] Re-ran `node --test apps/desktop/tests/control-tooltip-density.test.mjs` after the QA remediation; all 3 desktop tooltip density assertions still passed.
 - [x] Dependency-free desktop setup regression coverage added in `apps/desktop/tests/setup-permission-density.test.mjs`.
 - [x] Targeted desktop source verification passed: `node --test apps/desktop/tests/setup-permission-density.test.mjs`.
+- [x] Dependency-free desktop sessions empty-state regression coverage added in `apps/desktop/tests/sessions-empty-state-density.test.mjs`.
+- [x] Targeted desktop source verification passed: `node --test apps/desktop/tests/sessions-empty-state-density.test.mjs`.
 
 ### Blocked
 - [x] Live mobile runtime inspection blocked: `pnpm --filter @dotagents/mobile web` failed with `node_modules missing`, `expo: command not found`, and `ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL`.
@@ -74,6 +78,7 @@
 ### Still uncertain
 - [ ] Desktop renderer / Electron surfaces still need first live attachment and screenshot evidence once dependencies are installed.
 - [ ] Desktop setup / first-run permissions are denser in source, but the real setup window still needs screenshot-backed validation at short heights and narrow widths once Electron can launch.
+- [ ] Desktop sessions empty state is denser in source and keeps primary actions higher, but the real renderer still needs screenshot-backed validation for above-the-fold balance, empty-state readability, and recent-sessions proximity once Electron can launch.
 - [ ] Desktop settings helper-tooltip hover occlusion remains un-reproduced in a live renderer; the current coverage is shared-component/source-level only until the desktop runtime can launch for screenshot-backed review.
 - [ ] Desktop settings surfaces remain unchecked at runtime; the shared settings-row audit is not a substitute for live renderer coverage.
 - [ ] The repaired `control.test.tsx` assertion now renders `ControlLabel` correctly in source, but the component-level Vitest test still has not been executed in this environment because the desktop/shared toolchain is unavailable.
@@ -164,3 +169,12 @@ Evidence
 - After evidence: Source now keeps the first-run permissions page scroll-safe in short windows and makes each permission row denser and more resilient on constrained widths, while preserving the same actions and granted-state messaging.
 - Verification commands/run results: `node --test apps/desktop/tests/setup-permission-density.test.mjs` → passed (2 tests, 0 failures, exit 0). Runtime validation remains blocked because `REMOTE_DEBUGGING_PORT=9333 ELECTRON_EXTRA_LAUNCH_ARGS="--inspect=9339" pnpm dev -- -dui` still fails before Electron launch with `tsup: command not found`, `spawn ENOENT`, and `node_modules missing` warnings.
 - Blockers/remaining uncertainty: No before/after screenshots were possible because Electron still cannot launch in this worktree without installed dependencies, so real setup-window validation at narrow widths and short heights remains pending once desktop dependencies are available.
+
+#### Iteration 10
+Evidence
+- Scope: Desktop sessions empty state density, with cross-check against the mobile sessions empty state for shared-vs-platform-specific behavior.
+- Before evidence: Source-backed observation only because runtime was blocked — `REMOTE_DEBUGGING_PORT=9333 ELECTRON_EXTRA_LAUNCH_ARGS="--inspect=9339" pnpm dev -- -dui` failed during `@dotagents/shared build` with `tsup: command not found`, `spawn ENOENT`, and `node_modules missing` warnings before any renderer target or screenshot capture. In `apps/desktop/src/renderer/src/pages/sessions.tsx`, the empty state used `rounded-full bg-muted p-4` around an `h-8 w-8` icon, a non-compact `AgentSelector`, default-size prompt chrome, and `py-8` / `gap-4` / `mt-8` spacing, pushing the main start controls lower than necessary. Cross-check: `apps/mobile/src/screens/SessionListScreen.tsx` already uses a text-only empty state (`No Sessions Yet` + subtitle), so the density issue is desktop-specific rather than shared.
+- Change: Tightened the desktop empty state chrome in `apps/desktop/src/renderer/src/pages/sessions.tsx` by shrinking the decorative icon treatment, reducing the supporting copy width/size and container spacing, switching the agent selector to `compact`, using `buttonSize="sm"` for `PredefinedPromptsMenu`, and reducing the recent-sessions top margin; added `apps/desktop/tests/sessions-empty-state-density.test.mjs` to keep those density choices in place.
+- After evidence: Source now keeps the desktop sessions empty state more compact around the primary actions while preserving the main text/voice buttons and recent sessions affordance; mobile remains unchanged because its equivalent empty state was already minimal.
+- Verification commands/run results: `pnpm dev:mobile -- --web` → failed before launch (`expo: command not found`, `node_modules missing`, `ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL`, exit 1). `REMOTE_DEBUGGING_PORT=9333 ELECTRON_EXTRA_LAUNCH_ARGS="--inspect=9339" pnpm dev -- -dui` → failed before Electron launch (`tsup: command not found`, `spawn ENOENT`, `node_modules missing`, exit 1). `node --test apps/desktop/tests/sessions-empty-state-density.test.mjs` → passed (2 tests, 0 failures, exit 0).
+- Blockers/remaining uncertainty: No before/after screenshots were possible because desktop/mobile runtimes still cannot launch in this worktree without installed dependencies, so real renderer validation of visual balance, actual above-the-fold action placement, and recent-sessions spacing remains pending once runtime access is restored.
