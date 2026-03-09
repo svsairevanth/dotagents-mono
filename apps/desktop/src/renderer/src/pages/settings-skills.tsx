@@ -23,7 +23,7 @@ import { tipcClient, rendererHandlers } from "@renderer/lib/tipc-client"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { AgentSkill } from "@shared/types"
 import { toast } from "sonner"
-import { Plus, Pencil, Trash2, Download, Upload, FolderOpen, RefreshCw, Sparkles, Loader2, ChevronDown, FolderUp, Github, CheckSquare, Square, X, FileText, Package } from "lucide-react"
+import { Plus, Pencil, Trash2, Download, Upload, FolderOpen, RefreshCw, Loader2, ChevronDown, FolderUp, Github, CheckSquare, Square, X, FileText, Package } from "lucide-react"
 
 
 export function Component() {
@@ -584,9 +584,8 @@ Write your skill instructions here.
           )}
         </div>
 
-        <p className="text-sm text-muted-foreground">
-          Skills are specialized instructions that improve AI performance on specific tasks.
-          Enable skills to include their instructions in the system prompt.
+        <p className="text-xs text-muted-foreground">
+          Enabled skills add their instructions to the system prompt.
         </p>
 
         <details className="rounded-lg border bg-card">
@@ -620,19 +619,21 @@ Write your skill instructions here.
         {/* Skills List */}
         <div className="space-y-1">
           {skillsQuery.isLoading ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <Loader2 className="h-8 w-8 mx-auto mb-4 animate-spin" />
-              <p>Loading skills...</p>
+            <div className="rounded-lg border border-dashed bg-muted/20 px-4 py-5 text-center text-sm text-muted-foreground">
+              <div className="flex items-center justify-center gap-2 font-medium text-foreground/80">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                <span>Loading skills...</span>
+              </div>
             </div>
           ) : skillsQuery.isError ? (
-            <div className="text-center py-8 text-destructive">
-              <Sparkles className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>Failed to load skills. Please try again.</p>
+            <div className="rounded-lg border border-dashed border-destructive/30 bg-destructive/5 px-4 py-5 text-center">
+              <p className="text-sm font-medium text-destructive">Failed to load skills.</p>
+              <p className="mt-1 text-sm text-muted-foreground">Please try again.</p>
             </div>
           ) : skills.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <Sparkles className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>No skills yet. Create your first skill or import one.</p>
+            <div className="rounded-lg border border-dashed bg-muted/20 px-4 py-5 text-center">
+              <p className="text-sm font-medium">No skills yet.</p>
+              <p className="mt-1 text-sm text-muted-foreground">Create your first skill or import one.</p>
             </div>
           ) : (
             skills.map((skill) => (
