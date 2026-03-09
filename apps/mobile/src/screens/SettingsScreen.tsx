@@ -970,8 +970,6 @@ export default function SettingsScreen({ navigation }: any) {
           />
         }
       >
-        <Text style={styles.h1}>Settings</Text>
-
         {/* Connection Card - Tap to navigate to ConnectionSettings */}
         <TouchableOpacity
           style={styles.connectionCard}
@@ -2614,10 +2612,6 @@ function createStyles(theme: ReturnType<typeof useTheme>['theme']) {
     container: {
       padding: spacing.lg,
       gap: spacing.md,
-    },
-    h1: {
-      ...theme.typography.h1,
-      marginBottom: spacing.sm,
     },
     // Connection card styles
     connectionCard: {
