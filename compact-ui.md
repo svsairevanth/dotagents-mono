@@ -114,8 +114,9 @@
 - [x] Dependency-free desktop repeat-task shell density regression coverage added in `apps/desktop/tests/settings-loops-density.test.mjs`.
 - [x] Targeted desktop source verification passed: `node --test apps/desktop/tests/settings-loops-density.test.mjs`.
 - [x] Expanded `apps/desktop/tests/settings-loops-density.test.mjs` during QA remediation so it now covers the edit-shell action contract (`Add Task` remains available while editing) in addition to the list-shell header cleanup.
-- [x] Dependency-free desktop agents-toolbar density regression coverage added in `apps/desktop/tests/settings-agents-toolbar-density.test.mjs`.
+- [x] Initial dependency-free desktop agents-toolbar density regression coverage added in `apps/desktop/tests/settings-agents-toolbar-density.test.mjs`.
 - [x] Targeted desktop source verification passed: `node --test apps/desktop/tests/settings-agents-toolbar-density.test.mjs`.
+- [x] Expanded `apps/desktop/tests/settings-agents-toolbar-density.test.mjs` during QA remediation so it now parses the five top-row toolbar buttons individually and proves each keeps the compact `size="sm"` + `h-8 gap-1.5 whitespace-nowrap px-2.5` contract.
 
 ### Blocked
 - [x] Live mobile runtime inspection blocked: `pnpm --filter @dotagents/mobile web` failed with `node_modules missing`, `expo: command not found`, and `ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL`.
@@ -335,3 +336,12 @@ Evidence
 - After evidence: Source now opens the desktop agents surface with a denser wrap-safe top action row, which should keep the first agent cards visible sooner on narrower settings widths without removing any import/export/rescan/create actions; mobile remains unchanged because there is no corresponding toolbar there.
 - Verification commands/run results: `list-processes` → no processes found. `electron_execute_electron-native` → failed (`Failed to list CDP targets. Make sure Electron is running with --inspect flag.`). `pwd && test -d node_modules && echo NODE_MODULES_PRESENT || echo NODE_MODULES_MISSING && ls node_modules/.bin/expo node_modules/.bin/tsup 2>/dev/null || true` → `NODE_MODULES_MISSING` (exit 0). `node --test apps/desktop/tests/settings-agents-toolbar-density.test.mjs` → passed (2 tests, 0 failures, exit 0).
 - Blockers/remaining uncertainty: No before/after screenshots were possible because local desktop/mobile dependencies are still unavailable in this worktree, so the real toolbar wrapping, click-target comfort, and above-the-fold card visibility still need screenshot-backed validation once Electron can launch.
+
+#### Iteration 21
+Evidence
+- Scope: QA remediation for desktop `Settings → Agents` compact-toolbar verification strength.
+- Before evidence: QA found that `apps/desktop/tests/settings-agents-toolbar-density.test.mjs` used a lazy per-label regex (`<Button size="sm"[\s\S]*?${label}`) plus one shared className assertion, which could still pass if only the first toolbar button kept the compact contract while a later button regressed. Runtime remained unavailable in this worktree because `pwd && test -d node_modules && echo NODE_MODULES_PRESENT || echo NODE_MODULES_MISSING` reported `NODE_MODULES_MISSING`.
+- Change: Reworked `apps/desktop/tests/settings-agents-toolbar-density.test.mjs` to parse the five toolbar `<Button>` elements individually, assert the exact top-row label set/order, and verify each button keeps both `size="sm"` and `className="h-8 gap-1.5 whitespace-nowrap px-2.5"` instead of relying on a whole-block lazy regex.
+- After evidence: The targeted regression test now fails if any one of the five toolbar actions drops the compact sizing contract, so the source-level verification matches the ledger's claim about the full compact-toolbar action row rather than only proving one compact button exists.
+- Verification commands/run results: `pwd && test -d node_modules && echo NODE_MODULES_PRESENT || echo NODE_MODULES_MISSING` → `NODE_MODULES_MISSING` (exit 0). `node --test apps/desktop/tests/settings-agents-toolbar-density.test.mjs` → passed (2 tests, 0 failures, exit 0).
+- Blockers/remaining uncertainty: No before/after screenshots were possible because local desktop/mobile dependencies are still unavailable in this worktree, so live renderer validation of actual toolbar wrapping and clickability remains blocked until Electron can launch.
