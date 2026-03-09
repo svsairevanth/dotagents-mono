@@ -2284,12 +2284,15 @@ export default function SettingsScreen({ navigation }: any) {
             <View style={styles.modelPickerHeader}>
               <Text style={styles.modelPickerTitle}>Select Model</Text>
               <TouchableOpacity
+                style={styles.modalCloseButton}
                 onPress={() => {
                   setShowModelPicker(false);
                   setModelSearchQuery('');
                 }}
+                accessibilityRole="button"
+                accessibilityLabel="Close model picker"
               >
-                <Text style={styles.modelPickerClose}>✕</Text>
+                <Text style={styles.modalCloseText}>Close</Text>
               </TouchableOpacity>
             </View>
 
@@ -2369,8 +2372,13 @@ export default function SettingsScreen({ navigation }: any) {
           <View style={styles.modelPickerContainer}>
             <View style={styles.modelPickerHeader}>
               <Text style={styles.modelPickerTitle}>Select Endpoint</Text>
-              <TouchableOpacity onPress={() => setShowPresetPicker(false)}>
-                <Text style={styles.modelPickerClose}>✕</Text>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowPresetPicker(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Close endpoint picker"
+              >
+                <Text style={styles.modalCloseText}>Close</Text>
               </TouchableOpacity>
             </View>
 
@@ -2423,8 +2431,13 @@ export default function SettingsScreen({ navigation }: any) {
           <View style={styles.modelPickerContainer}>
             <View style={styles.modelPickerHeader}>
               <Text style={styles.modelPickerTitle}>Select TTS Model</Text>
-              <TouchableOpacity onPress={() => setShowTtsModelPicker(false)}>
-                <Text style={styles.modelPickerClose}>✕</Text>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowTtsModelPicker(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Close TTS model picker"
+              >
+                <Text style={styles.modalCloseText}>Close</Text>
               </TouchableOpacity>
             </View>
 
@@ -2486,8 +2499,13 @@ export default function SettingsScreen({ navigation }: any) {
           <View style={styles.modelPickerContainer}>
             <View style={styles.modelPickerHeader}>
               <Text style={styles.modelPickerTitle}>Select TTS Voice</Text>
-              <TouchableOpacity onPress={() => setShowTtsVoicePicker(false)}>
-                <Text style={styles.modelPickerClose}>✕</Text>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowTtsVoicePicker(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Close TTS voice picker"
+              >
+                <Text style={styles.modalCloseText}>Close</Text>
               </TouchableOpacity>
             </View>
 
@@ -2560,12 +2578,15 @@ export default function SettingsScreen({ navigation }: any) {
             <View style={styles.importModalHeader}>
               <Text style={styles.importModalTitle}>Import Profile</Text>
               <TouchableOpacity
+                style={styles.modalCloseButton}
                 onPress={() => {
                   setShowImportModal(false);
                   setImportJsonText('');
                 }}
+                accessibilityRole="button"
+                accessibilityLabel="Close import profile modal"
               >
-                <Text style={styles.importModalClose}>✕</Text>
+                <Text style={styles.modalCloseText}>Close</Text>
               </TouchableOpacity>
             </View>
 
@@ -2897,17 +2918,16 @@ function createStyles(theme: ReturnType<typeof useTheme>['theme']) {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
+      gap: spacing.sm,
       marginBottom: spacing.md,
     },
     importModalTitle: {
+      flex: 1,
+      flexShrink: 1,
       fontSize: 18,
       fontWeight: '600',
       color: theme.colors.foreground,
-    },
-    importModalClose: {
-      fontSize: 20,
-      color: theme.colors.mutedForeground,
-      padding: spacing.xs,
+      paddingRight: spacing.xs,
     },
     importModalDescription: {
       fontSize: 14,
@@ -3132,19 +3152,29 @@ function createStyles(theme: ReturnType<typeof useTheme>['theme']) {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      padding: spacing.lg,
+      gap: spacing.sm,
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.md,
       borderBottomWidth: 1,
       borderBottomColor: theme.colors.border,
     },
     modelPickerTitle: {
+      flex: 1,
+      flexShrink: 1,
       fontSize: 18,
       fontWeight: '600',
       color: theme.colors.foreground,
+      paddingRight: spacing.xs,
     },
-    modelPickerClose: {
-      fontSize: 20,
-      color: theme.colors.mutedForeground,
-      padding: spacing.sm,
+    modalCloseButton: {
+      borderRadius: radius.md,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+    },
+    modalCloseText: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: theme.colors.primary,
     },
     modelSearchContainer: {
       padding: spacing.md,
