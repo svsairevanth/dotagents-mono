@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react"
 import { cn } from "@renderer/lib/utils"
-import { X, Clock, Trash2, Pencil, Check, ChevronDown, ChevronUp, AlertCircle, RefreshCw, Loader2, Play, Pause } from "lucide-react"
+import { Clock, Trash2, Check, ChevronDown, ChevronUp, AlertCircle, Loader2, Play, Pause } from "lucide-react"
 import { Button } from "@renderer/components/ui/button"
 import { QueuedMessage } from "@shared/types"
 import { useMutation } from "@tanstack/react-query"
@@ -110,7 +110,7 @@ function QueuedMessageItem({
   return (
     <div
       className={cn(
-        "px-3 py-2 group",
+        "px-3 py-2",
         isFailed ? "bg-destructive/10 hover:bg-destructive/15" :
         isProcessing ? "bg-amber-100/50 dark:bg-amber-900/20" : "hover:bg-amber-100/30 dark:hover:bg-amber-900/10",
         "transition-colors"
@@ -210,42 +210,39 @@ function QueuedMessageItem({
           </div>
           {/* Hide action buttons when processing */}
           {!isProcessing && (
-            <div className={cn(
-              "ml-auto flex shrink-0 flex-wrap items-center gap-1 self-start transition-opacity",
-              isFailed ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-            )}>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
               {isFailed && (
                 <Button
                   variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
+                  size="sm"
+                  className="h-6 px-2 text-xs text-primary hover:bg-primary/10 hover:text-primary"
                   onClick={() => retryMutation.mutate()}
                   disabled={retryMutation.isPending}
                   title="Retry message"
                 >
-                  <RefreshCw className={cn("h-3 w-3", retryMutation.isPending && "animate-spin")} />
+                  {retryMutation.isPending ? "Retrying…" : "Retry"}
                 </Button>
               )}
-              {/* Disable edit for messages already added to conversation history to prevent inconsistency */}
+              {!isAddedToHistory && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  onClick={() => setIsEditing(true)}
+                  title="Edit message"
+                >
+                  Edit
+                </Button>
+              )}
               <Button
                 variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={() => setIsEditing(true)}
-                disabled={isAddedToHistory}
-                title={isAddedToHistory ? "Cannot edit - already added to conversation" : "Edit message"}
-              >
-                <Pencil className="h-3 w-3" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
+                size="sm"
+                className="h-6 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
                 onClick={() => removeMutation.mutate()}
                 disabled={removeMutation.isPending}
                 title="Remove from queue"
               >
-                <X className="h-3 w-3" />
+                Remove
               </Button>
             </div>
           )}
