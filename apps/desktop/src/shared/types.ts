@@ -477,6 +477,8 @@ export type ProfileModelConfig = {
   currentModelPresetId?: string
   // STT Provider settings
   sttProviderId?: "openai" | "groq" | "parakeet"
+  openaiSttModel?: string
+  groqSttModel?: string
   // Transcript Post-Processing settings
   transcriptPostProcessingProviderId?: "openai" | "groq" | "gemini"
   transcriptPostProcessingOpenaiModel?: string
@@ -1263,7 +1265,9 @@ export type Config = {
   // Speech-to-Text Language Configuration
   sttLanguage?: string
   openaiSttLanguage?: string
+  openaiSttModel?: string
   groqSttLanguage?: string
+  groqSttModel?: string
 
   // Transcription Preview - show live transcription while recording
   transcriptionPreviewEnabled?: boolean

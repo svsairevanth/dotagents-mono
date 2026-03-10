@@ -18,7 +18,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@renderer/components/ui/dialog"
-import { ModelSelector } from "@renderer/components/model-selector"
 import { Button } from "@renderer/components/ui/button"
 import {
   useConfigQuery,
@@ -963,6 +962,19 @@ export function Component() {
         </ControlGroup>
 
         <ControlGroup collapsible defaultCollapsed title="Speech-to-Text">
+          <Control label={<ControlLabel label="Model Selection" tooltip="Manage STT models from the Models page so speech-to-text choices stay with the rest of your provider model settings." />} className="px-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => navigate("/settings/models")}>
+                Open Models page
+              </Button>
+              <p className="text-sm text-muted-foreground">
+                {sttProviderId === "parakeet"
+                  ? "Parakeet uses its local downloaded model bundle."
+                  : `Choose your ${sttProviderId === "openai" ? "OpenAI" : "Groq"} STT model from the Models page.`}
+              </p>
+            </div>
+          </Control>
+
           <Control label={<ControlLabel label="Language" tooltip="Select the language for speech transcription. 'Auto-detect' lets the model determine the language automatically based on your speech." />} className="px-3">
             <Select
               value={configQuery.data.sttLanguage || "auto"}

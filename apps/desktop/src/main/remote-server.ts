@@ -1315,6 +1315,8 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
         langfuseBaseUrl: cfg.langfuseBaseUrl ?? "",
         // STT/TTS/Post-Processing Provider settings
         sttProviderId: cfg.sttProviderId || "openai",
+        openaiSttModel: cfg.openaiSttModel || "whisper-1",
+        groqSttModel: cfg.groqSttModel || "whisper-large-v3-turbo",
         ttsProviderId: cfg.ttsProviderId || "openai",
         transcriptPostProcessingProviderId: cfg.transcriptPostProcessingProviderId || "openai",
         transcriptPostProcessingOpenaiModel: cfg.transcriptPostProcessingOpenaiModel || "",
@@ -1485,6 +1487,12 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
       const validSttProviders = ["openai", "groq", "parakeet"]
       if (typeof body.sttProviderId === "string" && validSttProviders.includes(body.sttProviderId)) {
         updates.sttProviderId = body.sttProviderId as "openai" | "groq" | "parakeet"
+      }
+      if (typeof body.openaiSttModel === "string") {
+        updates.openaiSttModel = body.openaiSttModel
+      }
+      if (typeof body.groqSttModel === "string") {
+        updates.groqSttModel = body.groqSttModel
       }
       // TTS Provider
       const validTtsProviders = ["openai", "groq", "gemini", "kitten", "supertonic"]

@@ -2,6 +2,7 @@ import { configStore } from "./config"
 import { diagnosticsService } from "./diagnostics"
 import { fetchModelsDevData, getModelFromModelsDevByProviderId } from "./models-dev-service"
 import type { ModelsDevModel } from "./models-dev-service"
+import { isKnownSttModel, KNOWN_STT_MODEL_IDS } from "../shared/stt-models"
 import type { ModelInfo, EnhancedModelInfo } from "../shared/types"
 
 // Re-export ModelInfo for backward compatibility
@@ -208,7 +209,13 @@ async function fetchOpenAIModels(
       (model) =>
         !model.id.includes(":") &&
         !model.id.includes("instruct") &&
-        (model.id.includes("gpt") || model.id.includes("o1")),
+        (
+          model.id.includes("gpt") ||
+          model.id.includes("o1") ||
+          KNOWN_STT_MODEL_IDS.openai.some(transcriptionModel =>
+            model.id.includes(transcriptionModel),
+          )
+        ),
     )
   } else if (isGenericOpenAICompatible) {
     filteredModels = data.data.filter(
@@ -220,10 +227,6 @@ async function fetchOpenAIModels(
       (model) => model.id && model.id.length > 0,
     )
   }
-
-  // Models that support speech-to-text transcription (OpenAI)
-  const openaiTranscriptionModels = ["whisper-1"]
-
   const finalModels = filteredModels
     .map((model) => ({
       id: model.id,
@@ -231,7 +234,7 @@ async function fetchOpenAIModels(
       description: model.description,
       context_length: model.context_length,
       created: model.created,
-      supportsTranscription: openaiTranscriptionModels.some(tm => model.id.includes(tm)),
+      supportsTranscription: isKnownSttModel("openai", model.id),
     }))
     .sort((a, b) => {
       if (isOpenRouter) {
@@ -318,10 +321,6 @@ async function fetchGroqModels(
   }
 
   const data: ModelsResponse = await response.json()
-
-  // Models that support speech-to-text transcription
-  const transcriptionModels = ["whisper-large-v3", "whisper-large-v3-turbo", "distil-whisper-large-v3-en"]
-
   return data.data
     .map((model) => ({
       id: model.id,
@@ -329,7 +328,7 @@ async function fetchGroqModels(
       description: model.description,
       context_length: model.context_length,
       created: model.created,
-      supportsTranscription: transcriptionModels.some(tm => model.id.includes(tm)),
+      supportsTranscription: isKnownSttModel("groq", model.id),
     }))
     .sort((a, b) => a.name.localeCompare(b.name))
 }

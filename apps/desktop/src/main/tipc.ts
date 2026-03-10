@@ -50,6 +50,7 @@ import {
   SessionProfileSnapshot,
   LoopConfig,
 } from "../shared/types"
+import { DEFAULT_STT_MODELS, getConfiguredSttModel } from "../shared/stt-models"
 import { inferTransportType, normalizeMcpConfig } from "../shared/mcp-utils"
 import { conversationService } from "./conversation-service"
 import { RendererHandlers } from "./renderer-handlers"
@@ -127,6 +128,28 @@ function float32ToWav(samples: Float32Array, sampleRate: number): Buffer {
   }
 
   return buffer
+}
+
+async function postProcessTranscriptSafely(transcript: string, context: string): Promise<string> {
+  const config = configStore.get()
+
+  if (
+    !config.transcriptPostProcessingEnabled ||
+    !config.transcriptPostProcessingPrompt
+  ) {
+    return transcript
+  }
+
+  try {
+    return await postProcessTranscript(transcript)
+  } catch (error) {
+    logLLM(`[${context}] Transcript post-processing failed, using raw transcript instead:`, error)
+    return transcript
+  }
+}
+
+function getRemoteSttModel(config: Config): string {
+  return getConfiguredSttModel(config) || DEFAULT_STT_MODELS.openai
 }
 
 async function initializeMcpWithProgress(config: Config, sessionId: string, runId?: number): Promise<void> {
@@ -1485,7 +1508,7 @@ export const router = {
           throw new Error("Parakeet STT requires pre-decoded float32 PCM audio. pcmRecording was not provided.")
         }
         transcript = await parakeetStt.transcribe(input.pcmRecording, 16000)
-        transcript = await postProcessTranscript(transcript)
+        transcript = await postProcessTranscriptSafely(transcript, "createRecording")
       } else {
         // Use OpenAI or Groq for transcription
         const form = new FormData()
@@ -1495,7 +1518,7 @@ export const router = {
         )
         form.append(
           "model",
-          config.sttProviderId === "groq" ? "whisper-large-v3-turbo" : "whisper-1",
+          getRemoteSttModel(config),
         )
         form.append("response_format", "json")
 
@@ -1536,7 +1559,7 @@ export const router = {
         }
 
         const json: { text: string } = await transcriptResponse.json()
-        transcript = await postProcessTranscript(json.text)
+        transcript = await postProcessTranscriptSafely(json.text, "createRecording")
       }
 
       const history = getRecordingHistory()
@@ -1611,7 +1634,7 @@ export const router = {
         )
         form.append(
           "model",
-          config.sttProviderId === "groq" ? "whisper-large-v3-turbo" : "whisper-1",
+          getRemoteSttModel(config),
         )
         form.append("response_format", "json")
 
@@ -1880,7 +1903,7 @@ export const router = {
               )
               form.append(
                 "model",
-                config.sttProviderId === "groq" ? "whisper-large-v3-turbo" : "whisper-1",
+                getRemoteSttModel(config),
               )
               form.append("response_format", "json")
 
@@ -2058,7 +2081,7 @@ export const router = {
           )
           form.append(
             "model",
-            config.sttProviderId === "groq" ? "whisper-large-v3-turbo" : "whisper-1",
+            getRemoteSttModel(config),
           )
           form.append("response_format", "json")
 
@@ -3450,6 +3473,12 @@ export const router = {
         ...(profile.modelConfig?.sttProviderId && {
           sttProviderId: profile.modelConfig.sttProviderId,
         }),
+        ...(profile.modelConfig?.openaiSttModel && {
+          openaiSttModel: profile.modelConfig.openaiSttModel,
+        }),
+        ...(profile.modelConfig?.groqSttModel && {
+          groqSttModel: profile.modelConfig.groqSttModel,
+        }),
         // Transcript Post-Processing settings
         ...(profile.modelConfig?.transcriptPostProcessingProviderId && {
           transcriptPostProcessingProviderId: profile.modelConfig.transcriptPostProcessingProviderId,
@@ -3546,6 +3575,8 @@ export const router = {
         currentModelPresetId: config.currentModelPresetId,
         // STT Provider settings
         sttProviderId: config.sttProviderId,
+        openaiSttModel: config.openaiSttModel,
+        groqSttModel: config.groqSttModel,
         // Transcript Post-Processing settings
         transcriptPostProcessingProviderId: config.transcriptPostProcessingProviderId,
         transcriptPostProcessingOpenaiModel: config.transcriptPostProcessingOpenaiModel,
@@ -3568,6 +3599,8 @@ export const router = {
       currentModelPresetId?: string
       // STT Provider settings
       sttProviderId?: "openai" | "groq" | "parakeet"
+      openaiSttModel?: string
+      groqSttModel?: string
       // Transcript Post-Processing settings
       transcriptPostProcessingProviderId?: "openai" | "groq" | "gemini"
       transcriptPostProcessingOpenaiModel?: string
@@ -3586,6 +3619,8 @@ export const router = {
         currentModelPresetId: input.currentModelPresetId,
         // STT Provider settings
         sttProviderId: input.sttProviderId,
+        openaiSttModel: input.openaiSttModel,
+        groqSttModel: input.groqSttModel,
         // Transcript Post-Processing settings
         transcriptPostProcessingProviderId: input.transcriptPostProcessingProviderId,
         transcriptPostProcessingOpenaiModel: input.transcriptPostProcessingOpenaiModel,

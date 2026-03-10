@@ -226,6 +226,8 @@ function isValidModelConfig(config: unknown): boolean {
     "mcpToolsGroqModel",
     "mcpToolsGeminiModel",
     "currentModelPresetId",
+    "openaiSttModel",
+    "groqSttModel",
     "transcriptPostProcessingOpenaiModel",
     "transcriptPostProcessingGroqModel",
     "transcriptPostProcessingGeminiModel",
@@ -532,6 +534,8 @@ class ProfileService {
       ...(modelConfig.currentModelPresetId !== undefined && { currentModelPresetId: modelConfig.currentModelPresetId }),
       // STT Provider settings
       ...(modelConfig.sttProviderId !== undefined && { sttProviderId: modelConfig.sttProviderId }),
+      ...(modelConfig.openaiSttModel !== undefined && { openaiSttModel: modelConfig.openaiSttModel }),
+      ...(modelConfig.groqSttModel !== undefined && { groqSttModel: modelConfig.groqSttModel }),
       // Transcript Post-Processing settings
       ...(modelConfig.transcriptPostProcessingProviderId !== undefined && { transcriptPostProcessingProviderId: modelConfig.transcriptPostProcessingProviderId }),
       ...(modelConfig.transcriptPostProcessingOpenaiModel !== undefined && { transcriptPostProcessingOpenaiModel: modelConfig.transcriptPostProcessingOpenaiModel }),

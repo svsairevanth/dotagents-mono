@@ -163,6 +163,11 @@ export const Component = () => {
       icon: "i-mingcute-brain-line",
     },
     {
+      text: "Providers",
+      href: "/settings/providers",
+      icon: "i-mingcute-plug-line",
+    },
+    {
       text: "Memories",
       href: "/memories",
       icon: "i-mingcute-book-2-line",
@@ -194,7 +199,6 @@ export const Component = () => {
   // Maps route paths to their primary nav link href
   const routeAliases: Record<string, string> = {
     "/settings/general": "/settings",
-    "/settings/providers": "/settings/models",
     "/settings/mcp-tools": "/settings/capabilities",
     "/settings/skills": "/settings/capabilities",
     "/settings/remote-server": "/settings",

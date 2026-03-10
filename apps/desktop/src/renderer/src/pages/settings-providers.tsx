@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { Control, ControlGroup, ControlLabel } from "@renderer/components/ui/control"
+import { Control, ControlLabel } from "@renderer/components/ui/control"
 import { Input } from "@renderer/components/ui/input"
 import {
   Select,
@@ -9,39 +9,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@renderer/components/ui/select"
-import { Switch } from "@renderer/components/ui/switch"
 import { Button } from "@renderer/components/ui/button"
 import {
   useConfigQuery,
   useSaveConfigMutation,
 } from "@renderer/lib/query-client"
-import { Config, ModelPreset } from "@shared/types"
-import { ModelPresetManager } from "@renderer/components/model-preset-manager"
-import { ProviderModelSelector } from "@renderer/components/model-selector"
-import { PresetModelSelector } from "@renderer/components/preset-model-selector"
+import { Config } from "@shared/types"
 
-import { Mic, Bot, Volume2, FileText, CheckCircle2, ChevronDown, ChevronRight, Brain, Zap, BookOpen, Settings2, Cpu, Download, Loader2 } from "lucide-react"
+import { Mic, Bot, Volume2, FileText, CheckCircle2, ChevronDown, ChevronRight, Cpu, Download, Loader2 } from "lucide-react"
 
-import {
-  STT_PROVIDERS,
-  CHAT_PROVIDERS,
-  TTS_PROVIDERS,
-  STT_PROVIDER_ID,
-  CHAT_PROVIDER_ID,
-  TTS_PROVIDER_ID,
-  OPENAI_TTS_MODELS,
-  OPENAI_TTS_VOICES,
-  GROQ_TTS_MODELS,
-  GROQ_TTS_VOICES_ENGLISH,
-  GROQ_TTS_VOICES_ARABIC,
-  GEMINI_TTS_MODELS,
-  GEMINI_TTS_VOICES,
-  KITTEN_TTS_VOICES,
-  SUPERTONIC_TTS_VOICES,
-  SUPERTONIC_TTS_LANGUAGES,
-  getBuiltInModelPresets,
-  DEFAULT_MODEL_PRESET_ID,
-} from "@shared/index"
 import { getSelectableMainAcpAgents } from "./settings-general-main-agent-options"
 
 const SETTINGS_TEXT_SAVE_DEBOUNCE_MS = 400
@@ -64,56 +40,6 @@ function ActiveProviderBadge({ label, icon: Icon }: { label: string; icon: React
       <Icon className="h-3 w-3" />
       {label}
     </span>
-  )
-}
-
-// Inline provider selector with visual feedback
-function ProviderSelector({
-  label,
-  tooltip,
-  value,
-  onChange,
-  providers,
-  icon: Icon,
-  badge,
-}: {
-  label: React.ReactNode
-  tooltip: string
-  value: string
-  onChange: (value: string) => void
-  providers: readonly { label: string; value: string }[]
-  icon: React.ElementType
-  badge?: React.ReactNode
-}) {
-  return (
-    <Control
-      label={
-        <ControlLabel
-          label={
-            <span className="flex items-center gap-2">
-              <Icon className="h-4 w-4 text-muted-foreground" />
-              {label}
-              {badge}
-            </span>
-          }
-          tooltip={tooltip}
-        />
-      }
-      className="px-3"
-    >
-      <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="w-full sm:w-[180px]">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {providers.map((provider) => (
-            <SelectItem key={provider.value} value={provider.value}>
-              {provider.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </Control>
   )
 }
 
@@ -391,14 +317,12 @@ function KittenProviderSection({
   onToggleCollapse,
   usageBadges,
   voiceId,
-  onVoiceIdChange,
 }: {
   isActive: boolean
   isCollapsed: boolean
   onToggleCollapse: () => void
   usageBadges: { label: string; icon: React.ElementType }[]
   voiceId: number
-  onVoiceIdChange: (value: number) => void
 }) {
   // Query model status to determine if voice controls should be shown
   const modelStatusQuery = useQuery({
@@ -475,51 +399,26 @@ function KittenProviderSection({
             <KittenModelDownload />
           </Control>
 
-          {/* Voice Selection - only shown when model is downloaded */}
-          {modelDownloaded && (
-            <>
-              <Control
-                label={
-                  <ControlLabel
-                    label="Voice"
-                    tooltip="Select the voice to use for text-to-speech synthesis"
-                  />
-                }
-                className="px-3"
-              >
-                <Select
-                  value={String(voiceId)}
-                  onValueChange={(value) => onVoiceIdChange(parseInt(value))}
-                >
-                  <SelectTrigger className="w-full sm:w-[180px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {KITTEN_TTS_VOICES.map((voice) => (
-                      <SelectItem key={voice.value} value={String(voice.value)}>
-                        {voice.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Control>
+          <p className="px-3 py-1.5 text-[11px] text-muted-foreground border-t">
+            Voice selection now lives in Voice Models above. Use this section for install status and quick voice testing.
+          </p>
 
-              {/* Test Voice Button */}
-              <Control
-                label={
-                  <ControlLabel
-                    label="Test Voice"
-                    tooltip="Play a sample phrase using the selected voice"
-                  />
-                }
-                className="px-3"
-              >
-                <Button size="sm" variant="outline" onClick={handleTestVoice}>
-                  <Volume2 className="h-3.5 w-3.5 mr-1.5" />
-                  Test Voice
-                </Button>
-              </Control>
-            </>
+          {/* Test Voice Button - only shown when model is downloaded */}
+          {modelDownloaded && (
+            <Control
+              label={
+                <ControlLabel
+                  label="Test Voice"
+                  tooltip="Play a sample phrase using the selected voice"
+                />
+              }
+              className="px-3"
+            >
+              <Button size="sm" variant="outline" onClick={handleTestVoice}>
+                <Volume2 className="h-3.5 w-3.5 mr-1.5" />
+                Test Voice
+              </Button>
+            </Control>
           )}
         </div>
       )}
@@ -617,26 +516,18 @@ function SupertonicProviderSection({
   onToggleCollapse,
   usageBadges,
   voice,
-  onVoiceChange,
   language,
-  onLanguageChange,
   speed,
-  onSpeedChange,
   steps,
-  onStepsChange,
 }: {
   isActive: boolean
   isCollapsed: boolean
   onToggleCollapse: () => void
   usageBadges: { label: string; icon: React.ElementType }[]
   voice: string
-  onVoiceChange: (value: string) => void
   language: string
-  onLanguageChange: (value: string) => void
   speed: number
-  onSpeedChange: (value: number) => void
   steps: number
-  onStepsChange: (value: number) => void
 }) {
   const modelStatusQuery = useQuery({
     queryKey: ["supertonicModelStatus"],
@@ -715,127 +606,25 @@ function SupertonicProviderSection({
             <SupertonicModelDownload />
           </Control>
 
-          {/* Settings - only shown when model is downloaded */}
+          <p className="px-3 py-1.5 text-[11px] text-muted-foreground border-t">
+            Voice, language, and quality settings now live in Voice Models above. Use this section for install status and quick voice testing.
+          </p>
+
           {modelDownloaded && (
-            <>
-              <Control
-                label={
-                  <ControlLabel
-                    label="Voice"
-                    tooltip="Select the voice style to use for speech synthesis"
-                  />
-                }
-                className="px-3"
-              >
-                <Select
-                  value={voice}
-                  onValueChange={onVoiceChange}
-                >
-                  <SelectTrigger className="w-full sm:w-[180px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SUPERTONIC_TTS_VOICES.map((v) => (
-                      <SelectItem key={v.value} value={v.value}>
-                        {v.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Control>
-
-              <Control
-                label={
-                  <ControlLabel
-                    label="Language"
-                    tooltip="Select the language for speech synthesis"
-                  />
-                }
-                className="px-3"
-              >
-                <Select
-                  value={language}
-                  onValueChange={onLanguageChange}
-                >
-                  <SelectTrigger className="w-full sm:w-[180px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SUPERTONIC_TTS_LANGUAGES.map((l) => (
-                      <SelectItem key={l.value} value={l.value}>
-                        {l.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Control>
-
-              <Control
-                label={
-                  <ControlLabel
-                    label="Speed"
-                    tooltip="Speech speed multiplier (default: 1.05)"
-                  />
-                }
-                className="px-3"
-              >
-                <Input
-                  type="number"
-                  min={0.5}
-                  max={2.0}
-                  step={0.05}
-                  className="w-full sm:w-[100px]"
-                  value={speed}
-                  onChange={(e) => {
-                    const val = parseFloat(e.currentTarget.value)
-                    if (!isNaN(val) && val >= 0.5 && val <= 2.0) {
-                      onSpeedChange(val)
-                    }
-                  }}
+            <Control
+              label={
+                <ControlLabel
+                  label="Test Voice"
+                  tooltip="Play a sample phrase using the selected voice and settings"
                 />
-              </Control>
-
-              <Control
-                label={
-                  <ControlLabel
-                    label="Quality Steps"
-                    tooltip="Number of denoising steps (2-10). Higher = better quality but slower."
-                  />
-                }
-                className="px-3"
-              >
-                <Input
-                  type="number"
-                  min={2}
-                  max={10}
-                  step={1}
-                  className="w-full sm:w-[100px]"
-                  value={steps}
-                  onChange={(e) => {
-                    const val = parseInt(e.currentTarget.value)
-                    if (!isNaN(val) && val >= 2 && val <= 10) {
-                      onStepsChange(val)
-                    }
-                  }}
-                />
-              </Control>
-
-              {/* Test Voice Button */}
-              <Control
-                label={
-                  <ControlLabel
-                    label="Test Voice"
-                    tooltip="Play a sample phrase using the selected voice and settings"
-                  />
-                }
-                className="px-3"
-              >
-                <Button size="sm" variant="outline" onClick={handleTestVoice}>
-                  <Volume2 className="h-3.5 w-3.5 mr-1.5" />
-                  Test Voice
-                </Button>
-              </Control>
-            </>
+              }
+              className="px-3"
+            >
+              <Button size="sm" variant="outline" onClick={handleTestVoice}>
+                <Volume2 className="h-3.5 w-3.5 mr-1.5" />
+                Test Voice
+              </Button>
+            </Control>
           )}
         </div>
       )}
@@ -930,18 +719,18 @@ export function Component() {
     return {
       openai: [
         ...(stt === "openai" ? [{ label: "STT", icon: Mic }] : []),
-        ...(transcript === "openai" ? [{ label: "Transcript", icon: FileText }] : []),
+        ...(transcript === "openai" ? [{ label: "Cleanup", icon: FileText }] : []),
         ...(mcp === "openai" && !isMainAgentAcpMode ? [{ label: "Agent", icon: Bot }] : []),
         ...(tts === "openai" ? [{ label: "TTS", icon: Volume2 }] : []),
       ],
       groq: [
         ...(stt === "groq" ? [{ label: "STT", icon: Mic }] : []),
-        ...(transcript === "groq" ? [{ label: "Transcript", icon: FileText }] : []),
+        ...(transcript === "groq" ? [{ label: "Cleanup", icon: FileText }] : []),
         ...(mcp === "groq" && !isMainAgentAcpMode ? [{ label: "Agent", icon: Bot }] : []),
         ...(tts === "groq" ? [{ label: "TTS", icon: Volume2 }] : []),
       ],
       gemini: [
-        ...(transcript === "gemini" ? [{ label: "Transcript", icon: FileText }] : []),
+        ...(transcript === "gemini" ? [{ label: "Cleanup", icon: FileText }] : []),
         ...(mcp === "gemini" && !isMainAgentAcpMode ? [{ label: "Agent", icon: Bot }] : []),
         ...(tts === "gemini" ? [{ label: "TTS", icon: Volume2 }] : []),
       ],
@@ -977,39 +766,7 @@ export function Component() {
   const isKittenActive = activeProviders.kitten.length > 0
   const isSupertonicActive = activeProviders.supertonic.length > 0
 
-  // Get all available presets for dual-model selection
-  const allPresets = useMemo(() => {
-    const builtIn = getBuiltInModelPresets()
-    const custom = configQuery.data?.modelPresets || []
-
-    // Merge built-in presets with any saved data
-    const mergedBuiltIn = builtIn.map(preset => {
-      const saved = custom.find(c => c.id === preset.id)
-      if (saved) {
-        return { ...preset, ...saved }
-      }
-      return preset
-    })
-
-    // Add custom (non-built-in) presets
-    const customOnly = custom.filter(c => !c.isBuiltIn)
-    return [...mergedBuiltIn, ...customOnly]
-  }, [configQuery.data?.modelPresets])
-
-  // Get preset by ID helper
-  const getPresetById = (presetId: string | undefined): ModelPreset | undefined => {
-    if (!presetId) return undefined
-    return allPresets.find(p => p.id === presetId)
-  }
-
   if (!configQuery.data) return null
-
-  const config = configQuery.data
-  const dualModelEnabled = config.dualModelEnabled ?? false
-  const strongPresetId = config.dualModelStrongPresetId || config.currentModelPresetId || DEFAULT_MODEL_PRESET_ID
-  const weakPresetId = config.dualModelWeakPresetId || config.currentModelPresetId || DEFAULT_MODEL_PRESET_ID
-  const strongPreset = getPresetById(strongPresetId)
-  const weakPreset = getPresetById(weakPresetId)
 
   const renderProviderDraftInput = (
     key: ProviderDraftKey,
@@ -1042,61 +799,26 @@ export function Component() {
     <div className="modern-panel h-full overflow-y-auto overflow-x-hidden px-4 py-4 sm:px-6">
 
       <div className="grid gap-4">
-        {/* Provider Selection with clear visual hierarchy */}
-        <ControlGroup title="Provider Selection">
+        <div className="rounded-lg border bg-muted/20 px-4 py-3">
+          <h2 className="text-sm font-semibold">Provider Setup</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Use this page for API keys, base URLs, local engine downloads, and quick provider diagnostics. All model and voice
+            selection now lives on the Models page.
+          </p>
           {isMainAgentAcpMode && (
-            <div className="mx-3 my-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs">
+            <div className="mt-3 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs">
               <div className="flex items-center gap-1.5 font-medium text-primary">
                 <Bot className="h-3.5 w-3.5" />
                 ACP Main Agent:{" "}
-                <span className="text-foreground">
-                  {selectedMainAcpAgentDisplayName || "Not selected"}
-                </span>
+                <span className="text-foreground">{selectedMainAcpAgentDisplayName || "Not selected"}</span>
               </div>
               <p className="mt-1 text-muted-foreground">
-                In ACP mode, this agent handles chat submissions. API provider selection below for Agent/MCP tools applies in API mode.
+                ACP mode handles chat submissions through the selected agent. Provider setup below still applies to API-backed
+                tools, voice, and local engines.
               </p>
             </div>
           )}
-
-          <ProviderSelector
-            label="Voice Transcription (STT)"
-            tooltip="Choose which provider to use for speech-to-text transcription."
-            value={configQuery.data.sttProviderId || "openai"}
-            onChange={(value) => saveConfig({ sttProviderId: value as STT_PROVIDER_ID })}
-            providers={STT_PROVIDERS}
-            icon={Mic}
-          />
-
-          <ProviderSelector
-            label="Transcript Post-Processing"
-            tooltip="Choose which provider to use for transcript post-processing."
-            value={configQuery.data.transcriptPostProcessingProviderId || "openai"}
-            onChange={(value) => saveConfig({ transcriptPostProcessingProviderId: value as CHAT_PROVIDER_ID })}
-            providers={CHAT_PROVIDERS}
-            icon={FileText}
-          />
-
-          <ProviderSelector
-            label={isMainAgentAcpMode ? "Agent/MCP Tools (API mode)" : "Agent/MCP Tools"}
-            tooltip={isMainAgentAcpMode
-              ? "Main Agent Mode is ACP. This provider applies when running in API mode."
-              : "Choose which provider to use for agent mode and MCP tool calling."}
-            value={configQuery.data.mcpToolsProviderId || "openai"}
-            onChange={(value) => saveConfig({ mcpToolsProviderId: value as CHAT_PROVIDER_ID })}
-            providers={CHAT_PROVIDERS}
-            icon={Bot}
-          />
-
-          <ProviderSelector
-            label="Text-to-Speech (TTS)"
-            tooltip="Choose which provider to use for text-to-speech generation."
-            value={configQuery.data.ttsProviderId || "openai"}
-            onChange={(value) => saveConfig({ ttsProviderId: value as TTS_PROVIDER_ID })}
-            providers={TTS_PROVIDERS}
-            icon={Volume2}
-          />
-        </ControlGroup>
+        </div>
 
         {/* OpenAI Compatible Provider Section */}
         <div className={`rounded-lg border ${activeProviders.openai.length > 0 ? 'border-primary/30 bg-primary/5' : ''}`}>
@@ -1130,75 +852,14 @@ export function Component() {
             <div id="openai-provider-content" className="divide-y border-t">
               {activeProviders.openai.length === 0 && (
                 <p className="px-3 py-1.5 text-[11px] text-muted-foreground">
-                  Not selected above. You can still manage presets here.
+                  OpenAI-compatible presets are selected from the Models page.
                 </p>
               )}
 
               <div className="px-3 py-2">
-                <ModelPresetManager />
-                <p className="text-xs text-muted-foreground mt-3">
-                  Create presets with individual API keys for different providers (OpenRouter, Together AI, etc.)
+                <p className="text-sm text-muted-foreground">
+                  OpenAI-compatible presets, agent models, and transcript cleanup models are now managed on the Models page.
                 </p>
-              </div>
-
-              {/* OpenAI TTS - only shown for native OpenAI preset */}
-              <div className="border-t mt-3 pt-3">
-                <div className="px-3 pb-2">
-                  <span className="text-sm font-medium">Text-to-Speech</span>
-                  <p className="text-xs text-muted-foreground">Only available with native OpenAI API</p>
-                </div>
-                <Control label={<ControlLabel label="TTS Model" tooltip="Choose the OpenAI TTS model to use" />} className="px-3">
-                  <Select
-                    value={configQuery.data.openaiTtsModel || "tts-1"}
-                    onValueChange={(value) => saveConfig({ openaiTtsModel: value as "tts-1" | "tts-1-hd" })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {OPENAI_TTS_MODELS.map((model) => (
-                        <SelectItem key={model.value} value={model.value}>
-                          {model.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Control>
-
-                <Control label={<ControlLabel label="TTS Voice" tooltip="Choose the voice for OpenAI TTS" />} className="px-3">
-                  <Select
-                    value={configQuery.data.openaiTtsVoice || "alloy"}
-                    onValueChange={(value) => saveConfig({ openaiTtsVoice: value as "alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer" })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {OPENAI_TTS_VOICES.map((voice) => (
-                        <SelectItem key={voice.value} value={voice.value}>
-                          {voice.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Control>
-
-                <Control label={<ControlLabel label="TTS Speed" tooltip="Speech speed (0.25 to 4.0)" />} className="px-3">
-                  <Input
-                    type="number"
-                    min="0.25"
-                    max="4.0"
-                    step="0.25"
-                    placeholder="1.0"
-                    defaultValue={configQuery.data.openaiTtsSpeed?.toString()}
-                    onChange={(e) => {
-                      const speed = parseFloat(e.currentTarget.value)
-                      if (!isNaN(speed) && speed >= 0.25 && speed <= 4.0) {
-                        saveConfig({ openaiTtsSpeed: speed })
-                      }
-                    }}
-                  />
-                </Control>
               </div>
             </div>
           )}
@@ -1242,66 +903,9 @@ export function Component() {
                   placeholder: "https://api.groq.com/openai/v1",
                 })}
 
-                <div className="px-3 py-2">
-                  <ProviderModelSelector
-                    providerId="groq"
-                    mcpModel={configQuery.data.mcpToolsGroqModel}
-                    transcriptModel={configQuery.data.transcriptPostProcessingGroqModel}
-                    onMcpModelChange={(value) => saveConfig({ mcpToolsGroqModel: value })}
-                    onTranscriptModelChange={(value) => saveConfig({ transcriptPostProcessingGroqModel: value })}
-                    showMcpModel={true}
-                    showTranscriptModel={true}
-                  />
-                </div>
-
-                {/* Groq TTS */}
-                <div className="border-t mt-3 pt-3">
-                  <div className="px-3 pb-2">
-                    <span className="text-sm font-medium">Text-to-Speech</span>
-                  </div>
-                  <Control label={<ControlLabel label="TTS Model" tooltip="Choose the Groq TTS model to use" />} className="px-3">
-                    <Select
-                      value={configQuery.data.groqTtsModel || "canopylabs/orpheus-v1-english"}
-                      onValueChange={(value) => {
-                        // Reset voice to appropriate default when model changes
-                        const defaultVoice = value === "canopylabs/orpheus-arabic-saudi" ? "fahad" : "troy"
-                        saveConfig({
-                          groqTtsModel: value as "canopylabs/orpheus-v1-english" | "canopylabs/orpheus-arabic-saudi",
-                          groqTtsVoice: defaultVoice
-                        })
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {GROQ_TTS_MODELS.map((model) => (
-                          <SelectItem key={model.value} value={model.value}>
-                            {model.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Control>
-
-                  <Control label={<ControlLabel label="TTS Voice" tooltip="Choose the voice for Groq TTS" />} className="px-3">
-                    <Select
-                      value={configQuery.data.groqTtsVoice || (configQuery.data.groqTtsModel === "canopylabs/orpheus-arabic-saudi" ? "fahad" : "troy")}
-                      onValueChange={(value) => saveConfig({ groqTtsVoice: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(configQuery.data.groqTtsModel === "canopylabs/orpheus-arabic-saudi" ? GROQ_TTS_VOICES_ARABIC : GROQ_TTS_VOICES_ENGLISH).map((voice) => (
-                          <SelectItem key={voice.value} value={voice.value}>
-                            {voice.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Control>
-                </div>
+                <p className="px-3 py-1.5 text-[11px] text-muted-foreground border-t">
+                  Groq model selection now lives on the Models page.
+                </p>
               </div>
             )}
           </div>
@@ -1345,59 +949,9 @@ export function Component() {
                   placeholder: "https://generativelanguage.googleapis.com",
                 })}
 
-                <div className="px-3 py-2">
-                  <ProviderModelSelector
-                    providerId="gemini"
-                    mcpModel={configQuery.data.mcpToolsGeminiModel}
-                    transcriptModel={configQuery.data.transcriptPostProcessingGeminiModel}
-                    onMcpModelChange={(value) => saveConfig({ mcpToolsGeminiModel: value })}
-                    onTranscriptModelChange={(value) => saveConfig({ transcriptPostProcessingGeminiModel: value })}
-                    showMcpModel={true}
-                    showTranscriptModel={true}
-                  />
-                </div>
-
-                {/* Gemini TTS */}
-                <div className="border-t mt-3 pt-3">
-                  <div className="px-3 pb-2">
-                    <span className="text-sm font-medium">Text-to-Speech</span>
-                  </div>
-                  <Control label={<ControlLabel label="TTS Model" tooltip="Choose the Gemini TTS model to use" />} className="px-3">
-                    <Select
-                      value={configQuery.data.geminiTtsModel || "gemini-2.5-flash-preview-tts"}
-                      onValueChange={(value) => saveConfig({ geminiTtsModel: value as "gemini-2.5-flash-preview-tts" | "gemini-2.5-pro-preview-tts" })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {GEMINI_TTS_MODELS.map((model) => (
-                          <SelectItem key={model.value} value={model.value}>
-                            {model.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Control>
-
-                  <Control label={<ControlLabel label="TTS Voice" tooltip="Choose the voice for Gemini TTS" />} className="px-3">
-                    <Select
-                      value={configQuery.data.geminiTtsVoice || "Kore"}
-                      onValueChange={(value) => saveConfig({ geminiTtsVoice: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {GEMINI_TTS_VOICES.map((voice) => (
-                          <SelectItem key={voice.value} value={voice.value}>
-                            {voice.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Control>
-                </div>
+                <p className="px-3 py-1.5 text-[11px] text-muted-foreground border-t">
+                  Gemini model selection now lives on the Models page.
+                </p>
               </div>
             )}
           </div>
@@ -1423,7 +977,6 @@ export function Component() {
             onToggleCollapse={() => saveConfig({ providerSectionCollapsedKitten: !(configQuery.data.providerSectionCollapsedKitten ?? true) })}
             usageBadges={activeProviders.kitten}
             voiceId={configQuery.data.kittenVoiceId ?? 0}
-            onVoiceIdChange={(value) => saveConfig({ kittenVoiceId: value })}
           />
         )}
 
@@ -1435,13 +988,9 @@ export function Component() {
             onToggleCollapse={() => saveConfig({ providerSectionCollapsedSupertonic: !(configQuery.data.providerSectionCollapsedSupertonic ?? true) } as Partial<Config>)}
             usageBadges={activeProviders.supertonic}
             voice={configQuery.data.supertonicVoice ?? "M1"}
-            onVoiceChange={(value) => saveConfig({ supertonicVoice: value })}
             language={configQuery.data.supertonicLanguage ?? "en"}
-            onLanguageChange={(value) => saveConfig({ supertonicLanguage: value })}
             speed={configQuery.data.supertonicSpeed ?? 1.05}
-            onSpeedChange={(value) => saveConfig({ supertonicSpeed: value })}
             steps={configQuery.data.supertonicSteps ?? 5}
-            onStepsChange={(value) => saveConfig({ supertonicSteps: value })}
           />
         )}
 
@@ -1481,66 +1030,9 @@ export function Component() {
                   placeholder: "https://api.groq.com/openai/v1",
                 })}
 
-                <div className="px-3 py-2">
-                  <ProviderModelSelector
-                    providerId="groq"
-                    mcpModel={configQuery.data.mcpToolsGroqModel}
-                    transcriptModel={configQuery.data.transcriptPostProcessingGroqModel}
-                    onMcpModelChange={(value) => saveConfig({ mcpToolsGroqModel: value })}
-                    onTranscriptModelChange={(value) => saveConfig({ transcriptPostProcessingGroqModel: value })}
-                    showMcpModel={true}
-                    showTranscriptModel={true}
-                  />
-                </div>
-
-                {/* Groq TTS */}
-                <div className="border-t mt-3 pt-3">
-                  <div className="px-3 pb-2">
-                    <span className="text-sm font-medium">Text-to-Speech</span>
-                  </div>
-                  <Control label={<ControlLabel label="TTS Model" tooltip="Choose the Groq TTS model to use" />} className="px-3">
-                    <Select
-                      value={configQuery.data.groqTtsModel || "canopylabs/orpheus-v1-english"}
-                      onValueChange={(value) => {
-                        // Reset voice to appropriate default when model changes
-                        const defaultVoice = value === "canopylabs/orpheus-arabic-saudi" ? "fahad" : "troy"
-                        saveConfig({
-                          groqTtsModel: value as "canopylabs/orpheus-v1-english" | "canopylabs/orpheus-arabic-saudi",
-                          groqTtsVoice: defaultVoice
-                        })
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {GROQ_TTS_MODELS.map((model) => (
-                          <SelectItem key={model.value} value={model.value}>
-                            {model.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Control>
-
-                  <Control label={<ControlLabel label="TTS Voice" tooltip="Choose the voice for Groq TTS" />} className="px-3">
-                    <Select
-                      value={configQuery.data.groqTtsVoice || (configQuery.data.groqTtsModel === "canopylabs/orpheus-arabic-saudi" ? "fahad" : "troy")}
-                      onValueChange={(value) => saveConfig({ groqTtsVoice: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(configQuery.data.groqTtsModel === "canopylabs/orpheus-arabic-saudi" ? GROQ_TTS_VOICES_ARABIC : GROQ_TTS_VOICES_ENGLISH).map((voice) => (
-                          <SelectItem key={voice.value} value={voice.value}>
-                            {voice.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Control>
-                </div>
+                <p className="px-3 py-1.5 text-[11px] text-muted-foreground border-t">
+                  Groq model selection now lives on the Models page.
+                </p>
               </div>
             )}
           </div>
@@ -1582,59 +1074,9 @@ export function Component() {
                   placeholder: "https://generativelanguage.googleapis.com",
                 })}
 
-                <div className="px-3 py-2">
-                  <ProviderModelSelector
-                    providerId="gemini"
-                    mcpModel={configQuery.data.mcpToolsGeminiModel}
-                    transcriptModel={configQuery.data.transcriptPostProcessingGeminiModel}
-                    onMcpModelChange={(value) => saveConfig({ mcpToolsGeminiModel: value })}
-                    onTranscriptModelChange={(value) => saveConfig({ transcriptPostProcessingGeminiModel: value })}
-                    showMcpModel={true}
-                    showTranscriptModel={true}
-                  />
-                </div>
-
-                {/* Gemini TTS */}
-                <div className="border-t mt-3 pt-3">
-                  <div className="px-3 pb-2">
-                    <span className="text-sm font-medium">Text-to-Speech</span>
-                  </div>
-                  <Control label={<ControlLabel label="TTS Model" tooltip="Choose the Gemini TTS model to use" />} className="px-3">
-                    <Select
-                      value={configQuery.data.geminiTtsModel || "gemini-2.5-flash-preview-tts"}
-                      onValueChange={(value) => saveConfig({ geminiTtsModel: value as "gemini-2.5-flash-preview-tts" | "gemini-2.5-pro-preview-tts" })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {GEMINI_TTS_MODELS.map((model) => (
-                          <SelectItem key={model.value} value={model.value}>
-                            {model.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Control>
-
-                  <Control label={<ControlLabel label="TTS Voice" tooltip="Choose the voice for Gemini TTS" />} className="px-3">
-                    <Select
-                      value={configQuery.data.geminiTtsVoice || "Kore"}
-                      onValueChange={(value) => saveConfig({ geminiTtsVoice: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {GEMINI_TTS_VOICES.map((voice) => (
-                          <SelectItem key={voice.value} value={voice.value}>
-                            {voice.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Control>
-                </div>
+                <p className="px-3 py-1.5 text-[11px] text-muted-foreground border-t">
+                  Gemini model selection now lives on the Models page.
+                </p>
               </div>
             )}
           </div>
@@ -1660,7 +1102,6 @@ export function Component() {
             onToggleCollapse={() => saveConfig({ providerSectionCollapsedKitten: !(configQuery.data.providerSectionCollapsedKitten ?? true) })}
             usageBadges={activeProviders.kitten}
             voiceId={configQuery.data.kittenVoiceId ?? 0}
-            onVoiceIdChange={(value) => saveConfig({ kittenVoiceId: value })}
           />
         )}
 
@@ -1672,205 +1113,12 @@ export function Component() {
             onToggleCollapse={() => saveConfig({ providerSectionCollapsedSupertonic: !(configQuery.data.providerSectionCollapsedSupertonic ?? true) } as Partial<Config>)}
             usageBadges={activeProviders.supertonic}
             voice={configQuery.data.supertonicVoice ?? "M1"}
-            onVoiceChange={(value) => saveConfig({ supertonicVoice: value })}
             language={configQuery.data.supertonicLanguage ?? "en"}
-            onLanguageChange={(value) => saveConfig({ supertonicLanguage: value })}
             speed={configQuery.data.supertonicSpeed ?? 1.05}
-            onSpeedChange={(value) => saveConfig({ supertonicSpeed: value })}
             steps={configQuery.data.supertonicSteps ?? 5}
-            onStepsChange={(value) => saveConfig({ supertonicSteps: value })}
           />
         )}
 
-        {/* Dual-Model Agent Mode Section */}
-        <div className={`rounded-lg border ${dualModelEnabled ? 'border-primary/30 bg-primary/5' : ''}`}>
-          <button
-            type="button"
-            className="px-3 py-2 flex items-center justify-between w-full hover:bg-muted/30 transition-colors cursor-pointer"
-            onClick={() => saveConfig({ dualModelSectionCollapsed: !config.dualModelSectionCollapsed })}
-            aria-expanded={!config.dualModelSectionCollapsed}
-            aria-controls="dual-model-content"
-          >
-            <span className="flex items-center gap-2 text-sm font-semibold">
-              {config.dualModelSectionCollapsed ? (
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              ) : (
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
-              )}
-              <Brain className="h-4 w-4" />
-              Dual-Model Summarization
-              {dualModelEnabled && (
-                <CheckCircle2 className="h-4 w-4 text-primary" />
-              )}
-            </span>
-          </button>
-          {!config.dualModelSectionCollapsed && (
-            <div id="dual-model-content" className="divide-y border-t">
-              <p className="px-3 py-1.5 text-[11px] text-muted-foreground">
-                Use a separate model for UI and memory summaries.
-              </p>
-
-              <Control
-                label={
-                  <ControlLabel
-                    label="Enable Summarization"
-                    tooltip="When enabled, a separate model will generate summaries of each agent step"
-                  />
-                }
-                className="px-3"
-              >
-                <Switch
-                  checked={dualModelEnabled}
-                  onCheckedChange={(checked) => saveConfig({ dualModelEnabled: checked })}
-                />
-              </Control>
-
-              {dualModelEnabled && (
-                <>
-                  {/* Strong Model Configuration */}
-                  <div className="px-3 py-3 space-y-3">
-                    <div className="flex items-center gap-2 text-sm font-medium">
-                      <Zap className="h-4 w-4 text-yellow-500" />
-                      Strong Model (Planning)
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Primary model for reasoning and tool calls. Uses current agent model if not set.
-                    </p>
-                    <div className="space-y-2">
-                      <Control
-                        label={<ControlLabel label="Preset" tooltip="Select which model preset to use" />}
-                      >
-                        <Select
-                          value={strongPresetId}
-                          onValueChange={(value) => saveConfig({ dualModelStrongPresetId: value })}
-
-                        >
-                          <SelectTrigger className="w-full sm:w-[200px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {allPresets.map((preset) => (
-                              <SelectItem key={preset.id} value={preset.id}>
-                                {preset.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </Control>
-                      {strongPreset && (
-                        <Control
-                          label={<ControlLabel label="Model" tooltip="Select the model" />}
-                        >
-                          <PresetModelSelector
-                            presetId={strongPresetId}
-                            baseUrl={strongPreset.baseUrl}
-                            apiKey={strongPreset.apiKey}
-                            value={config.dualModelStrongModelName || ""}
-                            onValueChange={(value) => saveConfig({ dualModelStrongModelName: value })}
-                            label="Strong Model"
-                            placeholder="Select model..."
-                          />
-                        </Control>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Weak Model Configuration */}
-                  <div className="px-3 py-3 space-y-3">
-                    <div className="flex items-center gap-2 text-sm font-medium">
-                      <BookOpen className="h-4 w-4 text-blue-500" />
-                      Weak Model (Summarization)
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Faster, cheaper model for summarizing agent steps.
-                    </p>
-                    <div className="space-y-2">
-                      <Control
-                        label={<ControlLabel label="Preset" tooltip="Select which model preset to use" />}
-                      >
-                        <Select
-                          value={weakPresetId}
-                          onValueChange={(value) => saveConfig({ dualModelWeakPresetId: value })}
-                        >
-                          <SelectTrigger className="w-full sm:w-[200px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {allPresets.map((preset) => (
-                              <SelectItem key={preset.id} value={preset.id}>
-                                {preset.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </Control>
-                      {weakPreset && (
-                        <Control
-                          label={<ControlLabel label="Model" tooltip="Select the model" />}
-                        >
-                          <PresetModelSelector
-                            presetId={weakPresetId}
-                            baseUrl={weakPreset.baseUrl}
-                            apiKey={weakPreset.apiKey}
-                            value={config.dualModelWeakModelName || ""}
-                            onValueChange={(value) => saveConfig({ dualModelWeakModelName: value })}
-                            label="Weak Model"
-                            placeholder="Select model..."
-                          />
-                        </Control>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Summarization Settings */}
-                  <div className="px-3 py-3 space-y-3">
-                    <div className="flex items-center gap-2 text-sm font-medium">
-                      <Settings2 className="h-4 w-4" />
-                      Summarization Settings
-                    </div>
-                    <Control
-                      label={<ControlLabel label="Frequency" tooltip="How often to generate summaries" />}
-                    >
-                      <Select
-                        value={config.dualModelSummarizationFrequency || "every_response"}
-                        onValueChange={(value) =>
-                          saveConfig({ dualModelSummarizationFrequency: value as "every_response" | "major_steps_only" })
-                        }
-                      >
-                        <SelectTrigger className="w-full sm:w-[180px]">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="every_response">Every Response</SelectItem>
-                          <SelectItem value="major_steps_only">Major Steps Only</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </Control>
-                    <Control
-                      label={<ControlLabel label="Detail Level" tooltip="How detailed the summaries should be" />}
-                    >
-                      <Select
-                        value={config.dualModelSummaryDetailLevel || "compact"}
-                        onValueChange={(value) =>
-                          saveConfig({ dualModelSummaryDetailLevel: value as "compact" | "detailed" })
-                        }
-                      >
-                        <SelectTrigger className="w-full sm:w-[180px]">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="compact">Compact</SelectItem>
-                          <SelectItem value="detailed">Detailed</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </Control>
-
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-        </div>
       </div>
     </div>
   )

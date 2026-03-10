@@ -212,6 +212,11 @@ const getConfig = (): LoadedConfig => {
     // Theme preference defaults
     themePreference: "system",
 
+	    // Speech-to-Text defaults
+	    sttProviderId: "openai",
+	    openaiSttModel: "whisper-1",
+	    groqSttModel: "whisper-large-v3-turbo",
+
     // Parakeet STT defaults
     parakeetNumThreads: 2,
     parakeetModelDownloaded: false,
