@@ -10,10 +10,7 @@ describe('resolveQrScannerActivation', () => {
       hasPermission: false,
       isWeb: true,
       requestPermission,
-    })).resolves.toEqual({
-      errorMessage: 'Camera access is required to scan a QR code. Allow camera access in your browser and try scanning again.',
-      shouldShowScanner: false,
-    });
+    })).resolves.toBe('Camera access is required to scan a QR code. Allow camera access in your browser and try scanning again.');
     expect(requestPermission).toHaveBeenCalledTimes(1);
   });
 
@@ -24,10 +21,7 @@ describe('resolveQrScannerActivation', () => {
       hasPermission: false,
       isWeb: true,
       requestPermission,
-    })).resolves.toEqual({
-      errorMessage: 'Camera access is blocked in this browser. Allow camera access in your browser site settings and try scanning again.',
-      shouldShowScanner: false,
-    });
+    })).resolves.toBe('Camera access is blocked in this browser. Allow camera access in your browser site settings and try scanning again.');
   });
 
   it('opens the scanner immediately when permission is already granted', async () => {
@@ -37,10 +31,7 @@ describe('resolveQrScannerActivation', () => {
       hasPermission: true,
       isWeb: true,
       requestPermission,
-    })).resolves.toEqual({
-      errorMessage: null,
-      shouldShowScanner: true,
-    });
+    })).resolves.toBeNull();
     expect(requestPermission).not.toHaveBeenCalled();
   });
 });

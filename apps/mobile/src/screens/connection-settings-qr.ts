@@ -35,26 +35,17 @@ export async function resolveQrScannerActivation({
   hasPermission,
   isWeb,
   requestPermission,
-}: ResolveQrScannerActivationOptions): Promise<{
-  errorMessage: string | null;
-  shouldShowScanner: boolean;
-}> {
+}: ResolveQrScannerActivationOptions): Promise<string | null> {
   if (!hasPermission) {
     const result = await requestPermission();
 
     if (!result.granted) {
-      return {
-        errorMessage: createCameraPermissionDeniedMessage({
-          isWeb,
-          canAskAgain: result.canAskAgain,
-        }),
-        shouldShowScanner: false,
-      };
+      return createCameraPermissionDeniedMessage({
+        isWeb,
+        canAskAgain: result.canAskAgain,
+      });
     }
   }
 
-  return {
-    errorMessage: null,
-    shouldShowScanner: true,
-  };
+  return null;
 }

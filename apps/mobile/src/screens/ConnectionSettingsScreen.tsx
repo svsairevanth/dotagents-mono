@@ -155,14 +155,14 @@ export default function ConnectionSettingsScreen({ navigation }: any) {
   const handleScanQR = async () => {
     setConnectionError(null);
 
-    const scanActivation = await resolveQrScannerActivation({
+    const qrPermissionError = await resolveQrScannerActivation({
       hasPermission: permission?.granted === true,
       isWeb: Platform.OS === 'web',
       requestPermission,
     });
 
-    if (scanActivation.errorMessage) {
-      setConnectionError(scanActivation.errorMessage);
+    if (qrPermissionError) {
+      setConnectionError(qrPermissionError);
       return;
     }
 
