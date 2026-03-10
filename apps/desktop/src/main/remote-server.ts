@@ -1315,6 +1315,8 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
         langfuseBaseUrl: cfg.langfuseBaseUrl ?? "",
         // STT/TTS/Post-Processing Provider settings
         sttProviderId: cfg.sttProviderId || "openai",
+        openaiSttModel: cfg.openaiSttModel || "whisper-1",
+        groqSttModel: cfg.groqSttModel || "whisper-large-v3-turbo",
         ttsProviderId: cfg.ttsProviderId || "openai",
         transcriptPostProcessingProviderId: cfg.transcriptPostProcessingProviderId || "openai",
         transcriptPostProcessingOpenaiModel: cfg.transcriptPostProcessingOpenaiModel || "",
@@ -1324,7 +1326,7 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
         mainAgentName: cfg.mainAgentName || "",
         acpInjectBuiltinTools: cfg.acpInjectBuiltinTools !== false,
         // TTS voice/model per provider
-        openaiTtsModel: cfg.openaiTtsModel || "tts-1",
+        openaiTtsModel: cfg.openaiTtsModel || "gpt-4o-mini-tts",
         openaiTtsVoice: cfg.openaiTtsVoice || "alloy",
         openaiTtsSpeed: cfg.openaiTtsSpeed ?? 1.0,
         groqTtsModel: cfg.groqTtsModel || "canopylabs/orpheus-v1-english",
@@ -1486,6 +1488,12 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
       if (typeof body.sttProviderId === "string" && validSttProviders.includes(body.sttProviderId)) {
         updates.sttProviderId = body.sttProviderId as "openai" | "groq" | "parakeet"
       }
+      if (typeof body.openaiSttModel === "string") {
+        updates.openaiSttModel = body.openaiSttModel
+      }
+      if (typeof body.groqSttModel === "string") {
+        updates.groqSttModel = body.groqSttModel
+      }
       // TTS Provider
       const validTtsProviders = ["openai", "groq", "gemini", "kitten", "supertonic"]
       if (typeof body.ttsProviderId === "string" && validTtsProviders.includes(body.ttsProviderId)) {
@@ -1514,7 +1522,7 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
       }
       // OpenAI TTS settings
       if (typeof body.openaiTtsModel === "string") {
-        updates.openaiTtsModel = body.openaiTtsModel as "tts-1" | "tts-1-hd"
+        updates.openaiTtsModel = body.openaiTtsModel as "gpt-4o-mini-tts" | "tts-1" | "tts-1-hd"
       }
       if (typeof body.openaiTtsVoice === "string") {
         updates.openaiTtsVoice = body.openaiTtsVoice as "alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer"

@@ -24,7 +24,13 @@ import { Plus, Pencil, Trash2, Key, Globe, Bot, FileText, Settings2 } from "luci
 import { getBuiltInModelPresets, DEFAULT_MODEL_PRESET_ID } from "@shared/index"
 import { PresetModelSelector } from "./preset-model-selector"
 
-export function ModelPresetManager() {
+export function ModelPresetManager({
+  showAgentModel = true,
+  showTranscriptCleanupModel = true,
+}: {
+  showAgentModel?: boolean
+  showTranscriptCleanupModel?: boolean
+} = {}) {
   const configQuery = useConfigQuery()
   const saveConfigMutation = useSaveConfigMutation()
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
@@ -252,7 +258,7 @@ export function ModelPresetManager() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <Label>Model Provider Preset</Label>
+        <Label>OpenAI-Compatible Preset</Label>
         <div className="flex gap-2">
           {currentPreset && (
             <Button
@@ -305,28 +311,32 @@ export function ModelPresetManager() {
 
           {/* Inline model selectors - changes are auto-saved to preset */}
           <div className="space-y-3">
-            <PresetModelSelector
-              presetId={currentPreset.id}
-              baseUrl={currentPreset.baseUrl}
-              apiKey={currentPreset.apiKey}
-              value={config?.mcpToolsOpenaiModel || ""}
-              onValueChange={(value) => {
-                saveModelWithPreset('mcpToolsModel', 'mcpToolsOpenaiModel', value)
-              }}
-              label="Agent/MCP Tools Model"
-              placeholder="Select model"
-            />
-            <PresetModelSelector
-              presetId={currentPreset.id}
-              baseUrl={currentPreset.baseUrl}
-              apiKey={currentPreset.apiKey}
-              value={config?.transcriptPostProcessingOpenaiModel || ""}
-              onValueChange={(value) => {
-                saveModelWithPreset('transcriptProcessingModel', 'transcriptPostProcessingOpenaiModel', value)
-              }}
-              label="Transcript Processing Model"
-              placeholder="Select model"
-            />
+            {showAgentModel && (
+              <PresetModelSelector
+                presetId={currentPreset.id}
+                baseUrl={currentPreset.baseUrl}
+                apiKey={currentPreset.apiKey}
+                value={config?.mcpToolsOpenaiModel || ""}
+                onValueChange={(value) => {
+                  saveModelWithPreset('mcpToolsModel', 'mcpToolsOpenaiModel', value)
+                }}
+                label="Agent/MCP Tools Model"
+                placeholder="Select model"
+              />
+            )}
+            {showTranscriptCleanupModel && (
+              <PresetModelSelector
+                presetId={currentPreset.id}
+                baseUrl={currentPreset.baseUrl}
+                apiKey={currentPreset.apiKey}
+                value={config?.transcriptPostProcessingOpenaiModel || ""}
+                onValueChange={(value) => {
+                  saveModelWithPreset('transcriptProcessingModel', 'transcriptPostProcessingOpenaiModel', value)
+                }}
+                label="Transcript Cleanup Model"
+                placeholder="Select model"
+              />
+            )}
           </div>
 
           {!currentPreset.isBuiltIn && (
@@ -414,8 +424,8 @@ export function ModelPresetManager() {
                     onValueChange={(value) =>
                       setNewPreset({ ...newPreset, transcriptProcessingModel: value })
                     }
-                    label="Transcript Processing Model"
-                    placeholder="Select model for transcripts"
+                    label="Transcript Cleanup Model"
+                    placeholder="Select model for transcript cleanup"
                   />
 
                   <PresetModelSelector
@@ -526,8 +536,8 @@ export function ModelPresetManager() {
                     onValueChange={(value) =>
                       setEditingPreset({ ...editingPreset, transcriptProcessingModel: value })
                     }
-                    label="Transcript Processing Model"
-                    placeholder="Select model for transcripts"
+                    label="Transcript Cleanup Model"
+                    placeholder="Select model for transcript cleanup"
                   />
 
                   <PresetModelSelector

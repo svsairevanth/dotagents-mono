@@ -12,10 +12,63 @@ import { isDebugLLM, logLLM } from "./debug"
 
 export type ProviderType = "openai" | "groq" | "gemini"
 
+const DEFAULT_CHAT_MODELS = {
+  openai: {
+    mcp: "gpt-4.1-mini",
+    transcript: "gpt-4.1-mini",
+  },
+  groq: {
+    mcp: "openai/gpt-oss-120b",
+    transcript: "openai/gpt-oss-120b",
+  },
+  gemini: {
+    mcp: "gemini-2.5-flash",
+    transcript: "gemini-2.5-flash",
+  },
+} as const
+
+const TRANSCRIPTION_ONLY_MODEL_PATTERNS = {
+  openai: ["gpt-4o-transcribe", "gpt-4o-mini-transcribe", "whisper-1"],
+  groq: ["whisper-large-v3", "whisper-large-v3-turbo", "distil-whisper-large-v3-en"],
+} as const
+
 interface ProviderConfig {
   apiKey: string
   baseURL?: string
   model: string
+}
+
+function isTranscriptionOnlyModel(providerId: ProviderType, model: string): boolean {
+  const patterns = TRANSCRIPTION_ONLY_MODEL_PATTERNS[providerId as keyof typeof TRANSCRIPTION_ONLY_MODEL_PATTERNS]
+  if (!patterns) {
+    return false
+  }
+
+  const normalizedModel = model.trim().toLowerCase()
+  return patterns.some(pattern => normalizedModel.includes(pattern))
+}
+
+function sanitizeChatModelSelection(
+  providerId: ProviderType,
+  model: string,
+  modelContext: "mcp" | "transcript",
+): string {
+  if (!isTranscriptionOnlyModel(providerId, model)) {
+    return model
+  }
+
+  const fallbackModel = DEFAULT_CHAT_MODELS[providerId][modelContext]
+
+  if (isDebugLLM()) {
+    logLLM("Replacing STT-only model configured for chat/text usage", {
+      providerId,
+      modelContext,
+      invalidModel: model,
+      fallbackModel,
+    })
+  }
+
+  return fallbackModel
 }
 
 /**
@@ -32,21 +85,26 @@ function getProviderConfig(
       return {
         apiKey: config.openaiApiKey || "",
         baseURL: config.openaiBaseUrl || undefined,
-        model:
+        model: sanitizeChatModelSelection(
+          "openai",
           modelContext === "mcp"
-            ? config.mcpToolsOpenaiModel || "gpt-4o-mini"
-            : config.transcriptPostProcessingOpenaiModel || "gpt-4o-mini",
+            ? config.mcpToolsOpenaiModel || DEFAULT_CHAT_MODELS.openai.mcp
+            : config.transcriptPostProcessingOpenaiModel || DEFAULT_CHAT_MODELS.openai.transcript,
+          modelContext,
+        ),
       }
 
     case "groq":
       return {
         apiKey: config.groqApiKey || "",
         baseURL: config.groqBaseUrl || "https://api.groq.com/openai/v1",
-        model:
+        model: sanitizeChatModelSelection(
+          "groq",
           modelContext === "mcp"
-            ? config.mcpToolsGroqModel || "llama-3.3-70b-versatile"
-            : config.transcriptPostProcessingGroqModel ||
-              "llama-3.1-70b-versatile",
+            ? config.mcpToolsGroqModel || DEFAULT_CHAT_MODELS.groq.mcp
+            : config.transcriptPostProcessingGroqModel || DEFAULT_CHAT_MODELS.groq.transcript,
+          modelContext,
+        ),
       }
 
     case "gemini":
@@ -55,9 +113,8 @@ function getProviderConfig(
         baseURL: config.geminiBaseUrl || undefined,
         model:
           modelContext === "mcp"
-            ? config.mcpToolsGeminiModel || "gemini-1.5-flash-002"
-            : config.transcriptPostProcessingGeminiModel ||
-              "gemini-1.5-flash-002",
+            ? config.mcpToolsGeminiModel || DEFAULT_CHAT_MODELS.gemini.mcp
+            : config.transcriptPostProcessingGeminiModel || DEFAULT_CHAT_MODELS.gemini.transcript,
       }
 
     default:

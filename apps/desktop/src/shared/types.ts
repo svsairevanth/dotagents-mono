@@ -477,6 +477,8 @@ export type ProfileModelConfig = {
   currentModelPresetId?: string
   // STT Provider settings
   sttProviderId?: "openai" | "groq" | "parakeet"
+  openaiSttModel?: string
+  groqSttModel?: string
   // Transcript Post-Processing settings
   transcriptPostProcessingProviderId?: "openai" | "groq" | "gemini"
   transcriptPostProcessingOpenaiModel?: string
@@ -1263,7 +1265,9 @@ export type Config = {
   // Speech-to-Text Language Configuration
   sttLanguage?: string
   openaiSttLanguage?: string
+  openaiSttModel?: string
   groqSttLanguage?: string
+  groqSttModel?: string
 
   // Transcription Preview - show live transcription while recording
   transcriptionPreviewEnabled?: boolean
@@ -1279,7 +1283,7 @@ export type Config = {
   ttsProviderId?: TTS_PROVIDER_ID
 
   // OpenAI TTS Configuration
-  openaiTtsModel?: "tts-1" | "tts-1-hd"
+  openaiTtsModel?: "gpt-4o-mini-tts" | "tts-1" | "tts-1-hd"
   openaiTtsVoice?: "alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer"
   openaiTtsSpeed?: number // 0.25 to 4.0
   openaiTtsResponseFormat?: "mp3" | "opus" | "aac" | "flac" | "wav" | "pcm"

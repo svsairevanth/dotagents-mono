@@ -129,7 +129,7 @@ function isValidModelConfig(config: unknown): boolean {
   }
   if (c.sttProviderId !== undefined && (typeof c.sttProviderId !== "string" || !VALID_STT_PROVIDER_IDS.includes(c.sttProviderId as string))) return false
   if (c.ttsProviderId !== undefined && (typeof c.ttsProviderId !== "string" || !VALID_TTS_PROVIDER_IDS.includes(c.ttsProviderId as string))) return false
-  for (const field of ["mcpToolsOpenaiModel", "mcpToolsGroqModel", "mcpToolsGeminiModel", "currentModelPresetId", "transcriptPostProcessingOpenaiModel", "transcriptPostProcessingGroqModel", "transcriptPostProcessingGeminiModel"]) {
+  for (const field of ["mcpToolsOpenaiModel", "mcpToolsGroqModel", "mcpToolsGeminiModel", "currentModelPresetId", "openaiSttModel", "groqSttModel", "transcriptPostProcessingOpenaiModel", "transcriptPostProcessingGroqModel", "transcriptPostProcessingGeminiModel"]) {
     if (c[field] !== undefined && typeof c[field] !== "string") return false
   }
   return true
@@ -883,6 +883,8 @@ class AgentProfileService {
       ...(modelConfig.mcpToolsGeminiModel !== undefined && { mcpToolsGeminiModel: modelConfig.mcpToolsGeminiModel }),
       ...(modelConfig.currentModelPresetId !== undefined && { currentModelPresetId: modelConfig.currentModelPresetId }),
       ...(modelConfig.sttProviderId !== undefined && { sttProviderId: modelConfig.sttProviderId }),
+      ...(modelConfig.openaiSttModel !== undefined && { openaiSttModel: modelConfig.openaiSttModel }),
+      ...(modelConfig.groqSttModel !== undefined && { groqSttModel: modelConfig.groqSttModel }),
       ...(modelConfig.transcriptPostProcessingProviderId !== undefined && { transcriptPostProcessingProviderId: modelConfig.transcriptPostProcessingProviderId }),
       ...(modelConfig.transcriptPostProcessingOpenaiModel !== undefined && { transcriptPostProcessingOpenaiModel: modelConfig.transcriptPostProcessingOpenaiModel }),
       ...(modelConfig.transcriptPostProcessingGroqModel !== undefined && { transcriptPostProcessingGroqModel: modelConfig.transcriptPostProcessingGroqModel }),

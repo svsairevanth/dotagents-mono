@@ -11,10 +11,23 @@ test('desktop provider model selector uses shorter labels and text-first actions
   assert.match(modelSelectorSource, /\{useCustomInput \? "List" : "Custom"\}/)
   assert.match(modelSelectorSource, /\{isLoading \? "Loading\.\.\." : "Refresh"\}/)
   assert.match(modelSelectorSource, /label="Agent\/MCP model"/)
-  assert.match(modelSelectorSource, /label="Transcript model"/)
+  assert.match(modelSelectorSource, /label="Transcript Cleanup model"/)
   assert.doesNotMatch(modelSelectorSource, /title=\{useCustomInput \? "Switch to model list" : "Use custom model name"\}/)
   assert.doesNotMatch(modelSelectorSource, /<Edit3 className="h-3 w-3" \/>/)
   assert.doesNotMatch(modelSelectorSource, /<RefreshCw/)
+})
+
+test('desktop provider model selector keeps STT-only models out of chat model pickers', () => {
+  assert.match(modelSelectorSource, /allModels\.filter\(\(model\) => !model\.supportsTranscription\)/)
+  assert.match(modelSelectorSource, /label="Agent\/MCP model"[\s\S]*?excludeTranscriptionOnlyModels=\{true\}/)
+  assert.match(modelSelectorSource, /label="Transcript Cleanup model"[\s\S]*?excludeTranscriptionOnlyModels=\{true\}/)
+})
+
+test('desktop model selector can show only transcription-capable models for STT pickers', () => {
+  assert.match(modelSelectorSource, /allModels\.filter\(\(model\) => model\.supportsTranscription\)/)
+  assert.match(modelSelectorSource, /onlyTranscriptionModels\?: boolean/)
+  assert.match(modelSelectorSource, /label="Speech-to-Text model"/)
+  assert.match(modelSelectorSource, /showSttModel\?: boolean/)
 })
 
 test('desktop preset model selector keeps the refresh action explicit and wrap-safe', () => {

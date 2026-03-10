@@ -2,6 +2,7 @@ import { configStore } from "./config"
 import { diagnosticsService } from "./diagnostics"
 import { fetchModelsDevData, getModelFromModelsDevByProviderId } from "./models-dev-service"
 import type { ModelsDevModel } from "./models-dev-service"
+import { isKnownSttModel, KNOWN_STT_MODEL_IDS } from "../shared/stt-models"
 import type { ModelInfo, EnhancedModelInfo } from "../shared/types"
 
 // Re-export ModelInfo for backward compatibility
@@ -208,7 +209,13 @@ async function fetchOpenAIModels(
       (model) =>
         !model.id.includes(":") &&
         !model.id.includes("instruct") &&
-        (model.id.includes("gpt") || model.id.includes("o1")),
+        (
+          model.id.includes("gpt") ||
+          model.id.includes("o1") ||
+          KNOWN_STT_MODEL_IDS.openai.some(transcriptionModel =>
+            model.id.includes(transcriptionModel),
+          )
+        ),
     )
   } else if (isGenericOpenAICompatible) {
     filteredModels = data.data.filter(
@@ -220,10 +227,6 @@ async function fetchOpenAIModels(
       (model) => model.id && model.id.length > 0,
     )
   }
-
-  // Models that support speech-to-text transcription (OpenAI)
-  const openaiTranscriptionModels = ["whisper-1"]
-
   const finalModels = filteredModels
     .map((model) => ({
       id: model.id,
@@ -231,23 +234,25 @@ async function fetchOpenAIModels(
       description: model.description,
       context_length: model.context_length,
       created: model.created,
-      supportsTranscription: openaiTranscriptionModels.some(tm => model.id.includes(tm)),
+      supportsTranscription: isKnownSttModel("openai", model.id),
     }))
     .sort((a, b) => {
       if (isOpenRouter) {
         // For OpenRouter, sort by model family and capability
         const getOpenRouterPriority = (id: string) => {
           // Prioritize popular/capable models
-          if (id.includes("gpt-4o")) return 0
-          if (id.includes("claude-3.5-sonnet")) return 1
-          if (id.includes("claude-3-opus")) return 2
-          if (id.includes("gpt-4")) return 3
-          if (id.includes("claude")) return 4
-          if (id.includes("llama-3.1") && id.includes("405b")) return 5
-          if (id.includes("llama-3.1") && id.includes("70b")) return 6
-          if (id.includes("gemini-1.5-pro")) return 7
-          if (id.includes("o1")) return 8
-          if (id.includes("gpt-3.5")) return 9
+          if (id.includes("gpt-5")) return 0
+          if (id.includes("gpt-4.1")) return 1
+          if (id.includes("claude-sonnet-4")) return 2
+          if (id.includes("gemini-2.5-flash")) return 3
+          if (id.includes("gpt-oss-120b")) return 4
+          if (id.includes("gpt-4o")) return 5
+          if (id.includes("claude")) return 6
+          if (id.includes("llama-3.1") && id.includes("405b")) return 7
+          if (id.includes("llama-3.1") && id.includes("70b")) return 8
+          if (id.includes("gemini-1.5-pro")) return 9
+          if (id.includes("o1")) return 10
+          if (id.includes("gpt-3.5")) return 11
           return 10
         }
         const priorityDiff =
@@ -318,10 +323,6 @@ async function fetchGroqModels(
   }
 
   const data: ModelsResponse = await response.json()
-
-  // Models that support speech-to-text transcription
-  const transcriptionModels = ["whisper-large-v3", "whisper-large-v3-turbo", "distil-whisper-large-v3-en"]
-
   return data.data
     .map((model) => ({
       id: model.id,
@@ -329,7 +330,7 @@ async function fetchGroqModels(
       description: model.description,
       context_length: model.context_length,
       created: model.created,
-      supportsTranscription: transcriptionModels.some(tm => model.id.includes(tm)),
+      supportsTranscription: isKnownSttModel("groq", model.id),
     }))
     .sort((a, b) => a.name.localeCompare(b.name))
 }
@@ -391,6 +392,10 @@ function formatModelName(modelId: string): string {
   // Handle common model naming patterns
   const nameMap: Record<string, string> = {
     // OpenAI models
+    "gpt-5": "GPT-5",
+    "gpt-5-mini": "GPT-5 Mini",
+    "gpt-4.1": "GPT-4.1",
+    "gpt-4.1-mini": "GPT-4.1 Mini",
     "gpt-4o": "GPT-4o",
     "gpt-4o-mini": "GPT-4o Mini",
     "gpt-4-turbo": "GPT-4 Turbo",
@@ -400,15 +405,18 @@ function formatModelName(modelId: string): string {
     "o1-mini": "o1 Mini",
 
     // Anthropic Claude models (OpenRouter format)
+    "anthropic/claude-sonnet-4": "Claude Sonnet 4",
     "anthropic/claude-3.5-sonnet": "Claude 3.5 Sonnet",
     "anthropic/claude-3-opus": "Claude 3 Opus",
     "anthropic/claude-3-sonnet": "Claude 3 Sonnet",
     "anthropic/claude-3-haiku": "Claude 3 Haiku",
 
     // Google models
+    "google/gemini-2.5-flash": "Gemini 2.5 Flash",
     "google/gemini-1.5-pro": "Gemini 1.5 Pro",
     "google/gemini-1.5-flash": "Gemini 1.5 Flash",
     "google/gemini-1.0-pro": "Gemini 1.0 Pro",
+    "gemini-2.5-flash": "Gemini 2.5 Flash",
     "gemini-1.5-pro": "Gemini 1.5 Pro",
     "gemini-1.5-flash": "Gemini 1.5 Flash",
     "gemini-1.0-pro": "Gemini 1.0 Pro",
@@ -678,17 +686,17 @@ export async function fetchAvailableModels(
  */
 const HARDCODED_FALLBACK_MODELS: Record<string, ModelInfo[]> = {
   openai: [
-    { id: "gpt-4o-mini", name: "GPT-4o Mini" },
+    { id: "gpt-4.1-mini", name: "GPT-4.1 Mini" },
   ],
   openrouter: [
-    { id: "openai/gpt-4o-mini", name: "GPT-4o Mini (OpenAI)" },
-    { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet (Anthropic)" },
+    { id: "openai/gpt-4.1-mini", name: "GPT-4.1 Mini (OpenAI)" },
+    { id: "anthropic/claude-sonnet-4", name: "Claude Sonnet 4 (Anthropic)" },
   ],
   groq: [
-    { id: "llama-3.3-70b-versatile", name: "Llama 3.3 70B Versatile" },
+    { id: "openai/gpt-oss-120b", name: "GPT-OSS 120B (OpenAI)" },
   ],
   google: [
-    { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash" },
+    { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" },
   ],
 }
 

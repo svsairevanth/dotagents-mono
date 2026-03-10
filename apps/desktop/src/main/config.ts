@@ -213,6 +213,11 @@ const getConfig = (): LoadedConfig => {
     // Theme preference defaults
     themePreference: "system",
 
+	    // Speech-to-Text defaults
+	    sttProviderId: "openai",
+	    openaiSttModel: "whisper-1",
+	    groqSttModel: "whisper-large-v3-turbo",
+
     // Parakeet STT defaults
     parakeetNumThreads: 2,
     parakeetModelDownloaded: false,
@@ -232,7 +237,7 @@ const getConfig = (): LoadedConfig => {
     // LLM-based TTS preprocessing (off by default - uses regex for fast/free processing)
     ttsUseLLMPreprocessing: false,
     // OpenAI TTS defaults
-    openaiTtsModel: "tts-1",
+    openaiTtsModel: "gpt-4o-mini-tts",
     openaiTtsVoice: "alloy",
     openaiTtsSpeed: 1.0,
     openaiTtsResponseFormat: "mp3",

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import {
   Select,
   SelectContent,
@@ -22,6 +22,8 @@ interface ModelSelectorProps {
   placeholder?: string
   className?: string
   disabled?: boolean
+  excludeTranscriptionOnlyModels?: boolean
+  onlyTranscriptionModels?: boolean
 }
 
 export function ModelSelector({
@@ -32,6 +34,8 @@ export function ModelSelector({
   placeholder,
   className,
   disabled = false,
+  excludeTranscriptionOnlyModels = false,
+  onlyTranscriptionModels = false,
 }: ModelSelectorProps) {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
@@ -66,24 +70,6 @@ export function ModelSelector({
       setIsRefreshing(false)
     }
   }
-
-  // Auto-detect if current value is a custom model (not in list)
-  useEffect(() => {
-    if (value && modelsQuery.data && modelsQuery.data.length > 0 && !useCustomInput) {
-      const isInList = modelsQuery.data.some(model => model.id === value)
-      if (!isInList) {
-        setUseCustomInput(true)
-        logUI('[ModelSelector] Detected custom model:', value)
-      }
-    }
-  }, [value, modelsQuery.data])
-
-  useEffect(() => {
-    if (!value && modelsQuery.data && modelsQuery.data.length > 0 && !useCustomInput) {
-      logUI('[ModelSelector] Auto-selecting first model:', modelsQuery.data[0].id)
-      onValueChange(modelsQuery.data[0].id)
-    }
-  }, [value, modelsQuery.data, useCustomInput])
 
   useEffect(() => {
     if (useCustomInput) {
@@ -126,9 +112,38 @@ export function ModelSelector({
   const isLoading = modelsQuery.isLoading || isRefreshing
   const hasError = modelsQuery.isError && !modelsQuery.data
   const allModels = modelsQuery.data || []
+  const selectableModels = useMemo(() => {
+    if (onlyTranscriptionModels) {
+      return allModels.filter((model) => model.supportsTranscription)
+    }
+
+    if (excludeTranscriptionOnlyModels) {
+      return allModels.filter((model) => !model.supportsTranscription)
+    }
+
+    return allModels
+  }, [allModels, excludeTranscriptionOnlyModels, onlyTranscriptionModels])
+
+  // Auto-detect if current value is a custom model (not in list)
+  useEffect(() => {
+    if (value && allModels.length > 0 && !useCustomInput) {
+      const isInList = selectableModels.some(model => model.id === value)
+      if (!isInList) {
+        setUseCustomInput(true)
+        logUI('[ModelSelector] Detected custom model:', value)
+      }
+    }
+  }, [value, selectableModels, useCustomInput])
+
+  useEffect(() => {
+    if (!value && selectableModels.length > 0 && !useCustomInput) {
+      logUI('[ModelSelector] Auto-selecting first model:', selectableModels[0].id)
+      onValueChange(selectableModels[0].id)
+    }
+  }, [value, selectableModels, useCustomInput, onValueChange])
 
   // Filter models based on search query
-  const filteredModels = allModels.filter((model) => {
+  const filteredModels = selectableModels.filter((model) => {
     if (!searchQuery.trim()) return true
     const query = searchQuery.toLowerCase()
     return (
@@ -142,8 +157,8 @@ export function ModelSelector({
     if (useCustomInput) {
       // Switching back to dropdown - select first model if available
       setUseCustomInput(false)
-      if (allModels.length > 0) {
-        onValueChange(allModels[0].id)
+      if (selectableModels.length > 0) {
+        onValueChange(selectableModels[0].id)
       }
     } else {
       // Switching to custom input
@@ -214,7 +229,7 @@ export function ModelSelector({
 
             commitCustomInputDraft(e.currentTarget.value)
           }}
-          placeholder="Enter custom model name (e.g., gpt-4o, claude-3-opus)"
+          placeholder="Enter custom model name (e.g., gpt-4.1, claude-sonnet-4)"
           disabled={disabled}
           className="w-full"
           maxLength={100}
@@ -226,7 +241,7 @@ export function ModelSelector({
           logUI('[ModelSelector] Select onValueChange:', newValue)
           onValueChange(newValue)
         }}
-        disabled={disabled || isLoading || allModels.length === 0}
+        disabled={disabled || isLoading || selectableModels.length === 0}
         open={isOpen}
         onOpenChange={(open) => {
           logUI('[ModelSelector] Select onOpenChange:', open)
@@ -313,7 +328,7 @@ export function ModelSelector({
               </div>
             )}
 
-            {!isLoading && !hasError && allModels.length === 0 && (
+            {!isLoading && !hasError && selectableModels.length === 0 && (
               <div className="flex items-center justify-center py-8">
                 <span className="text-sm text-muted-foreground">
                   No models available
@@ -360,11 +375,11 @@ export function ModelSelector({
         </p>
       )}
 
-      {!useCustomInput && !hasError && allModels.length > 0 && (
+      {!useCustomInput && !hasError && selectableModels.length > 0 && (
         <p className="text-xs text-muted-foreground">
           {searchQuery.trim()
-            ? `${filteredModels.length} of ${allModels.length} models match "${searchQuery}"`
-            : `${allModels.length} model${allModels.length !== 1 ? "s" : ""} available`}
+            ? `${filteredModels.length} of ${selectableModels.length} models match "${searchQuery}"`
+            : `${selectableModels.length} model${selectableModels.length !== 1 ? "s" : ""} available`}
         </p>
       )}
     </div>
@@ -373,10 +388,13 @@ export function ModelSelector({
 
 interface ProviderModelSelectorProps {
   providerId: string
+  sttModel?: string
   mcpModel?: string
   transcriptModel?: string
+  onSttModelChange?: (value: string) => void
   onMcpModelChange: (value: string) => void
-  onTranscriptModelChange: (value: string) => void
+  onTranscriptModelChange?: (value: string) => void
+  showSttModel?: boolean
   showMcpModel?: boolean
   showTranscriptModel?: boolean
   disabled?: boolean
@@ -384,10 +402,13 @@ interface ProviderModelSelectorProps {
 
 export function ProviderModelSelector({
   providerId,
+  sttModel,
   mcpModel,
   transcriptModel,
+  onSttModelChange,
   onMcpModelChange,
   onTranscriptModelChange,
+  showSttModel = false,
   showMcpModel = true,
   showTranscriptModel = true,
   disabled = false,
@@ -402,6 +423,18 @@ export function ProviderModelSelector({
 
   return (
     <div className="space-y-4">
+      {showSttModel && onSttModelChange && (
+        <ModelSelector
+          providerId={providerId}
+          value={sttModel}
+          onValueChange={onSttModelChange}
+          label="Speech-to-Text model"
+          placeholder="Select model for speech transcription"
+          disabled={disabled}
+          onlyTranscriptionModels={true}
+        />
+      )}
+
       {showMcpModel && (
         <ModelSelector
           providerId={providerId}
@@ -410,21 +443,23 @@ export function ProviderModelSelector({
           label="Agent/MCP model"
           placeholder="Select model for tool calling"
           disabled={disabled}
+          excludeTranscriptionOnlyModels={true}
         />
       )}
 
-      {showTranscriptModel && (
+      {showTranscriptModel && onTranscriptModelChange && (
         <ModelSelector
           providerId={providerId}
           value={transcriptModel}
           onValueChange={onTranscriptModelChange}
-          label="Transcript model"
-          placeholder="Select model for transcript processing"
+          label="Transcript Cleanup model"
+          placeholder="Select model for transcript cleanup"
           disabled={disabled}
+          excludeTranscriptionOnlyModels={true}
         />
       )}
 
-      {!showMcpModel && !showTranscriptModel && (
+      {!showSttModel && !showMcpModel && !showTranscriptModel && (
         <div className="rounded-md bg-muted/50 p-3 text-sm text-muted-foreground">
           This provider is not currently selected for any functions. Configure
           provider selection above to use {providerName} models.
