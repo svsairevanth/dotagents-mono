@@ -77,7 +77,7 @@
 ### Evidence ID: mobile-web-qr-scanner
 
 - Scope: `apps/mobile/src/screens/ConnectionSettingsScreen.tsx` Expo Web QR scan action when browser camera permission is denied
-- Commit range: `PENDING`
+- Commit range: `f1a861ee6c96f07e8ac57f3ca38da5ea2db90196..7aa8f31a147e14cb57d4026d9bbabffb26aff41c`
 - Rationale: `Scan QR Code` is a primary mobile onboarding path from the desktop app. On Expo Web, when the browser denied camera access, the button left users on the same Connection screen with no modal and no visible explanation, which looked like a dead action and blocked recovery even though the app knew scanning could not proceed.
 - QA feedback: None (new iteration)
 - Before evidence: Screenshot: `/Users/ajjoobandi/Development/dotagents-mono-worktrees/bug-fix-loop/.aloops-artifacts/bug-fix-loop/mobile-web-qr-scanner--before--connection-qr-scanner--20260310.png` (viewport `1440x900`, desktop Chrome automation). The captured state shows the unchanged Connection screen immediately after clicking `Scan QR Code` in a browser context where camera permission was denied; no scanner dialog, camera preview, or inline guidance appears, so the action looks broken and gives the user no recovery path. Supporting runtime evidence from the same repro showed `navigator.mediaDevices.getUserMedia({ video: true })` rejecting with `NotAllowedError: Permission denied`.
