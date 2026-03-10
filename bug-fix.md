@@ -14,6 +14,8 @@
 - [x] Reviewed mobile connection/config code and shared base-URL normalization utilities.
 - [x] Attempted the documented Expo Web workflow in this worktree and recorded the exact dependency/runtime failures.
 - [x] Re-ran Expo Web after a minimal non-install dependency workaround plus `pnpm build:shared`.
+- [x] Reviewed the current `ConnectionSettingsScreen.tsx` QR scanner flow and existing mobile connection tests for a concrete web repro path.
+- [x] Live-checked Expo Web QR scanning in fresh browser contexts with denied and granted camera permission to separate the silent failure path from the working modal path.
 
 ## Not yet checked
 
@@ -23,10 +25,12 @@
 ## Reproduced
 
 - [x] Mobile Expo Web failed to bundle in this worktree when dependencies were reused via symlinked `node_modules`; Metro threw SHA-1/watch errors for files outside the current monorepo root.
+- [x] Mobile Expo Web `Scan QR Code` failed silently when browser camera permission was denied: clicking the button left the user on the same Connection screen with no scanner modal and no visible error.
 
 ## Fixed
 
 - [x] `apps/mobile/metro.config.js` now adds realpaths for symlinked `node_modules` directories plus linked `@dotagents/*` workspace packages to Metro `watchFolders`, which lets Expo Web bundle in the symlinked-worktree setup used for this iteration.
+- [x] `apps/mobile/src/screens/ConnectionSettingsScreen.tsx` now clears stale connection errors before QR attempts and shows a platform-aware inline error when camera permission is denied instead of failing silently on Expo Web.
 
 ## Verified
 
@@ -35,22 +39,26 @@
 - [x] `pnpm --filter @dotagents/mobile test`
 - [x] `git diff --check`
 - [x] `pnpm --filter @dotagents/mobile web --port 8103` now reaches `Web Bundled ... apps/mobile/index.ts` instead of the earlier Metro SHA-1 failure.
+- [x] `node --test apps/mobile/tests/connection-settings-validation.test.js apps/mobile/tests/connection-settings-density.test.js`
+- [x] Live Expo Web repro on `http://localhost:8110` now shows an inline camera-permission error after `Scan QR Code` in a denied-permission browser context.
+- [x] Live Expo Web regression check on `http://localhost:8110` still opens the scanner modal with an active camera preview when camera permission is granted.
 
 ## Blocked
 
 - [ ] No remaining blocker for this iteration's selected Metro/worktree bug.
+- [ ] No remaining blocker for this iteration's selected QR permission-handling bug.
 
 ## Still uncertain
 
 - [ ] Whether the historical Expo Web `normalizeApiBaseUrl is not a function` failure is still reproducible once the current worktree uses a normal local install instead of the symlink workaround.
 - [ ] Whether the historical React Native Web `Unexpected text node ... child of a <View>` warning still maps to a concrete, local user-facing bug.
-- [ ] Whether the `Scan QR Code` Expo Web flow still has a user-facing modal/camera problem now that bundling works again.
+- [ ] Whether end-to-end QR decoding works reliably on Expo Web with a real camera feed, not just modal open/close and permission handling.
 
 ## Candidate leads
 
-- Mobile Expo Web QR scanner flow not surfacing a usable scanner modal.
 - Mobile React Native Web warning about unexpected text nodes inside `<View>`.
 - Mobile/runtime behavior around historical `normalizeApiBaseUrl is not a function` errors.
+- Mobile Expo Web QR decoding with a real camera feed and real DotAgents QR payload once permission handling is no longer silent.
 
 ## Evidence
 
@@ -65,3 +73,15 @@
 - After evidence: The observable product evidence remains the same: rerunning `pnpm --filter @dotagents/mobile web --port 8103` after restarting Metro reaches `Web Bundled 780ms apps/mobile/index.ts (958 modules)` and logs `LOG  [web] Logs will appear in the browser console` instead of failing on SHA-1 lookup errors. In addition, the repo now has automated regression coverage that directly exercises the Metro watch-folder computation against a symlinked fixture rather than only regex-checking source text.
 - Verification commands/run results: `node --test apps/mobile/tests/metro-config-watchfolders.test.js` ✅ (2 tests passing; confirms the loaded config computes `watchFolders` from `nodeModulesPaths` and includes realpaths for a symlinked `node_modules` tree plus linked `@dotagents/shared` package); `git diff --check` ✅; prior iteration evidence still stands for `pnpm build:shared` ✅ and `pnpm --filter @dotagents/mobile web --port 8103` ✅ bundling succeeds after restart.
 - Blockers/remaining uncertainty: Verification used temporary ignored symlinks to sibling `node_modules` because this worktree still lacks a normal local install. The selected bug is fixed for the reproduced symlinked-worktree scenario, but I have not yet spent this iteration on a separate user-facing mobile flow bug now that Expo Web is unblocked.
+
+### Evidence ID: mobile-web-qr-scanner
+
+- Scope: `apps/mobile/src/screens/ConnectionSettingsScreen.tsx` Expo Web QR scan action when browser camera permission is denied
+- Commit range: `PENDING`
+- Rationale: `Scan QR Code` is a primary mobile onboarding path from the desktop app. On Expo Web, when the browser denied camera access, the button left users on the same Connection screen with no modal and no visible explanation, which looked like a dead action and blocked recovery even though the app knew scanning could not proceed.
+- QA feedback: None (new iteration)
+- Before evidence: Screenshot: `/Users/ajjoobandi/Development/dotagents-mono-worktrees/bug-fix-loop/.aloops-artifacts/bug-fix-loop/mobile-web-qr-scanner--before--connection-qr-scanner--20260310.png` (viewport `1440x900`, desktop Chrome automation). The captured state shows the unchanged Connection screen immediately after clicking `Scan QR Code` in a browser context where camera permission was denied; no scanner dialog, camera preview, or inline guidance appears, so the action looks broken and gives the user no recovery path. Supporting runtime evidence from the same repro showed `navigator.mediaDevices.getUserMedia({ video: true })` rejecting with `NotAllowedError: Permission denied`.
+- Change: Added a small permission-error helper in `ConnectionSettingsScreen.tsx`, cleared stale connection errors at the start of `handleScanQR`, and set a platform-aware inline error when `requestPermission()` returns denied instead of silently returning. Extended `apps/mobile/tests/connection-settings-validation.test.js` to lock the new QR permission error path in source-based regression coverage.
+- After evidence: Screenshot: `/Users/ajjoobandi/Development/dotagents-mono-worktrees/bug-fix-loop/.aloops-artifacts/bug-fix-loop/mobile-web-qr-scanner--after--connection-qr-scanner--20260310.png` (viewport `430x932`, mobile-sized Chrome automation). After clicking `Scan QR Code` with browser camera permission denied, the Connection screen now renders the inline error `Camera access is required to scan a QR code. Allow camera access in your browser and try scanning again.` directly in the visible form flow. This is preferable because the user gets immediate feedback and a concrete next step instead of a silent no-op. Separate regression validation in a granted-permission browser context confirmed the scanner modal still opens with an active camera preview.
+- Verification commands/run results: `node --test apps/mobile/tests/connection-settings-validation.test.js apps/mobile/tests/connection-settings-density.test.js` ✅ (7 tests passing); `git diff --check` ✅; live Expo Web repro at `http://localhost:8110` with denied camera permission ✅ now shows the inline error and no longer fails silently; live Expo Web regression check at `http://localhost:8110` with granted camera permission ✅ still opens the scanner modal and active camera preview; `pnpm --filter @dotagents/mobile exec tsc --noEmit` ❌ with pre-existing unrelated errors in `apps/mobile/src/screens/LoopEditScreen.tsx` (`Property 'guidelines' does not exist on type 'ApiAgentProfile'`).
+- Blockers/remaining uncertainty: I did not complete an end-to-end real-camera QR decode run in this iteration; browser automation used denied-permission and fake-camera contexts to validate the failure and non-regression paths. App-level mobile typecheck is currently red for an unrelated pre-existing `LoopEditScreen.tsx` issue, so this iteration relies on targeted tests plus live QR-flow validation rather than a clean full mobile typecheck.
