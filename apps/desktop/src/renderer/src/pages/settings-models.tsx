@@ -177,53 +177,55 @@ export function Component() {
         </ControlGroup>
 
         <ControlGroup title="Voice Models">
-          {sttProviderId === "parakeet" ? (
-            <Control
-              label={<ControlLabel label="Speech-to-Text model" tooltip="Parakeet uses the local speech-to-text model bundle managed on the Providers page." />}
-              className="px-3"
-            >
-              <p className="text-sm text-muted-foreground">
-                Parakeet uses its local downloaded model bundle. Manage installation and runtime settings on Providers.
-              </p>
-            </Control>
-          ) : (
-            <ModelSelector
-              providerId={sttProviderId}
-              value={sttProviderId === "openai" ? config.openaiSttModel || getDefaultSttModel("openai") : config.groqSttModel || getDefaultSttModel("groq")}
-              onValueChange={(value) => saveConfig(sttProviderId === "openai" ? { openaiSttModel: value } : { groqSttModel: value })}
-              label="Speech-to-Text model"
-              placeholder="Select model for speech transcription"
-              onlyTranscriptionModels={true}
-            />
-          )}
+          <div className="px-3 py-2">
+            {sttProviderId === "parakeet" ? (
+              <Control
+                label={<ControlLabel label="Speech-to-Text model" tooltip="Parakeet uses the local speech-to-text model bundle managed on the Providers page." />}
+              >
+                <p className="text-sm text-muted-foreground">
+                  Parakeet uses its local downloaded model bundle. Manage installation and runtime settings on Providers.
+                </p>
+              </Control>
+            ) : (
+              <ModelSelector
+                providerId={sttProviderId}
+                value={sttProviderId === "openai" ? config.openaiSttModel || getDefaultSttModel("openai") : config.groqSttModel || getDefaultSttModel("groq")}
+                onValueChange={(value) => saveConfig(sttProviderId === "openai" ? { openaiSttModel: value } : { groqSttModel: value })}
+                label="Speech-to-Text model"
+                placeholder="Select model for speech transcription"
+                onlyTranscriptionModels={true}
+              />
+            )}
+          </div>
 
-          {transcriptCleanupProviderId === "openai" ? (
-            <Control
-              label={<ControlLabel label="Transcript Cleanup model" tooltip="OpenAI-compatible transcript cleanup is selected through the preset section below." />}
-              className="px-3"
-            >
-              <p className="text-sm text-muted-foreground">
-                OpenAI-compatible transcript cleanup models are selected in the OpenAI-Compatible Preset section below.
-              </p>
-            </Control>
-          ) : (
-            <ModelSelector
-              providerId={transcriptCleanupProviderId}
-              value={transcriptCleanupModel}
-              onValueChange={(value) => {
-                if (transcriptCleanupProviderId === "groq") {
-                  saveConfig({ transcriptPostProcessingGroqModel: value })
-                } else {
-                  saveConfig({ transcriptPostProcessingGeminiModel: value })
-                }
-              }}
-              label="Transcript Cleanup model"
-              placeholder="Select model for transcript cleanup"
-              excludeTranscriptionOnlyModels={true}
-            />
-          )}
+          <div className="border-t px-3 py-2">
+            {transcriptCleanupProviderId === "openai" ? (
+              <Control
+                label={<ControlLabel label="Transcript Cleanup model" tooltip="OpenAI-compatible transcript cleanup is selected through the preset section below." />}
+              >
+                <p className="text-sm text-muted-foreground">
+                  OpenAI-compatible transcript cleanup models are selected in the OpenAI-Compatible Preset section below.
+                </p>
+              </Control>
+            ) : (
+              <ModelSelector
+                providerId={transcriptCleanupProviderId}
+                value={transcriptCleanupModel}
+                onValueChange={(value) => {
+                  if (transcriptCleanupProviderId === "groq") {
+                    saveConfig({ transcriptPostProcessingGroqModel: value })
+                  } else {
+                    saveConfig({ transcriptPostProcessingGeminiModel: value })
+                  }
+                }}
+                label="Transcript Cleanup model"
+                placeholder="Select model for transcript cleanup"
+                excludeTranscriptionOnlyModels={true}
+              />
+            )}
+          </div>
 
-          <div className="border-t px-3 py-3">
+          <div className="border-t px-3 py-2">
             <div className="pb-2">
               <span className="text-sm font-medium">Text-to-Speech model and voice</span>
               <p className="text-xs text-muted-foreground">
