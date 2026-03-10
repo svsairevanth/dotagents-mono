@@ -17,6 +17,7 @@ test('renders the extracted handsfree status chip in the mobile chat composer', 
 test('wires ChatScreen through the extracted handsfree controller and recognizer hooks', () => {
   assert.match(screenSource, /useSpeechRecognizer\(/);
   assert.match(screenSource, /useHandsFreeController\(/);
+  assert.match(screenSource, /handsFreeDebounceMs:\s*handsFreeMessageDebounceMs/);
   assert.match(screenSource, /handlePushToTalkPressIn/);
   assert.match(screenSource, /handlePushToTalkPressOut/);
 });

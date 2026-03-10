@@ -18,6 +18,8 @@ test('exposes wake and sleep phrase fields for handsfree tuning', () => {
   assert.match(settingsSource, /placeholder='hey dot agents'/);
   assert.match(settingsSource, />Sleep phrase<\/Text>/);
   assert.match(settingsSource, /placeholder='go to sleep'/);
+  assert.match(settingsSource, />Send after silence<\/Text>/);
+  assert.match(settingsSource, /Wait this long without new speech before sending a hands-free message\./);
 });
 
 test('keeps internal voice diagnostics behind explicit settings toggles', () => {

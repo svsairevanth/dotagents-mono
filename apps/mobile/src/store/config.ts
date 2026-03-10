@@ -7,6 +7,7 @@ export type AppConfig = {
   baseUrl: string; // OpenAI-compatible API base URL e.g., https://api.openai.com/v1
   model: string; // model name required by /v1/chat/completions
   handsFree?: boolean; // hands-free voice mode toggle (optional for backward compatibility)
+  handsFreeMessageDebounceMs?: number; // silence window before auto-sending a hands-free message
   handsFreeWakePhrase?: string; // wake phrase for foreground handsfree mode
   handsFreeSleepPhrase?: string; // sleep phrase for foreground handsfree mode
   handsFreeDebug?: boolean; // show structured handsfree debug state/events in chat
@@ -21,12 +22,27 @@ export type AppConfig = {
 
 export const DEFAULT_HANDS_FREE_WAKE_PHRASE = 'hey dot agents';
 export const DEFAULT_HANDS_FREE_SLEEP_PHRASE = 'go to sleep';
+export const DEFAULT_HANDS_FREE_MESSAGE_DEBOUNCE_MS = 1500;
+export const MIN_HANDS_FREE_MESSAGE_DEBOUNCE_MS = 500;
+export const MAX_HANDS_FREE_MESSAGE_DEBOUNCE_MS = 5000;
+
+function normalizeHandsFreeMessageDebounceMs(value?: number) {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_HANDS_FREE_MESSAGE_DEBOUNCE_MS;
+  }
+
+  return Math.min(
+    MAX_HANDS_FREE_MESSAGE_DEBOUNCE_MS,
+    Math.max(MIN_HANDS_FREE_MESSAGE_DEBOUNCE_MS, Math.round(value as number)),
+  );
+}
 
 export const DEFAULT_APP_CONFIG: AppConfig = {
   apiKey: '',
   baseUrl: 'https://api.openai.com/v1',
   model: 'gpt-4o-mini',
   handsFree: false,
+  handsFreeMessageDebounceMs: DEFAULT_HANDS_FREE_MESSAGE_DEBOUNCE_MS,
   handsFreeWakePhrase: DEFAULT_HANDS_FREE_WAKE_PHRASE,
   handsFreeSleepPhrase: DEFAULT_HANDS_FREE_SLEEP_PHRASE,
   handsFreeDebug: false,
@@ -45,6 +61,7 @@ export function normalizeStoredConfig(cfg: AppConfig): AppConfig {
     ...DEFAULT_APP_CONFIG,
     ...cfg,
     baseUrl: cfg.baseUrl ? normalizeApiBaseUrl(cfg.baseUrl) : cfg.baseUrl,
+    handsFreeMessageDebounceMs: normalizeHandsFreeMessageDebounceMs(cfg.handsFreeMessageDebounceMs),
     handsFreeWakePhrase: cfg.handsFreeWakePhrase?.trim() || DEFAULT_HANDS_FREE_WAKE_PHRASE,
     handsFreeSleepPhrase: cfg.handsFreeSleepPhrase?.trim() || DEFAULT_HANDS_FREE_SLEEP_PHRASE,
     handsFreeDebug: cfg.handsFreeDebug ?? false,

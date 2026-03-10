@@ -23,7 +23,11 @@ import {
 const darkSpinner = require('../../assets/loading-spinner.gif');
 const lightSpinner = require('../../assets/light-spinner.gif');
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useConfigContext, saveConfig } from '../store/config';
+import {
+	DEFAULT_HANDS_FREE_MESSAGE_DEBOUNCE_MS,
+	useConfigContext,
+	saveConfig,
+} from '../store/config';
 import { useSessionContext } from '../store/sessions';
 import { useMessageQueueContext } from '../store/message-queue';
 import { MessageQueuePanel } from '../ui/MessageQueuePanel';
@@ -298,6 +302,7 @@ export default function ChatScreen({ route, navigation }: any) {
   const { currentProfile } = useProfile();
   const currentAgentLabel = currentProfile?.name || 'Default Agent';
   const handsFree = !!config.handsFree;
+	  const handsFreeMessageDebounceMs = config.handsFreeMessageDebounceMs ?? DEFAULT_HANDS_FREE_MESSAGE_DEBOUNCE_MS;
   const handsFreeWakePhrase = config.handsFreeWakePhrase || 'hey dot agents';
   const handsFreeSleepPhrase = config.handsFreeSleepPhrase || 'go to sleep';
   const handsFreeDebugEnabled = config.handsFreeDebug === true;
@@ -651,6 +656,7 @@ export default function ChatScreen({ route, navigation }: any) {
 		handlePushToTalkPressOut,
 	  } = useSpeechRecognizer({
 		handsFree,
+			handsFreeDebounceMs: handsFreeMessageDebounceMs,
 		willCancel,
 		onVoiceFinalized: ({ text, mode }) => {
 			const finalText = text.trim();

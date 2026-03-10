@@ -6,6 +6,7 @@ import {
   View,
 } from 'react-native';
 import { EventEmitter } from 'expo-modules-core';
+import { DEFAULT_HANDS_FREE_MESSAGE_DEBOUNCE_MS } from '../../store/config';
 import type { VoiceDebugLog } from './voiceDebug';
 import { mergeVoiceText } from './mergeVoiceText';
 
@@ -19,6 +20,7 @@ type VoiceFinalizedPayload = {
 
 type UseSpeechRecognizerOptions = {
   handsFree: boolean;
+  handsFreeDebounceMs?: number;
   willCancel: boolean;
   onVoiceFinalized: (payload: VoiceFinalizedPayload) => void;
   onRecognizerError?: (message: string) => void;
@@ -26,13 +28,20 @@ type UseSpeechRecognizerOptions = {
   log?: VoiceDebugLog;
 };
 
-const HANDS_FREE_DEBOUNCE_MS = 1500;
 const MIN_HOLD_MS = 200;
 
 const normalizeVoiceText = (text?: string) => (text || '').replace(/\s+/g, ' ').trim();
 
 export function useSpeechRecognizer(options: UseSpeechRecognizerOptions) {
-  const { handsFree, willCancel, onVoiceFinalized, onRecognizerError, onPermissionDenied, log } = options;
+  const {
+    handsFree,
+    handsFreeDebounceMs = DEFAULT_HANDS_FREE_MESSAGE_DEBOUNCE_MS,
+    willCancel,
+    onVoiceFinalized,
+    onRecognizerError,
+    onPermissionDenied,
+    log,
+  } = options;
   const [listening, setListening] = useState(false);
   const [liveTranscript, setLiveTranscript] = useState('');
   const [sttPreview, setSttPreview] = useState('');
@@ -177,7 +186,7 @@ export function useSpeechRecognizer(options: UseSpeechRecognizerOptions) {
                   void stopRecognitionOnly();
                   emitFinalized(textToSend, 'web');
                 }
-              }, HANDS_FREE_DEBOUNCE_MS);
+              }, handsFreeDebounceMs);
             }
           } else {
             webFinalRef.current = mergeVoiceText(webFinalRef.current, finalText);
@@ -245,6 +254,7 @@ export function useSpeechRecognizer(options: UseSpeechRecognizerOptions) {
     clearHandsFreeDebounce,
     emitFinalized,
     handsFree,
+    handsFreeDebounceMs,
     log,
     onRecognizerError,
     setListeningValue,
@@ -300,7 +310,7 @@ export function useSpeechRecognizer(options: UseSpeechRecognizerOptions) {
                         void stopRecognitionOnly();
                         emitFinalized(textToSend, 'native');
                       }
-                    }, HANDS_FREE_DEBOUNCE_MS);
+                    }, handsFreeDebounceMs);
                   }
                 } else {
                   nativeFinalRef.current = mergeVoiceText(nativeFinalRef.current, text);
@@ -434,6 +444,7 @@ export function useSpeechRecognizer(options: UseSpeechRecognizerOptions) {
     emitFinalized,
     ensureWebRecognizer,
     handsFree,
+    handsFreeDebounceMs,
     log,
     onPermissionDenied,
     onRecognizerError,

@@ -1,7 +1,14 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { View, Text, TextInput, Switch, StyleSheet, ScrollView, Modal, TouchableOpacity, Platform, Pressable, ActivityIndicator, RefreshControl, Share, Alert, LayoutAnimation, UIManager } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { AppConfig, saveConfig, useConfigContext } from '../store/config';
+import {
+  AppConfig,
+  DEFAULT_HANDS_FREE_MESSAGE_DEBOUNCE_MS,
+  MAX_HANDS_FREE_MESSAGE_DEBOUNCE_MS,
+  MIN_HANDS_FREE_MESSAGE_DEBOUNCE_MS,
+  saveConfig,
+  useConfigContext,
+} from '../store/config';
 import { useTheme, ThemeMode } from '../ui/ThemeProvider';
 import { spacing, radius } from '../ui/theme';
 import { useProfile } from '../store/profile';
@@ -1238,6 +1245,30 @@ export default function SettingsScreen({ navigation }: any) {
           autoCapitalize='none'
           autoCorrect={false}
         />
+
+        <View style={{ marginTop: spacing.md }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text style={styles.label}>Send after silence</Text>
+            <Text style={[styles.helperText, { marginTop: 0 }]}>
+              {Math.round((draft.handsFreeMessageDebounceMs ?? DEFAULT_HANDS_FREE_MESSAGE_DEBOUNCE_MS) / 10) / 100}s
+            </Text>
+          </View>
+          <Slider
+            style={{ width: '100%', height: 40 }}
+            minimumValue={MIN_HANDS_FREE_MESSAGE_DEBOUNCE_MS}
+            maximumValue={MAX_HANDS_FREE_MESSAGE_DEBOUNCE_MS}
+            step={100}
+            value={draft.handsFreeMessageDebounceMs ?? DEFAULT_HANDS_FREE_MESSAGE_DEBOUNCE_MS}
+            onValueChange={(value) => setDraft((current) => ({ ...current, handsFreeMessageDebounceMs: value }))}
+            onSlidingComplete={(value) => updateLocalConfig({ handsFreeMessageDebounceMs: value })}
+            minimumTrackTintColor={theme.colors.primary}
+            maximumTrackTintColor={theme.colors.muted}
+            thumbTintColor={theme.colors.primary}
+          />
+        </View>
+        <Text style={styles.helperText}>
+          Wait this long without new speech before sending a hands-free message.
+        </Text>
 
         <View style={styles.row}>
           <View style={{ flex: 1 }}>

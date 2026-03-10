@@ -9,8 +9,11 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 
 import {
   DEFAULT_APP_CONFIG,
+  DEFAULT_HANDS_FREE_MESSAGE_DEBOUNCE_MS,
   DEFAULT_HANDS_FREE_SLEEP_PHRASE,
   DEFAULT_HANDS_FREE_WAKE_PHRASE,
+  MAX_HANDS_FREE_MESSAGE_DEBOUNCE_MS,
+  MIN_HANDS_FREE_MESSAGE_DEBOUNCE_MS,
   normalizeStoredConfig,
 } from './config';
 
@@ -23,6 +26,7 @@ describe('normalizeStoredConfig', () => {
     });
 
     expect(normalized.handsFree).toBe(false);
+    expect(normalized.handsFreeMessageDebounceMs).toBe(DEFAULT_HANDS_FREE_MESSAGE_DEBOUNCE_MS);
     expect(normalized.handsFreeWakePhrase).toBe(DEFAULT_HANDS_FREE_WAKE_PHRASE);
     expect(normalized.handsFreeSleepPhrase).toBe(DEFAULT_HANDS_FREE_SLEEP_PHRASE);
     expect(normalized.handsFreeDebug).toBe(false);
@@ -39,5 +43,19 @@ describe('normalizeStoredConfig', () => {
 
     expect(normalized.handsFreeWakePhrase).toBe('hey desk agent');
     expect(normalized.handsFreeSleepPhrase).toBe('go quiet');
+  });
+
+  it('clamps the handsfree send delay to a safe range', () => {
+    const tooLow = normalizeStoredConfig({
+      ...DEFAULT_APP_CONFIG,
+      handsFreeMessageDebounceMs: MIN_HANDS_FREE_MESSAGE_DEBOUNCE_MS - 200,
+    });
+    const tooHigh = normalizeStoredConfig({
+      ...DEFAULT_APP_CONFIG,
+      handsFreeMessageDebounceMs: MAX_HANDS_FREE_MESSAGE_DEBOUNCE_MS + 200,
+    });
+
+    expect(tooLow.handsFreeMessageDebounceMs).toBe(MIN_HANDS_FREE_MESSAGE_DEBOUNCE_MS);
+    expect(tooHigh.handsFreeMessageDebounceMs).toBe(MAX_HANDS_FREE_MESSAGE_DEBOUNCE_MS);
   });
 });
