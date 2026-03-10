@@ -11,13 +11,6 @@ import { STT_PROVIDER_ID } from "@shared/index"
 import { SUPPORTED_LANGUAGES } from "@shared/languages"
 import { Textarea } from "@renderer/components/ui/textarea"
 import { Input } from "@renderer/components/ui/input"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@renderer/components/ui/dialog"
 import { Button } from "@renderer/components/ui/button"
 import {
   useConfigQuery,
@@ -72,10 +65,6 @@ export function Component() {
   const langfuseSaveTimeoutsRef = useRef<Partial<Record<LangfuseDraftKey, ReturnType<typeof setTimeout>>>>({})
   const [groqSttPromptDraft, setGroqSttPromptDraft] = useState(() => cfg?.groqSttPrompt ?? "")
   const groqSttPromptSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [transcriptPostProcessingPromptDraft, setTranscriptPostProcessingPromptDraft] = useState(
-    () => cfg?.transcriptPostProcessingPrompt ?? "",
-  )
-  const transcriptPostProcessingPromptSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [mcpMaxIterationsDraft, setMcpMaxIterationsDraft] = useState(
     () => String(cfg?.mcpMaxIterations ?? MCP_MAX_ITERATIONS_DEFAULT),
   )
@@ -213,10 +202,6 @@ export function Component() {
   }, [cfg?.groqSttPrompt])
 
   useEffect(() => {
-    setTranscriptPostProcessingPromptDraft(cfg?.transcriptPostProcessingPrompt ?? "")
-  }, [cfg?.transcriptPostProcessingPrompt])
-
-  useEffect(() => {
     setMcpMaxIterationsDraft(String(cfg?.mcpMaxIterations ?? MCP_MAX_ITERATIONS_DEFAULT))
   }, [cfg?.mcpMaxIterations])
 
@@ -228,10 +213,6 @@ export function Component() {
 
       if (groqSttPromptSaveTimeoutRef.current) {
         clearTimeout(groqSttPromptSaveTimeoutRef.current)
-      }
-
-      if (transcriptPostProcessingPromptSaveTimeoutRef.current) {
-        clearTimeout(transcriptPostProcessingPromptSaveTimeoutRef.current)
       }
 
       if (mcpMaxIterationsSaveTimeoutRef.current) {
@@ -295,31 +276,6 @@ export function Component() {
     scheduleGroqSttPromptSave(value)
   }, [scheduleGroqSttPromptSave])
 
-  const flushTranscriptPostProcessingPromptSave = useCallback((value: string) => {
-    if (transcriptPostProcessingPromptSaveTimeoutRef.current) {
-      clearTimeout(transcriptPostProcessingPromptSaveTimeoutRef.current)
-      transcriptPostProcessingPromptSaveTimeoutRef.current = null
-    }
-
-    saveConfig({ transcriptPostProcessingPrompt: value })
-  }, [saveConfig])
-
-  const scheduleTranscriptPostProcessingPromptSave = useCallback((value: string) => {
-    if (transcriptPostProcessingPromptSaveTimeoutRef.current) {
-      clearTimeout(transcriptPostProcessingPromptSaveTimeoutRef.current)
-    }
-
-    transcriptPostProcessingPromptSaveTimeoutRef.current = setTimeout(() => {
-      transcriptPostProcessingPromptSaveTimeoutRef.current = null
-      saveConfig({ transcriptPostProcessingPrompt: value })
-    }, SETTINGS_TEXT_SAVE_DEBOUNCE_MS)
-  }, [saveConfig])
-
-  const updateTranscriptPostProcessingPromptDraft = useCallback((value: string) => {
-    setTranscriptPostProcessingPromptDraft(value)
-    scheduleTranscriptPostProcessingPromptSave(value)
-  }, [scheduleTranscriptPostProcessingPromptSave])
-
   const flushMcpMaxIterationsSave = useCallback((value: string) => {
     if (mcpMaxIterationsSaveTimeoutRef.current) {
       clearTimeout(mcpMaxIterationsSaveTimeoutRef.current)
@@ -366,29 +322,6 @@ export function Component() {
       )
     }
   }, [(configQuery.data as any)?.themePreference])
-
-  // Memoize model change handler to prevent infinite re-renders
-  const handleTranscriptModelChange = useCallback(
-    (value: string) => {
-      const transcriptPostProcessingProviderId =
-        (configQuery.data as any)?.transcriptPostProcessingProviderId || "openai"
-
-      if (transcriptPostProcessingProviderId === "openai") {
-        saveConfig({
-          transcriptPostProcessingOpenaiModel: value,
-        })
-      } else if (transcriptPostProcessingProviderId === "groq") {
-        saveConfig({
-          transcriptPostProcessingGroqModel: value,
-        })
-      } else {
-        saveConfig({
-          transcriptPostProcessingGeminiModel: value,
-        })
-      }
-    },
-    [saveConfig, (configQuery.data as any)?.transcriptPostProcessingProviderId],
-  )
 
   const sttProviderId: STT_PROVIDER_ID =
     (configQuery.data as any)?.sttProviderId || "openai"
@@ -1072,64 +1005,6 @@ export function Component() {
             />
           </Control>
 
-          <Control label={<ControlLabel label="Post-Processing" tooltip="Enable AI-powered post-processing to clean up and improve transcripts" />} className="px-3">
-            <Switch
-              defaultChecked={configQuery.data.transcriptPostProcessingEnabled}
-              onCheckedChange={(value) => {
-                saveConfig({
-                  transcriptPostProcessingEnabled: value,
-                })
-              }}
-            />
-          </Control>
-
-          {configQuery.data.transcriptPostProcessingEnabled && (
-            <Control label={<ControlLabel label="Post-Processing Prompt" tooltip="Custom prompt for transcript post-processing. Use {transcript} placeholder to insert the original transcript." />} className="px-3">
-              <div className="flex flex-col items-end gap-1 text-right">
-                {configQuery.data.transcriptPostProcessingPrompt && (
-                  <div className="line-clamp-3 text-sm text-neutral-500 dark:text-neutral-400">
-                    {configQuery.data.transcriptPostProcessingPrompt}
-                  </div>
-                )}
-                <Dialog>
-                  <DialogTrigger className="" asChild>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-6 gap-1 px-2"
-                    >
-                      <span className="i-mingcute-edit-2-line"></span>
-                      Edit
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Edit Post-Processing Prompt</DialogTitle>
-                    </DialogHeader>
-                    <Textarea
-                      rows={10}
-                      value={transcriptPostProcessingPromptDraft}
-                      onChange={(e) => {
-                        updateTranscriptPostProcessingPromptDraft(
-                          e.currentTarget.value,
-                        )
-                      }}
-                      onBlur={(e) => {
-                        flushTranscriptPostProcessingPromptSave(
-                          e.currentTarget.value,
-                        )
-                      }}
-                    ></Textarea>
-                    <div className="text-sm text-muted-foreground">
-                      Use{" "}
-                      <span className="select-text">{"{transcript}"}</span>{" "}
-                      placeholder to insert the original transcript
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </div>
-            </Control>
-          )}
         </ControlGroup>
 
         <ControlGroup collapsible defaultCollapsed title="Text to Speech">

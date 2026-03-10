@@ -27,7 +27,8 @@ test('avoids decorative emoji chrome in the mobile remote provider selection sub
   assert.doesNotMatch(providerSection, /🎤|📝|🤖|🔊/);
   assert.doesNotMatch(providerSection, /Select which AI provider to use for each feature\./);
   assert.match(providerSection, />Voice Transcription \(STT\)</);
-  assert.match(providerSection, />Transcript Post-Processing</);
+  assert.doesNotMatch(providerSection, />Transcript Post-Processing</);
+  assert.doesNotMatch(providerSection, />Transcript Processing</);
   assert.match(providerSection, />Agent\/MCP Tools</);
   assert.match(providerSection, />Text-to-Speech \(TTS\)</);
 });
@@ -45,6 +46,10 @@ test('keeps profile/model actions text-first and explicitly labeled', () => {
   assert.match(profileModelSection, /\{isLoadingModels \? 'Refreshing…' : 'Refresh'\}/);
   assert.match(profileModelSection, /accessibilityLabel=\{useCustomModel \? 'Show model list' : 'Enter custom model name'\}/);
   assert.match(profileModelSection, /accessibilityLabel="Refresh available models"/);
+  assert.match(profileModelSection, />Transcript Processing</);
+  assert.match(profileModelSection, />Enabled</);
+  assert.match(profileModelSection, />Provider</);
+  assert.match(profileModelSection, />Prompt</);
 });
 
 test('keeps the mobile remote-settings error banner text-first and wrap-safe', () => {

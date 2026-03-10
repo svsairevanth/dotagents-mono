@@ -44,6 +44,11 @@ function createHookRuntime() {
     useRef,
     useEffect,
     useCallback: (fn: any) => fn,
+    forwardRef: (render: any) => {
+      const ForwardRefComponent = (props: any) => render(props, null)
+      ForwardRefComponent.displayName = render.displayName || render.name || "ForwardRef"
+      return ForwardRefComponent
+    },
   }
   reactMock.default = reactMock
 
@@ -100,10 +105,6 @@ function findTextareaByPlaceholder(node: any, placeholder: string) {
   return findNode(node, candidate => candidate.type === "Textarea" && candidate.props?.placeholder === placeholder)
 }
 
-function findTextarea(node: any) {
-  return findNode(node, candidate => candidate.type === "Textarea" && candidate.props?.rows === 10)
-}
-
 function findMaxIterationsInput(node: any) {
   return findNode(
     node,
@@ -142,6 +143,9 @@ async function loadSettingsGeneral(runtime: ReturnType<typeof createHookRuntime>
   vi.doMock("react/jsx-dev-runtime", () => runtime.jsxRuntimeMock)
   vi.doMock("react-router-dom", () => ({ useNavigate: () => vi.fn() }))
   vi.doMock("@tanstack/react-query", () => ({
+    QueryClient: class QueryClient {
+      constructor(_options?: any) {}
+    },
     useQuery: ({ queryKey }: any) => {
       const key = Array.isArray(queryKey) ? queryKey[0] : queryKey
       if (key === "langfuseInstalled") return { data: true, isLoading: false }
@@ -149,6 +153,8 @@ async function loadSettingsGeneral(runtime: ReturnType<typeof createHookRuntime>
       if (key === "externalAgents") return { data: [], isLoading: false }
       return { data: undefined, isLoading: false }
     },
+    useMutation: () => ({ mutate: vi.fn() }),
+    focusManager: { setEventListener: vi.fn() },
   }))
   vi.doMock("@renderer/lib/query-client", () => ({
     useConfigQuery: () => ({ data: currentConfig }),
@@ -189,12 +195,25 @@ async function loadSettingsGeneral(runtime: ReturnType<typeof createHookRuntime>
 
 beforeEach(() => {
   vi.useFakeTimers()
+  ;(globalThis as any).window = {
+    electron: { ipcRenderer: { invoke: vi.fn() } },
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }
+  ;(globalThis as any).localStorage = {
+    getItem: vi.fn(),
+    setItem: vi.fn(),
+    removeItem: vi.fn(),
+  }
 })
 
 afterEach(() => {
   vi.useRealTimers()
   vi.restoreAllMocks()
   vi.resetModules()
+  delete (globalThis as any).window
+  delete (globalThis as any).localStorage
 })
 
 describe("desktop general settings draft behavior", () => {
@@ -464,79 +483,4 @@ describe("desktop general settings draft behavior", () => {
     )
   })
 
-  it("keeps the transcript post-processing prompt draft local, debounces saves, and merges with the latest config", async () => {
-    const runtime = createHookRuntime()
-    const { Component, mutate, setConfig, getCurrentConfig } = await loadSettingsGeneral(runtime)
-
-    let tree = runtime.render(Component, {} as any)
-    runtime.commitEffects()
-    await flushPromises()
-
-    let promptTextarea = findTextarea(tree)
-    expect(promptTextarea.props.value).toBe("Prompt old")
-
-    promptTextarea.props.onChange({ currentTarget: { value: "Prompt new" } })
-
-    tree = runtime.render(Component, {} as any)
-    runtime.commitEffects()
-    promptTextarea = findTextarea(tree)
-    expect(promptTextarea.props.value).toBe("Prompt new")
-    expect(mutate).not.toHaveBeenCalled()
-
-    setConfig({ ...getCurrentConfig(), launchAtLogin: true })
-    runtime.render(Component, {} as any)
-    runtime.commitEffects()
-
-    vi.advanceTimersByTime(399)
-    expect(mutate).not.toHaveBeenCalled()
-
-    vi.advanceTimersByTime(1)
-    expect(mutate).toHaveBeenCalledWith({
-      config: {
-        ...getCurrentConfig(),
-        transcriptPostProcessingPrompt: "Prompt new",
-      },
-    })
-  })
-
-  it("flushes the latest transcript post-processing prompt on blur without waiting for a rerender", async () => {
-    const runtime = createHookRuntime()
-    const { Component, mutate, getCurrentConfig } = await loadSettingsGeneral(runtime)
-
-    const tree = runtime.render(Component, {} as any)
-    runtime.commitEffects()
-    await flushPromises()
-
-    const promptTextarea = findTextarea(tree)
-    promptTextarea.props.onChange({ currentTarget: { value: "Prompt blur" } })
-    promptTextarea.props.onBlur({ currentTarget: { value: "Prompt blur" } })
-
-    expect(mutate).toHaveBeenCalledTimes(1)
-    expect(mutate).toHaveBeenCalledWith({
-      config: {
-        ...getCurrentConfig(),
-        transcriptPostProcessingPrompt: "Prompt blur",
-      },
-    })
-  })
-
-  it("resyncs the transcript post-processing prompt draft from saved config updates", async () => {
-    const runtime = createHookRuntime()
-    const { Component, setConfig, getCurrentConfig } = await loadSettingsGeneral(runtime)
-
-    let tree = runtime.render(Component, {} as any)
-    runtime.commitEffects()
-    await flushPromises()
-
-    setConfig({
-      ...getCurrentConfig(),
-      transcriptPostProcessingPrompt: "Prompt synced",
-    })
-
-    tree = runtime.render(Component, {} as any)
-    runtime.commitEffects()
-    tree = runtime.render(Component, {} as any)
-
-    expect(findTextarea(tree).props.value).toBe("Prompt synced")
-  })
 })

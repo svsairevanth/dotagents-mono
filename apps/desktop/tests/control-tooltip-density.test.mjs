@@ -27,6 +27,13 @@ test("opens shared helper tooltips above the label instead of into the control c
   )
 })
 
+test("renders collapsible settings groups with the same card-style header treatment used on provider sections", () => {
+  assert.match(
+    controlSource,
+    /className="rounded-lg border"[\s\S]*?className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-muted\/30 transition-colors cursor-pointer"[\s\S]*?aria-expanded=\{!collapsed\}[\s\S]*?className="divide-y border-t"/,
+  )
+})
+
 test("uses the shared tooltip label pattern in a concrete dense desktop settings row", () => {
   assert.match(
     settingsGeneralSource,

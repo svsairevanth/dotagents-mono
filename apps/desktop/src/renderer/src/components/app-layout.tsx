@@ -24,12 +24,13 @@ import {
   VolumeX,
   OctagonX,
   Loader2,
+  Plug2,
 } from "lucide-react"
 
 type NavLinkItem = {
   text: string
   href: string
-  icon: string
+  icon: string | React.ComponentType<{ className?: string }>
 }
 
 interface AgentSession {
@@ -165,7 +166,7 @@ export const Component = () => {
     {
       text: "Providers",
       href: "/settings/providers",
-      icon: "i-mingcute-plug-line",
+      icon: Plug2,
     },
     {
       text: "Memories",
@@ -228,6 +229,10 @@ export const Component = () => {
 
   const renderNavLink = (link: NavLinkItem) => {
     const isActive = isNavLinkActive(link.href)
+    const icon = typeof link.icon === "string"
+      ? <span className={cn(link.icon, "h-4 w-4 shrink-0")}></span>
+      : <link.icon className="h-4 w-4 shrink-0" />
+
     return (
       <NavLink
         key={link.text}
@@ -247,7 +252,7 @@ export const Component = () => {
           )
         }}
       >
-        <span className={cn(link.icon, "shrink-0")}></span>
+        {icon}
         {!isCollapsed && (
           <span className="truncate font-medium">{link.text}</span>
         )}
@@ -527,6 +532,10 @@ export const Component = () => {
               <div className="mt-2 grid gap-1">
                 {settingsNavLinks.map((link) => {
                   const isActive = isNavLinkActive(link.href)
+                  const icon = typeof link.icon === "string"
+                    ? <span className={cn(link.icon, "h-4 w-4")}></span>
+                    : <link.icon className="h-4 w-4" />
+
                   return (
                     <NavLink
                       key={link.text}
@@ -541,7 +550,7 @@ export const Component = () => {
                       aria-label={link.text}
                       aria-current={isActive ? "page" : undefined}
                     >
-                      <span className={link.icon}></span>
+                      {icon}
                     </NavLink>
                   )
                 })}

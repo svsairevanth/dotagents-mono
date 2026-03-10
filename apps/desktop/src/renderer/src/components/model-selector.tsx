@@ -452,8 +452,8 @@ export function ProviderModelSelector({
           providerId={providerId}
           value={transcriptModel}
           onValueChange={onTranscriptModelChange}
-          label="Transcript Cleanup model"
-          placeholder="Select model for transcript cleanup"
+          label="Transcript Processing model"
+          placeholder="Select model for transcript processing"
           disabled={disabled}
           excludeTranscriptionOnlyModels={true}
         />

@@ -1,6 +1,7 @@
-import { useCallback, useMemo, type ElementType, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ElementType, type ReactNode } from "react"
 import { Control, ControlGroup, ControlLabel } from "@renderer/components/ui/control"
 import { Input } from "@renderer/components/ui/input"
+import { Textarea } from "@renderer/components/ui/textarea"
 import {
   Select,
   SelectContent,
@@ -36,6 +37,8 @@ import {
 } from "@shared/index"
 import { getDefaultSttModel } from "@shared/stt-models"
 import { Mic, FileText, Volume2, Bot, Zap, BookOpen, Settings2 } from "lucide-react"
+
+const SETTINGS_TEXT_SAVE_DEBOUNCE_MS = 400
 
 function RoleProviderSelector({
   label,
@@ -76,11 +79,44 @@ function RoleProviderSelector({
 export function Component() {
   const configQuery = useConfigQuery()
   const saveConfigMutation = useSaveConfigMutation()
+  const transcriptProcessingPromptSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [transcriptProcessingPromptDraft, setTranscriptProcessingPromptDraft] = useState("")
 
   const saveConfig = useCallback((updates: Partial<Config>) => {
     if (!configQuery.data) return
     saveConfigMutation.mutate({ config: { ...configQuery.data, ...updates } })
   }, [configQuery.data, saveConfigMutation])
+
+  const flushTranscriptProcessingPromptSave = useCallback((value: string) => {
+    if (transcriptProcessingPromptSaveTimeoutRef.current) {
+      clearTimeout(transcriptProcessingPromptSaveTimeoutRef.current)
+      transcriptProcessingPromptSaveTimeoutRef.current = null
+    }
+    saveConfig({ transcriptPostProcessingPrompt: value })
+  }, [saveConfig])
+
+  const updateTranscriptProcessingPromptDraft = useCallback((value: string) => {
+    setTranscriptProcessingPromptDraft(value)
+    if (transcriptProcessingPromptSaveTimeoutRef.current) {
+      clearTimeout(transcriptProcessingPromptSaveTimeoutRef.current)
+    }
+    transcriptProcessingPromptSaveTimeoutRef.current = setTimeout(() => {
+      transcriptProcessingPromptSaveTimeoutRef.current = null
+      saveConfig({ transcriptPostProcessingPrompt: value })
+    }, SETTINGS_TEXT_SAVE_DEBOUNCE_MS)
+  }, [saveConfig])
+
+  useEffect(() => {
+    setTranscriptProcessingPromptDraft(configQuery.data?.transcriptPostProcessingPrompt ?? "")
+  }, [configQuery.data?.transcriptPostProcessingPrompt])
+
+  useEffect(() => {
+    return () => {
+      if (transcriptProcessingPromptSaveTimeoutRef.current) {
+        clearTimeout(transcriptProcessingPromptSaveTimeoutRef.current)
+      }
+    }
+  }, [])
 
   const allPresets = useMemo(() => {
     const builtIn = getBuiltInModelPresets()
@@ -112,13 +148,17 @@ export function Component() {
 
   const config = configQuery.data
   const sttProviderId = config.sttProviderId || "openai"
-  const transcriptCleanupProviderId = config.transcriptPostProcessingProviderId || "openai"
+  const transcriptProcessingProviderId = config.transcriptPostProcessingProviderId || "openai"
   const ttsProviderId = config.ttsProviderId || "openai"
   const agentProviderId = config.mcpToolsProviderId || "openai"
-  const usesOpenAiCompatiblePreset = agentProviderId === "openai" || transcriptCleanupProviderId === "openai" || (config.dualModelEnabled ?? false)
-  const transcriptCleanupModel = transcriptCleanupProviderId === "openai"
+  const transcriptProcessingEnabled = config.transcriptPostProcessingEnabled ?? false
+  const usesOpenAiCompatiblePreset =
+    agentProviderId === "openai" ||
+    (transcriptProcessingEnabled && transcriptProcessingProviderId === "openai") ||
+    (config.dualModelEnabled ?? false)
+  const transcriptProcessingModel = transcriptProcessingProviderId === "openai"
     ? config.transcriptPostProcessingOpenaiModel
-    : transcriptCleanupProviderId === "groq"
+    : transcriptProcessingProviderId === "groq"
       ? config.transcriptPostProcessingGroqModel
       : config.transcriptPostProcessingGeminiModel
   const dualModelEnabled = config.dualModelEnabled ?? false
@@ -138,7 +178,7 @@ export function Component() {
           </p>
         </div>
 
-        <ControlGroup title="Choose a Provider for Each Job">
+        <ControlGroup title="Choose a Provider for Each Job" collapsible>
           <RoleProviderSelector
             label="Speech-to-Text"
             tooltip="Choose which provider listens to your audio and turns it into text."
@@ -146,15 +186,6 @@ export function Component() {
             onChange={(value) => saveConfig({ sttProviderId: value as STT_PROVIDER_ID })}
             providers={STT_PROVIDERS}
             icon={Mic}
-          />
-
-          <RoleProviderSelector
-            label="Transcript Cleanup"
-            tooltip="Choose which provider optionally cleans up punctuation and formatting after speech-to-text."
-            value={transcriptCleanupProviderId}
-            onChange={(value) => saveConfig({ transcriptPostProcessingProviderId: value as CHAT_PROVIDER_ID })}
-            providers={CHAT_PROVIDERS}
-            icon={FileText}
           />
 
           <RoleProviderSelector
@@ -176,7 +207,78 @@ export function Component() {
           />
         </ControlGroup>
 
-        <ControlGroup title="Voice Models">
+        <ControlGroup title="Transcript Processing" collapsible>
+          <Control
+            label={<ControlLabel label="Enabled" tooltip="Optionally clean up punctuation, formatting, or wording after transcription and before the transcript is used elsewhere." />}
+            className="px-3"
+          >
+            <Switch
+              checked={transcriptProcessingEnabled}
+              onCheckedChange={(checked) => saveConfig({ transcriptPostProcessingEnabled: checked })}
+            />
+          </Control>
+
+          {transcriptProcessingEnabled && (
+            <>
+              <RoleProviderSelector
+                label="Provider"
+                tooltip="Choose which provider handles transcript processing when it is enabled."
+                value={transcriptProcessingProviderId}
+                onChange={(value) => saveConfig({ transcriptPostProcessingProviderId: value as CHAT_PROVIDER_ID })}
+                providers={CHAT_PROVIDERS}
+                icon={FileText}
+              />
+
+              <div className="border-t px-3 py-2">
+                {transcriptProcessingProviderId === "openai" ? (
+                  <Control
+                    label={<ControlLabel label="Transcript Processing model" tooltip="OpenAI-compatible transcript processing is selected through the preset section below." />}
+                  >
+                    <p className="text-sm text-muted-foreground">
+                      OpenAI-compatible transcript processing models are selected in the OpenAI-Compatible Preset section below.
+                    </p>
+                  </Control>
+                ) : (
+                  <ModelSelector
+                    providerId={transcriptProcessingProviderId}
+                    value={transcriptProcessingModel}
+                    onValueChange={(value) => {
+                      if (transcriptProcessingProviderId === "groq") {
+                        saveConfig({ transcriptPostProcessingGroqModel: value })
+                      } else {
+                        saveConfig({ transcriptPostProcessingGeminiModel: value })
+                      }
+                    }}
+                    label="Transcript Processing model"
+                    placeholder="Select model for transcript processing"
+                    excludeTranscriptionOnlyModels={true}
+                  />
+                )}
+              </div>
+
+              <Control
+                label={<ControlLabel label="Prompt" tooltip="Custom prompt for transcript processing. Use {transcript} to insert the original transcript." />}
+                className="border-t px-3 py-2"
+              >
+                <div className="w-full space-y-2">
+                  <Textarea
+                    rows={6}
+                    value={transcriptProcessingPromptDraft}
+                    onChange={(e) => updateTranscriptProcessingPromptDraft(e.currentTarget.value)}
+                    onBlur={(e) => flushTranscriptProcessingPromptSave(e.currentTarget.value)}
+                    placeholder="Custom instructions for transcript processing..."
+                    className="min-h-[120px]"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Use <span className="select-text">{"{transcript}"}</span> to insert the original transcript.
+                  </p>
+                </div>
+              </Control>
+            </>
+          )}
+        </ControlGroup>
+
+        <ControlGroup title="Speech & Voice Models" collapsible>
           <div className="px-3 py-2">
             {sttProviderId === "parakeet" ? (
               <Control
@@ -194,33 +296,6 @@ export function Component() {
                 label="Speech-to-Text model"
                 placeholder="Select model for speech transcription"
                 onlyTranscriptionModels={true}
-              />
-            )}
-          </div>
-
-          <div className="border-t px-3 py-2">
-            {transcriptCleanupProviderId === "openai" ? (
-              <Control
-                label={<ControlLabel label="Transcript Cleanup model" tooltip="OpenAI-compatible transcript cleanup is selected through the preset section below." />}
-              >
-                <p className="text-sm text-muted-foreground">
-                  OpenAI-compatible transcript cleanup models are selected in the OpenAI-Compatible Preset section below.
-                </p>
-              </Control>
-            ) : (
-              <ModelSelector
-                providerId={transcriptCleanupProviderId}
-                value={transcriptCleanupModel}
-                onValueChange={(value) => {
-                  if (transcriptCleanupProviderId === "groq") {
-                    saveConfig({ transcriptPostProcessingGroqModel: value })
-                  } else {
-                    saveConfig({ transcriptPostProcessingGeminiModel: value })
-                  }
-                }}
-                label="Transcript Cleanup model"
-                placeholder="Select model for transcript cleanup"
-                excludeTranscriptionOnlyModels={true}
               />
             )}
           </div>
@@ -400,9 +475,9 @@ export function Component() {
           </div>
         </ControlGroup>
 
-        <ControlGroup title="Agent Models">
+        <ControlGroup title="Agent Models" collapsible>
           <div className="mx-3 my-2 rounded-md border border-muted bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-            Keep agent model choices here. OpenAI-compatible presets can carry both an agent model and a transcript cleanup model.
+            Keep agent model choices here. OpenAI-compatible presets can carry both an agent model and a transcript processing model.
           </div>
 
           {usesOpenAiCompatiblePreset && (
@@ -410,12 +485,12 @@ export function Component() {
               <div className="pb-3">
                 <span className="text-sm font-medium">OpenAI-Compatible Preset</span>
                 <p className="text-xs text-muted-foreground">
-                  Use this when Agent/MCP Tools or Transcript Cleanup is set to OpenAI-compatible.
+                  Use this when Agent/MCP Tools or Transcript Processing is set to OpenAI-compatible.
                 </p>
               </div>
               <ModelPresetManager
                 showAgentModel={agentProviderId === "openai"}
-                showTranscriptCleanupModel={transcriptCleanupProviderId === "openai"}
+                showTranscriptCleanupModel={transcriptProcessingEnabled && transcriptProcessingProviderId === "openai"}
               />
             </div>
           )}
@@ -434,12 +509,12 @@ export function Component() {
 
           {!usesOpenAiCompatiblePreset && agentProviderId === "openai" && (
             <p className="px-3 py-2 text-sm text-muted-foreground">
-              OpenAI-compatible preset controls appear here when Agent/MCP Tools or Transcript Cleanup uses that provider.
+              OpenAI-compatible preset controls appear here when Agent/MCP Tools or Transcript Processing uses that provider.
             </p>
           )}
         </ControlGroup>
 
-        <ControlGroup title="Advanced Agent Models">
+        <ControlGroup title="Advanced Agent Models" collapsible>
           <Control
             label={<ControlLabel label="Enable summarization model" tooltip="Use a separate model for UI and memory summaries." />}
             className="px-3"

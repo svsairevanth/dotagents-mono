@@ -333,7 +333,7 @@ export function ModelPresetManager({
                 onValueChange={(value) => {
                   saveModelWithPreset('transcriptProcessingModel', 'transcriptPostProcessingOpenaiModel', value)
                 }}
-                label="Transcript Cleanup Model"
+                label="Transcript Processing Model"
                 placeholder="Select model"
               />
             )}
@@ -424,8 +424,8 @@ export function ModelPresetManager({
                     onValueChange={(value) =>
                       setNewPreset({ ...newPreset, transcriptProcessingModel: value })
                     }
-                    label="Transcript Cleanup Model"
-                    placeholder="Select model for transcript cleanup"
+                    label="Transcript Processing Model"
+                    placeholder="Select model for transcript processing"
                   />
 
                   <PresetModelSelector
@@ -536,8 +536,8 @@ export function ModelPresetManager({
                     onValueChange={(value) =>
                       setEditingPreset({ ...editingPreset, transcriptProcessingModel: value })
                     }
-                    label="Transcript Cleanup Model"
-                    placeholder="Select model for transcript cleanup"
+                    label="Transcript Processing Model"
+                    placeholder="Select model for transcript processing"
                   />
 
                   <PresetModelSelector

@@ -83,35 +83,55 @@ export const ControlGroup = ({
 
   return (
     <div className={className}>
-      {title && (
-        collapsible ? (
+      {title && collapsible ? (
+        <div className="rounded-lg border">
           <button
             type="button"
-            className="flex items-center gap-1.5 mb-3 group cursor-pointer"
+            className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-muted/30 transition-colors cursor-pointer"
             onClick={() => setCollapsed(!collapsed)}
+            aria-expanded={!collapsed}
           >
-            {collapsed ? (
-              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
-            ) : (
-              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
-            )}
-            <span className="text-sm font-semibold">{title}</span>
+            <span className="flex items-center gap-2 text-sm font-semibold">
+              {collapsed ? (
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              )}
+              <span>{title}</span>
+            </span>
           </button>
-        ) : (
-          <div className="mb-3">
-            <span className="text-sm font-semibold">{title}</span>
-          </div>
-        )
-      )}
-      {(!collapsible || !collapsed) && (
+
+          {!collapsed && (
+            <>
+              <div className="divide-y border-t">{children}</div>
+              {endDescription && (
+                <div className="border-t px-3 py-2 text-xs text-muted-foreground sm:flex sm:justify-end sm:text-right">
+                  <div className="w-full break-words whitespace-normal sm:max-w-[70%]">
+                    {endDescription}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      ) : (
         <>
-          <div className="divide-y rounded-lg border">{children}</div>
-          {endDescription && (
-            <div className="mt-2 text-xs text-muted-foreground sm:flex sm:justify-end sm:text-right">
-              <div className="w-full break-words whitespace-normal sm:max-w-[70%]">
-                {endDescription}
-              </div>
+          {title && (
+            <div className="mb-3">
+              <span className="text-sm font-semibold">{title}</span>
             </div>
+          )}
+          {(!collapsible || !collapsed) && (
+            <>
+              <div className="divide-y rounded-lg border">{children}</div>
+              {endDescription && (
+                <div className="mt-2 text-xs text-muted-foreground sm:flex sm:justify-end sm:text-right">
+                  <div className="w-full break-words whitespace-normal sm:max-w-[70%]">
+                    {endDescription}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </>
       )}

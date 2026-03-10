@@ -31,7 +31,7 @@ const STT_PROVIDERS = [
   { label: 'Parakeet (Local)', value: 'parakeet' },
 ] as const;
 
-// Chat/Agent Provider Options (for Agent/MCP Tools and Transcript Post-Processing)
+// Chat/Agent Provider Options (for Agent/MCP Tools and Transcript Processing)
 const CHAT_PROVIDERS = [
   { label: 'OpenAI', value: 'openai' },
   { label: 'Groq', value: 'groq' },
@@ -1422,28 +1422,6 @@ export default function SettingsScreen({ navigation }: any) {
                   ))}
                 </View>
 
-                {/* Transcript Post-Processing Provider */}
-                <Text style={[styles.label, { marginTop: spacing.md }]}>Transcript Post-Processing</Text>
-                <View style={styles.providerSelector}>
-                  {CHAT_PROVIDERS.map((provider) => (
-                    <Pressable
-                      key={provider.value}
-                      style={[
-                        styles.providerOption,
-                        (remoteSettings.transcriptPostProcessingProviderId || 'openai') === provider.value && styles.providerOptionActive,
-                      ]}
-                      onPress={() => handleRemoteSettingUpdate('transcriptPostProcessingProviderId', provider.value)}
-                    >
-                      <Text style={[
-                        styles.providerOptionText,
-                        (remoteSettings.transcriptPostProcessingProviderId || 'openai') === provider.value && styles.providerOptionTextActive,
-                      ]}>
-                        {provider.label}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-
                 {/* Agent/MCP Tools Provider */}
                 <Text style={[styles.label, { marginTop: spacing.md }]}>Agent/MCP Tools</Text>
                 <View style={styles.providerSelector}>
@@ -1644,6 +1622,57 @@ export default function SettingsScreen({ navigation }: any) {
                     )}
                   </TouchableOpacity>
                 )}
+
+                <Text style={[styles.label, { marginTop: spacing.lg }]}>Transcript Processing</Text>
+                <Text style={styles.helperText}>
+                  Clean up transcripts after speech-to-text and before they are used elsewhere.
+                </Text>
+
+                <View style={styles.row}>
+                  <Text style={styles.label}>Enabled</Text>
+                  <Switch
+                    value={remoteSettings.transcriptPostProcessingEnabled ?? false}
+                    onValueChange={(v) => handleRemoteSettingToggle('transcriptPostProcessingEnabled', v)}
+                    trackColor={{ false: theme.colors.muted, true: theme.colors.primary }}
+                    thumbColor={remoteSettings.transcriptPostProcessingEnabled ? theme.colors.primaryForeground : theme.colors.background}
+                  />
+                </View>
+
+                <Text style={styles.label}>Provider</Text>
+                <View style={styles.providerSelector}>
+                  {CHAT_PROVIDERS.map((provider) => (
+                    <Pressable
+                      key={provider.value}
+                      style={[
+                        styles.providerOption,
+                        (remoteSettings.transcriptPostProcessingProviderId || 'openai') === provider.value && styles.providerOptionActive,
+                      ]}
+                      onPress={() => handleRemoteSettingUpdate('transcriptPostProcessingProviderId', provider.value)}
+                    >
+                      <Text style={[
+                        styles.providerOptionText,
+                        (remoteSettings.transcriptPostProcessingProviderId || 'openai') === provider.value && styles.providerOptionTextActive,
+                      ]}>
+                        {provider.label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                {remoteSettings.transcriptPostProcessingEnabled && (
+                  <>
+                    <Text style={styles.label}>Prompt</Text>
+                    <TextInput
+                      style={[styles.input, { minHeight: 80, textAlignVertical: 'top' }]}
+                      value={inputDrafts.transcriptPostProcessingPrompt ?? ''}
+                      onChangeText={(v) => handleRemoteSettingUpdate('transcriptPostProcessingPrompt', v)}
+                      placeholder="Custom instructions for transcript processing..."
+                      placeholderTextColor={theme.colors.mutedForeground}
+                      multiline
+                      numberOfLines={3}
+                    />
+                  </>
+                )}
               </CollapsibleSection>
             )}
 
@@ -1694,33 +1723,6 @@ export default function SettingsScreen({ navigation }: any) {
                   Show live transcription while recording
                 </Text>
 
-                <View style={styles.row}>
-                  <Text style={styles.label}>Post-Processing</Text>
-                  <Switch
-                    value={remoteSettings.transcriptPostProcessingEnabled ?? false}
-                    onValueChange={(v) => handleRemoteSettingToggle('transcriptPostProcessingEnabled', v)}
-                    trackColor={{ false: theme.colors.muted, true: theme.colors.primary }}
-                    thumbColor={remoteSettings.transcriptPostProcessingEnabled ? theme.colors.primaryForeground : theme.colors.background}
-                  />
-                </View>
-                <Text style={styles.helperText}>
-                  Clean up transcripts before sending to LLM
-                </Text>
-
-                {remoteSettings.transcriptPostProcessingEnabled && (
-                  <>
-                    <Text style={styles.label}>Post-Processing Prompt</Text>
-                    <TextInput
-                      style={[styles.input, { minHeight: 80, textAlignVertical: 'top' }]}
-                      value={inputDrafts.transcriptPostProcessingPrompt ?? ''}
-                      onChangeText={(v) => handleRemoteSettingUpdate('transcriptPostProcessingPrompt', v)}
-                      placeholder="Custom instructions for transcript cleanup..."
-                      placeholderTextColor={theme.colors.mutedForeground}
-                      multiline
-                      numberOfLines={3}
-                    />
-                  </>
-                )}
               </CollapsibleSection>
             )}
 
