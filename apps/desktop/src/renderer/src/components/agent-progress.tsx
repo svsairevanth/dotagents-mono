@@ -2384,7 +2384,7 @@ const ResponseHistoryPanel: React.FC<{
   if (allResponses.length === 0) return null
 
   return (
-    <div className="flex-shrink-0 border-b bg-green-50/50 dark:bg-green-950/30">
+    <div className="flex-shrink-0 border-t bg-green-50/50 dark:bg-green-950/30">
       {/* Header */}
       <button
         type="button"
@@ -3728,13 +3728,6 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
 
             {/* Message Stream (Chat Tab) */}
             <div className={cn("relative flex-1 min-h-0 flex flex-col", activeTab !== "chat" && (progress.stepSummaries?.length ?? 0) > 0 && "hidden")} onClick={(e) => e.stopPropagation()}>
-              {/* Response History Panel - sticky at top like mobile */}
-              {effectiveUserResponse && (
-                <ResponseHistoryPanel
-                  currentResponse={effectiveUserResponse}
-                  pastResponses={effectiveUserResponseHistory}
-                />
-              )}
               <div
                 ref={scrollContainerRef}
                 onScroll={handleScroll}
@@ -3829,6 +3822,13 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
                   </div>
                 )}
               </div>
+              {/* Response History Panel - sticky at bottom of conversation */}
+              {effectiveUserResponse && (
+                <ResponseHistoryPanel
+                  currentResponse={effectiveUserResponse}
+                  pastResponses={effectiveUserResponseHistory}
+                />
+              )}
             </div>
 
             {/* Tool Approval - Fixed position outside scroll area */}
@@ -4100,13 +4100,6 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
           maxItems={delegationSummaryMaxItems}
           onOpenDetails={setSelectedDelegationRunId}
         />
-        {/* Response History Panel - sticky at top like mobile */}
-        {effectiveUserResponse && (
-          <ResponseHistoryPanel
-            currentResponse={effectiveUserResponse}
-            pastResponses={effectiveUserResponseHistory}
-          />
-        )}
         <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
@@ -4217,6 +4210,13 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
             </div>
           )}
         </div>
+        {/* Response History Panel - sticky at bottom of conversation */}
+        {effectiveUserResponse && (
+          <ResponseHistoryPanel
+            currentResponse={effectiveUserResponse}
+            pastResponses={effectiveUserResponseHistory}
+          />
+        )}
       </div>
 
       {/* Tool Approval - Fixed position outside scroll area for overlay variant */}
