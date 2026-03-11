@@ -153,15 +153,15 @@ function calculateTileWidth(containerWidth: number, gap: number, layoutMode: Til
   }
   switch (layoutMode) {
     case "1x1":
-      // Full width
-      return Math.max(TILE_DIMENSIONS.width.min, Math.min(TILE_DIMENSIONS.width.max, containerWidth))
+      // Full width — use container width directly (no max clamp so ultrawide displays work)
+      return Math.max(TILE_DIMENSIONS.width.min, containerWidth)
     case "2x2":
-      // Half width (same as 1x2 — 2 columns)
-      return Math.max(TILE_DIMENSIONS.width.min, Math.min(TILE_DIMENSIONS.width.max, Math.floor((containerWidth - gap) / 2)))
     case "1x2":
-    default:
-      // Half width — 2 columns
-      return Math.max(TILE_DIMENSIONS.width.min, Math.min(TILE_DIMENSIONS.width.max, Math.floor((containerWidth - gap) / 2)))
+    default: {
+      // Half width — 2 columns, clamped so each tile is at most half the container
+      const halfWidth = Math.floor((containerWidth - gap) / 2)
+      return Math.max(TILE_DIMENSIONS.width.min, halfWidth)
+    }
   }
 }
 
