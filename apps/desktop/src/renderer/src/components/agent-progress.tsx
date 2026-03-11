@@ -2287,10 +2287,14 @@ const ResponseTTSButton: React.FC<{ text: string }> = ({ text }) => {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const audioUrlRef = useRef<string | null>(null)
   const configQuery = useConfigQuery()
+  const ttsSource = sanitizeMessageContentForSpeech(text)
+  const latestTtsSourceRef = useRef(ttsSource)
+  latestTtsSourceRef.current = ttsSource
+  const ttsGenerationIdRef = useRef(0)
 
   useEffect(() => {
     const audio = audioRef.current
-    if (!audio) return
+    if (!audio) return undefined
     const unregisterAudio = ttsManager.registerAudio(audio)
     const unregisterCb = ttsManager.registerStopCallback(() => {
       audio.pause()
@@ -2306,8 +2310,11 @@ const ResponseTTSButton: React.FC<{ text: string }> = ({ text }) => {
     return () => { unregisterAudio(); unregisterCb(); audio.removeEventListener("ended", onEnded); audio.removeEventListener("play", onPlay); audio.removeEventListener("pause", onPause) }
   }, [])
 
-  // Cleanup URL on unmount
-  useEffect(() => () => { if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current) }, [])
+  // Cleanup URL on unmount and invalidate any in-flight generations
+  useEffect(() => () => {
+    ttsGenerationIdRef.current += 1
+    if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current)
+  }, [])
 
   if (!configQuery.data?.ttsEnabled) return null
 
@@ -2315,6 +2322,10 @@ const ResponseTTSButton: React.FC<{ text: string }> = ({ text }) => {
     e.stopPropagation()
     const audio = audioRef.current
     if (!audio) return
+
+    if (state === "generating") {
+      return
+    }
 
     if (state === "playing") {
       audio.pause()
@@ -2326,24 +2337,38 @@ const ResponseTTSButton: React.FC<{ text: string }> = ({ text }) => {
     if (audioUrlRef.current) {
       try {
         audio.src = audioUrlRef.current
-        await ttsManager.playExclusive(audio, { source: "response-history", autoPlay: false, textPreview: text.slice(0, 80) })
+        await ttsManager.playExclusive(audio, { source: "response-history", autoPlay: false, textPreview: ttsSource.slice(0, 80) })
       } catch {
         setState("idle")
       }
       return
     }
 
+    const generationId = ++ttsGenerationIdRef.current
+    const generationSource = ttsSource
     setState("generating")
     try {
-      const source = sanitizeMessageContentForSpeech(text)
-      const result = await tipcClient.generateSpeech({ text: source })
+      const result = await tipcClient.generateSpeech({ text: generationSource })
+
+      if (
+        ttsGenerationIdRef.current !== generationId ||
+        latestTtsSourceRef.current !== generationSource
+      ) {
+        return
+      }
+
       if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current)
       const blob = new Blob([result.audio], { type: "audio/wav" })
       audioUrlRef.current = URL.createObjectURL(blob)
       audio.src = audioUrlRef.current
-      await ttsManager.playExclusive(audio, { source: "response-history", autoPlay: false, textPreview: text.slice(0, 80) })
+      await ttsManager.playExclusive(audio, { source: "response-history", autoPlay: false, textPreview: generationSource.slice(0, 80) })
     } catch {
-      setState("idle")
+      if (
+        ttsGenerationIdRef.current === generationId &&
+        latestTtsSourceRef.current === generationSource
+      ) {
+        setState("idle")
+      }
     }
   }
 
