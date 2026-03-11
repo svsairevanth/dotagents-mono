@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, createContext, useContext, useCallback } from "react"
+import React, { useRef, useState, useEffect, useLayoutEffect, createContext, useContext, useCallback } from "react"
 import { cn } from "@renderer/lib/utils"
 import { GripVertical } from "lucide-react"
 import { useResizable, TILE_DIMENSIONS } from "@renderer/hooks/use-resizable"
@@ -215,22 +215,29 @@ export function SessionTileWrapper({
     storageKey: "session-tile",
   })
 
-  // Synchronously update tile size during render when layout mode or resetKey
-  // changes. Using useEffect caused a one-frame stale render where tiles kept
-  // their old (e.g. 1x1 full-width) size before the effect corrected them,
-  // breaking flex-wrap two-column layout.
-  if (resetKey !== lastResetKeyRef.current && containerWidth > 0) {
-    lastResetKeyRef.current = resetKey
-    const newWidth = calculateTileWidth(containerWidth, gap, layoutMode)
-    const newHeight = calculateTileHeight(containerHeight, gap, layoutMode)
-    setSize({ width: newWidth, height: newHeight })
-  }
-  if (layoutMode !== lastLayoutModeRef.current && containerWidth > 0) {
-    lastLayoutModeRef.current = layoutMode
-    const newWidth = calculateTileWidth(containerWidth, gap, layoutMode)
-    const newHeight = calculateTileHeight(containerHeight, gap, layoutMode)
-    setSize({ width: newWidth, height: newHeight })
-  }
+  // Use useLayoutEffect (runs before browser paint) to update tile size when
+  // layout mode or resetKey changes. Regular useEffect caused a one-frame stale
+  // render where tiles kept their old (e.g. 1x1 full-width) size before the
+  // effect corrected them, breaking flex-wrap two-column layout.
+  useLayoutEffect(() => {
+    if (resetKey !== lastResetKeyRef.current && containerWidth > 0) {
+      lastResetKeyRef.current = resetKey
+      setSize({
+        width: calculateTileWidth(containerWidth, gap, layoutMode),
+        height: calculateTileHeight(containerHeight, gap, layoutMode),
+      })
+    }
+  }, [resetKey, containerWidth, containerHeight, gap, layoutMode, setSize])
+
+  useLayoutEffect(() => {
+    if (layoutMode !== lastLayoutModeRef.current && containerWidth > 0) {
+      lastLayoutModeRef.current = layoutMode
+      setSize({
+        width: calculateTileWidth(containerWidth, gap, layoutMode),
+        height: calculateTileHeight(containerHeight, gap, layoutMode),
+      })
+    }
+  }, [layoutMode, containerWidth, containerHeight, gap, setSize])
 
   // Update width and height to fill container once it is measured (only on first valid measurement)
   // This handles the case where containerWidth/containerHeight are 0 on initial render
