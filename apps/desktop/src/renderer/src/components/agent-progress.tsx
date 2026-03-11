@@ -3250,6 +3250,7 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
         : undefined),
     [fallbackRespondToUserResponses, progress.userResponseHistory],
   )
+  const hasResponseHistoryEntries = !!(effectiveUserResponse || effectiveUserResponseHistory?.length)
   const primaryAgentLabel = useMemo(
     () => acpSessionInfo?.agentTitle ?? acpSessionInfo?.agentName ?? profileName ?? "Agent",
     [acpSessionInfo?.agentName, acpSessionInfo?.agentTitle, profileName],
@@ -3921,9 +3922,9 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
                 )}
               </div>
               {/* Response History Panel - sticky at bottom of conversation */}
-              {effectiveUserResponse && (
+              {hasResponseHistoryEntries && (
                 <ResponseHistoryPanel
-                  currentResponse={effectiveUserResponse}
+                  currentResponse={effectiveUserResponse ?? ""}
                   pastResponses={effectiveUserResponseHistory}
                 />
               )}
@@ -4309,9 +4310,9 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
           )}
         </div>
         {/* Response History Panel - sticky at bottom of conversation */}
-        {effectiveUserResponse && (
+        {hasResponseHistoryEntries && (
           <ResponseHistoryPanel
-            currentResponse={effectiveUserResponse}
+            currentResponse={effectiveUserResponse ?? ""}
             pastResponses={effectiveUserResponseHistory}
           />
         )}
