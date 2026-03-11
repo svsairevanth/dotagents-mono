@@ -351,6 +351,23 @@ export class ACPClientService {
     this.activeRuns.clear();
   }
 
+  /**
+   * Cancel all active runs that belong to a specific parent session.
+   * This is used when a user stops a session to also cancel any remote ACP runs
+   * that were spawned by that session.
+   */
+  cancelRunsByParentSession(parentSessionId: string): number {
+    let cancelledCount = 0;
+    for (const [runId, run] of this.activeRuns) {
+      if (run.parentSessionId === parentSessionId) {
+        run.controller.abort();
+        this.activeRuns.delete(runId);
+        cancelledCount++;
+      }
+    }
+    return cancelledCount;
+  }
+
   getActiveRuns(): string[] {
     return Array.from(this.activeRuns.keys());
   }

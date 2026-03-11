@@ -167,11 +167,27 @@ export function ActiveAgentsSidebar({
       key: `active:${session.id}`,
     }))
 
+    // Ensure pinned past sessions always appear, even if beyond the visible count.
+    // Split into pinned (always shown) and unpinned (paginated).
+    const pinnedPast: SidebarSession[] = []
+    const unpinnedPast: SidebarSession[] = []
+    for (const item of allPastSessions) {
+      const cid = item.session.conversationId
+      if (cid && pinnedSessionIds.has(cid)) {
+        pinnedPast.push(item)
+      } else {
+        unpinnedPast.push(item)
+      }
+    }
+
+    const unpinnedSliceCount = Math.max(displayedPastSessionCount - pinnedPast.length, 0)
+
     return [
       ...activeItems,
-      ...allPastSessions.slice(0, displayedPastSessionCount),
+      ...pinnedPast,
+      ...unpinnedPast.slice(0, unpinnedSliceCount),
     ]
-  }, [activeSessions, allPastSessions, displayedPastSessionCount])
+  }, [activeSessions, allPastSessions, displayedPastSessionCount, pinnedSessionIds])
 
   const hasMorePastSessions = allPastSessions.length > displayedPastSessionCount
 
@@ -485,6 +501,7 @@ export function ActiveAgentsSidebar({
 
             // Get agent/profile name from progress data
             const agentName = sessionProgress?.profileName
+            const isActivePinned = session.conversationId ? pinnedSessionIds.has(session.conversationId) : false
 
             return (
               <div
@@ -499,14 +516,18 @@ export function ActiveAgentsSidebar({
                       : "hover:bg-accent/50",
                 )}
               >
-                {/* Status dot */}
-                <span
-                  className={cn(
-                    "h-1.5 w-1.5 shrink-0 rounded-full",
-                    statusDotColor,
-                    !isSnoozed && !hasPendingApproval && "animate-pulse",
-                  )}
-                />
+                {/* Status dot or pinned icon */}
+                {isActivePinned ? (
+                  <Pin className="h-3 w-3 shrink-0 fill-current text-foreground" />
+                ) : (
+                  <span
+                    className={cn(
+                      "h-1.5 w-1.5 shrink-0 rounded-full",
+                      statusDotColor,
+                      !isSnoozed && !hasPendingApproval && "animate-pulse",
+                    )}
+                  />
+                )}
                 <div className="flex-1 min-w-0 flex flex-col gap-0.5">
                   <p
                     className={cn(
@@ -533,6 +554,28 @@ export function ActiveAgentsSidebar({
                     </span>
                   )}
                 </div>
+                {session.conversationId && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (session.conversationId) {
+                        togglePinSession(session.conversationId)
+                      }
+                    }}
+                    className={cn(
+                      "shrink-0 rounded p-0.5 hover:bg-accent transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                      isActivePinned
+                        ? "opacity-100"
+                        : "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto",
+                    )}
+                    title={isActivePinned ? "Unpin session" : "Pin session"}
+                    aria-label={`${isActivePinned ? "Unpin" : "Pin"} ${session.conversationTitle || "Untitled session"}`}
+                    aria-pressed={isActivePinned}
+                  >
+                    <Pin className={cn("h-3 w-3", isActivePinned && "fill-current text-foreground")} />
+                  </button>
+                )}
                 <button
                   onClick={(e) => handleToggleSnooze(session.id, isSnoozed, e)}
                   className={cn(

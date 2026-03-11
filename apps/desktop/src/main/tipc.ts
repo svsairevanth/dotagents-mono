@@ -1132,12 +1132,38 @@ export const router = {
   stopAgentSession: t.procedure
     .input<{ sessionId: string }>()
     .action(async ({ input }) => {
-        
+
       // Stop the session in the state manager (aborts LLM requests, kills processes)
       agentSessionStateManager.stopSession(input.sessionId)
 
       // Cancel any pending tool approvals for this session so executeToolCall doesn't hang
       toolApprovalManager.cancelSessionApprovals(input.sessionId)
+
+      // Cancel any remote ACP runs spawned by this session so they don't keep running
+      // and writing back to the dead session (zombie session prevention)
+      try {
+        const { acpClientService } = await import("./acp")
+        const cancelledAcpRuns = acpClientService.cancelRunsByParentSession(input.sessionId)
+        if (cancelledAcpRuns > 0) {
+          logLLM(`[stopAgentSession] Cancelled ${cancelledAcpRuns} ACP run(s) for session ${input.sessionId}`)
+        }
+      } catch (error) {
+        logApp("[stopAgentSession] Error cancelling ACP runs:", error)
+      }
+
+      // Cancel any internal sub-sessions spawned by this session
+      try {
+        const { getChildSubSessions, cancelSubSession } = await import("./acp/internal-agent")
+        const childSessions = getChildSubSessions(input.sessionId)
+        for (const child of childSessions) {
+          if (child.status === "running") {
+            cancelSubSession(child.id)
+            logLLM(`[stopAgentSession] Cancelled internal sub-session ${child.id}`)
+          }
+        }
+      } catch (error) {
+        logApp("[stopAgentSession] Error cancelling internal sub-sessions:", error)
+      }
 
       // Pause the message queue for this conversation to prevent processing the next queued message
       // The user can resume the queue later if they want to continue
