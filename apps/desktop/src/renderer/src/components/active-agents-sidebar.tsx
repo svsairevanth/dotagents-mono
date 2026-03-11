@@ -160,7 +160,7 @@ export function ActiveAgentsSidebar({
     minimumPastSessionsNeeded,
   )
 
-  const sidebarSessions = useMemo(() => {
+  const { sidebarSessions, hasMorePastSessions } = useMemo(() => {
     const activeItems: SidebarSession[] = activeSessions.map((session) => ({
       session,
       isPast: false,
@@ -182,14 +182,16 @@ export function ActiveAgentsSidebar({
 
     const unpinnedSliceCount = Math.max(displayedPastSessionCount - pinnedPast.length, 0)
 
-    return [
-      ...activeItems,
-      ...pinnedPast,
-      ...unpinnedPast.slice(0, unpinnedSliceCount),
-    ]
+    return {
+      sidebarSessions: [
+        ...activeItems,
+        ...pinnedPast,
+        ...unpinnedPast.slice(0, unpinnedSliceCount),
+      ],
+      // "Has more" is based on unpinned sessions only since pinned are always shown
+      hasMorePastSessions: unpinnedPast.length > unpinnedSliceCount,
+    }
   }, [activeSessions, allPastSessions, displayedPastSessionCount, pinnedSessionIds])
-
-  const hasMorePastSessions = allPastSessions.length > displayedPastSessionCount
 
   const hasAnySessions = sidebarSessions.length > 0
 
