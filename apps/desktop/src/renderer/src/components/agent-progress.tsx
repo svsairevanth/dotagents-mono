@@ -2281,6 +2281,92 @@ const PastResponseItem: React.FC<{
   )
 }
 
+// Individual TTS button for a single response in the history panel
+const ResponseTTSButton: React.FC<{ text: string }> = ({ text }) => {
+  const [state, setState] = useState<"idle" | "generating" | "playing">("idle")
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const audioUrlRef = useRef<string | null>(null)
+  const configQuery = useConfigQuery()
+
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+    const unregisterAudio = ttsManager.registerAudio(audio)
+    const unregisterCb = ttsManager.registerStopCallback(() => {
+      audio.pause()
+      audio.currentTime = 0
+      setState((s) => (s === "playing" ? "idle" : s))
+    }, audio)
+    const onEnded = () => setState("idle")
+    const onPlay = () => setState("playing")
+    const onPause = () => setState((s) => (s === "playing" ? "idle" : s))
+    audio.addEventListener("ended", onEnded)
+    audio.addEventListener("play", onPlay)
+    audio.addEventListener("pause", onPause)
+    return () => { unregisterAudio(); unregisterCb(); audio.removeEventListener("ended", onEnded); audio.removeEventListener("play", onPlay); audio.removeEventListener("pause", onPause) }
+  }, [])
+
+  // Cleanup URL on unmount
+  useEffect(() => () => { if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current) }, [])
+
+  if (!configQuery.data?.ttsEnabled) return null
+
+  const handleClick = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const audio = audioRef.current
+    if (!audio) return
+
+    if (state === "playing") {
+      audio.pause()
+      audio.currentTime = 0
+      return
+    }
+
+    // If already has audio loaded, just play
+    if (audioUrlRef.current) {
+      audio.src = audioUrlRef.current
+      await ttsManager.playExclusive(audio, { source: "response-history", autoPlay: false, textPreview: text.slice(0, 80) })
+      return
+    }
+
+    setState("generating")
+    try {
+      const source = sanitizeMessageContentForSpeech(text)
+      const result = await tipcClient.generateSpeech({ text: source })
+      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current)
+      const blob = new Blob([result.audio], { type: "audio/wav" })
+      audioUrlRef.current = URL.createObjectURL(blob)
+      audio.src = audioUrlRef.current
+      await ttsManager.playExclusive(audio, { source: "response-history", autoPlay: false, textPreview: text.slice(0, 80) })
+    } catch {
+      setState("idle")
+    }
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={handleClick}
+        className={cn(
+          "shrink-0 rounded p-0.5 transition-colors hover:bg-green-200/50 dark:hover:bg-green-800/50",
+          state === "playing" && "text-green-600 dark:text-green-400",
+        )}
+        title={state === "generating" ? "Generating…" : state === "playing" ? "Stop" : "Listen"}
+      >
+        {state === "generating" ? (
+          <Loader2 className="h-3 w-3 animate-spin text-green-600 dark:text-green-400" />
+        ) : state === "playing" ? (
+          <Volume2 className="h-3 w-3 animate-pulse" />
+        ) : (
+          <Volume2 className="h-3 w-3 text-green-600/60 dark:text-green-400/50" />
+        )}
+      </button>
+      <audio ref={audioRef} />
+    </>
+  )
+}
+
 // Response History Panel - sticky panel at top of tile showing all respond_to_user responses (like mobile)
 const ResponseHistoryPanel: React.FC<{
   currentResponse: string
@@ -2331,13 +2417,18 @@ const ResponseHistoryPanel: React.FC<{
                 idx === 0 && "bg-green-100/30 dark:bg-green-900/20",
               )}
             >
-              {idx > 0 && (
-                <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-green-600/60 dark:text-green-400/50">
-                  Response {allResponses.length - idx}
+              <div className="flex items-start gap-1">
+                <div className="min-w-0 flex-1">
+                  {idx > 0 && (
+                    <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-green-600/60 dark:text-green-400/50">
+                      Response {allResponses.length - idx}
+                    </div>
+                  )}
+                  <div className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                    <MarkdownRenderer content={response} />
+                  </div>
                 </div>
-              )}
-              <div className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-                <MarkdownRenderer content={response} />
+                <ResponseTTSButton text={response} />
               </div>
             </div>
           ))}
