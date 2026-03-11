@@ -151,6 +151,12 @@ function calculateTileWidth(containerWidth: number, gap: number, layoutMode: Til
   if (containerWidth <= 0) {
     return TILE_DIMENSIONS.width.default
   }
+
+  // Leave a tiny amount of slack in multi-column modes. Exact-fit widths can
+  // wrap unpredictably at certain viewport/sidebar combinations due to
+  // subpixel rounding during layout/animation.
+  const MULTI_COLUMN_SAFETY_PX = 2
+
   switch (layoutMode) {
     case "1x1":
       // Full width — use container width directly (no max clamp so ultrawide displays work)
@@ -158,8 +164,9 @@ function calculateTileWidth(containerWidth: number, gap: number, layoutMode: Til
     case "2x2":
     case "1x2":
     default: {
-      // Half width — 2 columns, clamped so each tile is at most half the container
-      const halfWidth = Math.floor((containerWidth - gap) / 2)
+      // Half width — 2 columns, with a small safety buffer to avoid exact-fit
+      // wrapping when the sidebar is open and available width lands on a tight boundary.
+      const halfWidth = Math.floor((containerWidth - gap - MULTI_COLUMN_SAFETY_PX) / 2)
       return Math.max(TILE_DIMENSIONS.width.min, halfWidth)
     }
   }

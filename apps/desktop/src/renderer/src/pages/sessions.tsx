@@ -929,9 +929,7 @@ export function Component() {
                   </div>
                 </SessionTileWrapper>
               )}
-              {/* Regular sessions — use display:contents so the outer ref-holder
-                  doesn't interfere with flex layout (the SessionTileWrapper inside
-                  is the real flex item with an explicit width). */}
+              {/* Regular sessions */}
               {allProgressEntries.map(([sessionId], index) => {
                 const isCollapsed = collapsedSessions[sessionId] ?? false
                 const adjustedIndex = hasPendingTile ? index + 1 : index
@@ -939,7 +937,6 @@ export function Component() {
                   <div
                     key={sessionId}
                     ref={(el) => { sessionRefs.current[sessionId] = el }}
-                    className="contents"
                   >
                     <SessionAgentTile
                       sessionId={sessionId}
