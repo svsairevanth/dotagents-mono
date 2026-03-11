@@ -2399,10 +2399,9 @@ const ResponseHistoryPanel: React.FC<{
 
   return (
     <div className={cn(
-      "bg-green-50/50 dark:bg-green-950/30",
       displayState === "full"
-        ? "absolute inset-0 z-20 flex flex-col"
-        : "flex-shrink-0 border-t",
+        ? "absolute inset-0 z-20 flex flex-col bg-green-50 dark:bg-green-950"
+        : "flex-shrink-0 border-t bg-green-50/50 dark:bg-green-950/30",
     )}>
       {/* Header */}
       <button
