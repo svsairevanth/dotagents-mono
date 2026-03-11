@@ -227,6 +227,7 @@ type CompactMessageProps = {
 // Compact message component for space efficiency
 const CompactMessageBase: React.FC<CompactMessageProps> = ({ message, ttsText, isLast, isComplete, hasErrors, wasStopped = false, isExpanded, onToggleExpand, variant = "default", sessionId }) => {
   const [audioData, setAudioData] = useState<ArrayBuffer | null>(null)
+  const [audioMimeType, setAudioMimeType] = useState<string | null>(null)
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false)
   const [ttsError, setTtsError] = useState<string | null>(null)
   const [isCopied, setIsCopied] = useState(false)
@@ -321,6 +322,7 @@ const CompactMessageBase: React.FC<CompactMessageProps> = ({ message, ttsText, i
       }
 
       setAudioData(result.audio)
+      setAudioMimeType(result.mimeType)
       return result.audio
     } catch (error) {
       console.error("[TTS UI] Failed to generate TTS audio:", error)
@@ -366,6 +368,7 @@ const CompactMessageBase: React.FC<CompactMessageProps> = ({ message, ttsText, i
     if (prevTtsSourceRef.current !== ttsSource) {
       prevTtsSourceRef.current = ttsSource
       setAudioData(null)
+      setAudioMimeType(null)
     }
   }, [ttsSource])
 
@@ -584,6 +587,7 @@ const CompactMessageBase: React.FC<CompactMessageProps> = ({ message, ttsText, i
             <div className="mt-2 min-w-0 space-y-1">
               <AudioPlayer
                 audioData={audioData || undefined}
+                audioMimeType={audioMimeType || undefined}
                 text={ttsSource}
                 onGenerateAudio={generateAudio}
                 isGenerating={isGeneratingAudio}
@@ -2228,6 +2232,8 @@ const PastResponseItem: React.FC<{
   index: number
   sessionId?: string
 }> = ({ response, index, sessionId }) => {
+  const [audioData, setAudioData] = useState<ArrayBuffer | null>(null)
+  const [audioMimeType, setAudioMimeType] = useState<string | null>(null)
   const [isExpanded, setIsExpanded] = useState(false)
   const configQuery = useConfigQuery()
   const shouldShowTTSButton = configQuery.data?.ttsEnabled
@@ -2235,8 +2241,15 @@ const PastResponseItem: React.FC<{
 
   const generatePastAudio = async (): Promise<ArrayBuffer> => {
     const result = await tipcClient.generateSpeech({ text: ttsResponseText })
+    setAudioData(result.audio)
+    setAudioMimeType(result.mimeType)
     return result.audio
   }
+
+  useEffect(() => {
+    setAudioData(null)
+    setAudioMimeType(null)
+  }, [ttsResponseText])
 
   const preview = response.length > 80 ? response.slice(0, 80) + "…" : response
 
@@ -2268,6 +2281,8 @@ const PastResponseItem: React.FC<{
           {shouldShowTTSButton && (
             <div className="mt-1.5 min-w-0">
               <AudioPlayer
+                audioData={audioData || undefined}
+                audioMimeType={audioMimeType || undefined}
                 text={ttsResponseText}
                 onGenerateAudio={generatePastAudio}
                 compact={true}
@@ -2358,7 +2373,7 @@ const ResponseTTSButton: React.FC<{ text: string }> = ({ text }) => {
       }
 
       if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current)
-      const blob = new Blob([result.audio], { type: "audio/wav" })
+      const blob = new Blob([result.audio], { type: result.mimeType || "audio/wav" })
       audioUrlRef.current = URL.createObjectURL(blob)
       audio.src = audioUrlRef.current
       await ttsManager.playExclusive(audio, { source: "response-history", autoPlay: false, textPreview: generationSource.slice(0, 80) })
@@ -2534,6 +2549,7 @@ const MidTurnUserResponseBubble: React.FC<{
   onToggleExpand,
 }) => {
   const [audioData, setAudioData] = useState<ArrayBuffer | null>(null)
+  const [audioMimeType, setAudioMimeType] = useState<string | null>(null)
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false)
   const [ttsError, setTtsError] = useState<string | null>(null)
   const [isTTSPlaying, setIsTTSPlaying] = useState(false)
@@ -2570,6 +2586,7 @@ const MidTurnUserResponseBubble: React.FC<{
       }
 
       setAudioData(result.audio)
+      setAudioMimeType(result.mimeType)
       return result.audio
     } catch (error) {
       console.error("[TTS MidTurn] Failed to generate TTS audio:", error)
@@ -2600,6 +2617,11 @@ const MidTurnUserResponseBubble: React.FC<{
       }
     }
   }
+
+  useEffect(() => {
+    setAudioData(null)
+    setAudioMimeType(null)
+  }, [ttsSource])
 
   // Auto-play TTS for mid-turn userResponse (only in overlay variant to prevent double-play)
   useEffect(() => {
@@ -2727,6 +2749,7 @@ const MidTurnUserResponseBubble: React.FC<{
         <div className={cn("min-w-0 px-3", isExpanded ? "pb-2" : "hidden")}>
           <AudioPlayer
             audioData={audioData || undefined}
+            audioMimeType={audioMimeType || undefined}
             text={ttsSource}
             onGenerateAudio={generateAudio}
             isGenerating={isGeneratingAudio}

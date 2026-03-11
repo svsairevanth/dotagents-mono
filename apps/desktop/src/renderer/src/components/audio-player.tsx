@@ -7,6 +7,7 @@ import { ttsManager } from "@renderer/lib/tts-manager"
 
 interface AudioPlayerProps {
   audioData?: ArrayBuffer
+  audioMimeType?: string
   text: string
   onGenerateAudio?: () => Promise<ArrayBuffer>
   className?: string
@@ -20,6 +21,7 @@ interface AudioPlayerProps {
 
 export function AudioPlayer({
   audioData,
+  audioMimeType,
   text,
   onGenerateAudio,
   className,
@@ -46,7 +48,7 @@ export function AudioPlayer({
         URL.revokeObjectURL(audioUrlRef.current)
       }
 
-      const blob = new Blob([audioData], { type: "audio/wav" })
+      const blob = new Blob([audioData], { type: audioMimeType || "audio/wav" })
       audioUrlRef.current = URL.createObjectURL(blob)
       setHasAudio(true)
       setHasAutoPlayed(false)
@@ -64,7 +66,7 @@ export function AudioPlayer({
         URL.revokeObjectURL(audioUrlRef.current)
       }
     }
-  }, [audioData])
+  }, [audioData, audioMimeType])
 
   useEffect(() => {
     const audio = audioRef.current
