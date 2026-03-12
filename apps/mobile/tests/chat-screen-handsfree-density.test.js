@@ -20,6 +20,11 @@ test('lets handsfree users queue a drafted message without sending immediately',
   assert.match(screenSource, /handsFree && messageQueueEnabled && \([\s\S]*?accessibilityLabel=\{createButtonAccessibilityLabel\('Queue message'\)\}[\s\S]*?<Text style=\{styles\.queueButtonText\}>Queue<\/Text>/);
 });
 
+test('derives send-next availability from strict FIFO queue semantics', () => {
+  assert.match(screenSource, /const nextQueuedMessage = !responding \? messageQueue\.peek\(currentConversationId\) : null;/);
+  assert.match(screenSource, /canProcessNext=\{!!nextQueuedMessage\}/);
+});
+
 test('wires ChatScreen through the extracted handsfree controller and recognizer hooks', () => {
   assert.match(screenSource, /useSpeechRecognizer\(/);
   assert.match(screenSource, /useHandsFreeController\(/);

@@ -1389,6 +1389,7 @@ export default function ChatScreen({ route, navigation }: any) {
 
   // Get queued messages for the current conversation
   const queuedMessages = messageQueue.getQueue(currentConversationId);
+  const nextQueuedMessage = !responding ? messageQueue.peek(currentConversationId) : null;
 
   const handlePickImages = useCallback(async () => {
     if (pendingImages.length >= MAX_PENDING_IMAGES) {
@@ -2801,7 +2802,7 @@ export default function ChatScreen({ route, navigation }: any) {
                 }
               }}
               onProcessNext={handleProcessNextQueuedMessage}
-              canProcessNext={!responding && queuedMessages.some((message) => message.status === 'pending')}
+              canProcessNext={!!nextQueuedMessage}
               onClear={() => messageQueue.clearQueue(currentConversationId)}
             />
           </View>
