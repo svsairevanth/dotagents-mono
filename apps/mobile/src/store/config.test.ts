@@ -12,7 +12,6 @@ import {
   DEFAULT_HANDS_FREE_MESSAGE_DEBOUNCE_MS,
   DEFAULT_HANDS_FREE_SLEEP_PHRASE,
   DEFAULT_HANDS_FREE_WAKE_PHRASE,
-  MAX_HANDS_FREE_MESSAGE_DEBOUNCE_MS,
   MIN_HANDS_FREE_MESSAGE_DEBOUNCE_MS,
   normalizeStoredConfig,
 } from './config';
@@ -45,17 +44,18 @@ describe('normalizeStoredConfig', () => {
     expect(normalized.handsFreeSleepPhrase).toBe('go quiet');
   });
 
-  it('clamps the handsfree send delay to a safe range', () => {
+  it('accepts arbitrary non-negative handsfree send delays while still rejecting negatives', () => {
     const tooLow = normalizeStoredConfig({
       ...DEFAULT_APP_CONFIG,
       handsFreeMessageDebounceMs: MIN_HANDS_FREE_MESSAGE_DEBOUNCE_MS - 200,
     });
-    const tooHigh = normalizeStoredConfig({
+    const customHighValue = 12345;
+    const arbitraryHigh = normalizeStoredConfig({
       ...DEFAULT_APP_CONFIG,
-      handsFreeMessageDebounceMs: MAX_HANDS_FREE_MESSAGE_DEBOUNCE_MS + 200,
+      handsFreeMessageDebounceMs: customHighValue,
     });
 
     expect(tooLow.handsFreeMessageDebounceMs).toBe(MIN_HANDS_FREE_MESSAGE_DEBOUNCE_MS);
-    expect(tooHigh.handsFreeMessageDebounceMs).toBe(MAX_HANDS_FREE_MESSAGE_DEBOUNCE_MS);
+    expect(arbitraryHigh.handsFreeMessageDebounceMs).toBe(customHighValue);
   });
 });

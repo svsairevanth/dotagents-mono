@@ -16,5 +16,5 @@ test('adds a mobile chat search field with a search-specific empty state', () =>
 });
 
 test('shows matched message snippets in search results when available', () => {
-  assert.match(screenSource, /\{\(item\.searchPreview \?\? item\.preview\) \|\| 'No messages yet'\}/);
+  assert.match(screenSource, /const sessionPreviewText = \(item\.searchPreview \?\? item\.preview\) \|\| 'No messages yet';/);
 });
