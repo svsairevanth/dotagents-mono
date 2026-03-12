@@ -10,8 +10,19 @@ const screenSource = fs.readFileSync(
 
 test('renders the extracted handsfree status chip in the mobile chat composer', () => {
   assert.match(screenSource, /<HandsFreeStatusChip/);
+  assert.match(screenSource, /<View style=\{styles\.handsFreeStatusRow\}>[\s\S]*?<HandsFreeStatusChip/);
   assert.match(screenSource, /handsFreeController\.statusLabel/);
   assert.match(screenSource, /handsFreeStatusSubtitle/);
+});
+
+test('lets handsfree users queue a drafted message without sending immediately', () => {
+  assert.match(screenSource, /const queueComposerInput = useCallback\(\(\) => \{[\s\S]*?messageQueue\.enqueue\(currentConversationId, composedMessage\);[\s\S]*?setInput\(''\);[\s\S]*?setPendingImages\(\[\]\);/);
+  assert.match(screenSource, /handsFree && messageQueueEnabled && \([\s\S]*?accessibilityLabel=\{createButtonAccessibilityLabel\('Queue message'\)\}[\s\S]*?<Text style=\{styles\.queueButtonText\}>Queue<\/Text>/);
+});
+
+test('derives send-next availability from strict FIFO queue semantics', () => {
+  assert.match(screenSource, /const nextQueuedMessage = !responding \? messageQueue\.peek\(currentConversationId\) : null;/);
+  assert.match(screenSource, /canProcessNext=\{!!nextQueuedMessage\}/);
 });
 
 test('wires ChatScreen through the extracted handsfree controller and recognizer hooks', () => {
