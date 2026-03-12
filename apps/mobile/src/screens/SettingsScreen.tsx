@@ -4,8 +4,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   AppConfig,
   DEFAULT_HANDS_FREE_MESSAGE_DEBOUNCE_MS,
-  MAX_HANDS_FREE_MESSAGE_DEBOUNCE_MS,
-  MIN_HANDS_FREE_MESSAGE_DEBOUNCE_MS,
   saveConfig,
   useConfigContext,
 } from '../store/config';
@@ -170,6 +168,9 @@ export default function SettingsScreen({ navigation }: any) {
   const { theme, themeMode, setThemeMode } = useTheme();
   const { config, setConfig, ready } = useConfigContext();
   const [draft, setDraft] = useState<AppConfig>(config);
+  const [handsFreeDebounceInput, setHandsFreeDebounceInput] = useState(
+    String(config.handsFreeMessageDebounceMs ?? DEFAULT_HANDS_FREE_MESSAGE_DEBOUNCE_MS),
+  );
   const [hasPendingLocalSave, setHasPendingLocalSave] = useState(false);
   const [pendingRemoteSaveKeys, setPendingRemoteSaveKeys] = useState<string[]>([]);
   const [isSavingAllSettings, setIsSavingAllSettings] = useState(false);
@@ -262,6 +263,9 @@ export default function SettingsScreen({ navigation }: any) {
 
   useEffect(() => {
     setDraft(config);
+    setHandsFreeDebounceInput(
+      String(config.handsFreeMessageDebounceMs ?? DEFAULT_HANDS_FREE_MESSAGE_DEBOUNCE_MS),
+    );
     setHasPendingLocalSave(false);
   }, [ready, config]);
 
@@ -298,6 +302,39 @@ export default function SettingsScreen({ navigation }: any) {
     setHasPendingLocalSave(false);
     setSaveStatusMessage('Saved');
   }, [draft, setConfig]);
+
+  const handleHandsFreeDebounceInputChange = useCallback((value: string) => {
+    const sanitized = value.replace(/[^0-9]/g, '');
+    setHandsFreeDebounceInput(sanitized);
+    updateDraftField({
+      handsFreeMessageDebounceMs: sanitized ? Number(sanitized) : undefined,
+    });
+  }, [updateDraftField]);
+
+  const commitHandsFreeDebounceInput = useCallback(() => {
+    const trimmed = handsFreeDebounceInput.trim();
+    const fallbackValue = draft.handsFreeMessageDebounceMs ?? DEFAULT_HANDS_FREE_MESSAGE_DEBOUNCE_MS;
+
+    if (!trimmed) {
+      setHandsFreeDebounceInput(String(DEFAULT_HANDS_FREE_MESSAGE_DEBOUNCE_MS));
+      updateLocalConfig({ handsFreeMessageDebounceMs: DEFAULT_HANDS_FREE_MESSAGE_DEBOUNCE_MS });
+      return;
+    }
+
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      setHandsFreeDebounceInput(String(fallbackValue));
+      setDraft((current) => ({
+        ...current,
+        handsFreeMessageDebounceMs: fallbackValue,
+      }));
+      return;
+    }
+
+    const normalized = Math.round(parsed);
+    setHandsFreeDebounceInput(String(normalized));
+    updateLocalConfig({ handsFreeMessageDebounceMs: normalized });
+  }, [draft.handsFreeMessageDebounceMs, handsFreeDebounceInput, updateLocalConfig]);
 
   // Create settings API client when we have valid credentials
   const settingsClient = useMemo(() => {
@@ -1247,28 +1284,19 @@ export default function SettingsScreen({ navigation }: any) {
           autoCorrect={false}
         />
 
-        <View style={{ marginTop: spacing.md }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text style={styles.label}>Send after silence</Text>
-            <Text style={[styles.helperText, { marginTop: 0 }]}>
-              {Math.round((draft.handsFreeMessageDebounceMs ?? DEFAULT_HANDS_FREE_MESSAGE_DEBOUNCE_MS) / 10) / 100}s
-            </Text>
-          </View>
-          <Slider
-            style={{ width: '100%', height: 40 }}
-            minimumValue={MIN_HANDS_FREE_MESSAGE_DEBOUNCE_MS}
-            maximumValue={MAX_HANDS_FREE_MESSAGE_DEBOUNCE_MS}
-            step={100}
-            value={draft.handsFreeMessageDebounceMs ?? DEFAULT_HANDS_FREE_MESSAGE_DEBOUNCE_MS}
-            onValueChange={(value) => setDraft((current) => ({ ...current, handsFreeMessageDebounceMs: value }))}
-            onSlidingComplete={(value) => updateLocalConfig({ handsFreeMessageDebounceMs: value })}
-            minimumTrackTintColor={theme.colors.primary}
-            maximumTrackTintColor={theme.colors.muted}
-            thumbTintColor={theme.colors.primary}
-          />
-        </View>
+        <Text style={[styles.label, { marginTop: spacing.md }]}>Send after silence</Text>
+        <TextInput
+          style={styles.input}
+          value={handsFreeDebounceInput}
+          onChangeText={handleHandsFreeDebounceInputChange}
+          onEndEditing={commitHandsFreeDebounceInput}
+          placeholder={`${DEFAULT_HANDS_FREE_MESSAGE_DEBOUNCE_MS}`}
+          placeholderTextColor={theme.colors.mutedForeground}
+          keyboardType='number-pad'
+        />
         <Text style={styles.helperText}>
-          Wait this long without new speech before sending a hands-free message.
+          Wait this many milliseconds without new speech before sending a hands-free message. Any value ≥ 0 works.
+          Current: {Math.round((draft.handsFreeMessageDebounceMs ?? DEFAULT_HANDS_FREE_MESSAGE_DEBOUNCE_MS) / 10) / 100}s.
         </Text>
 
         <View style={styles.row}>

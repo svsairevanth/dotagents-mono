@@ -18,6 +18,12 @@ type VoiceFinalizedPayload = {
   source: 'native' | 'web';
 };
 
+type DeferredPushToTalkFinal = {
+  gestureId: number;
+  text: string;
+  source: 'native' | 'web';
+};
+
 type UseSpeechRecognizerOptions = {
   handsFree: boolean;
   handsFreeDebounceMs?: number;
@@ -66,6 +72,7 @@ export function useSpeechRecognizer(options: UseSpeechRecognizerOptions) {
   const srSubsRef = useRef<any[]>([]);
   const voiceGestureIdRef = useRef(0);
   const voiceGestureFinalizedIdRef = useRef(0);
+  const pendingPushToTalkFinalRef = useRef<DeferredPushToTalkFinal | null>(null);
   const suppressFinalizeRef = useRef(false);
 
   const setListeningValue = useCallback((value: boolean) => {
@@ -113,6 +120,33 @@ export function useSpeechRecognizer(options: UseSpeechRecognizerOptions) {
     });
   }, [handsFree, onVoiceFinalized, setSttPreviewWithExpiry, willCancel]);
 
+  const deferPushToTalkFinalization = useCallback((text: string, source: 'native' | 'web') => {
+    const finalText = normalizeVoiceText(text);
+    if (!finalText) {
+      return false;
+    }
+
+    pendingPushToTalkFinalRef.current = {
+      gestureId: voiceGestureIdRef.current,
+      text: finalText,
+      source,
+    };
+    setSttPreviewWithExpiry(finalText);
+    return true;
+  }, [setSttPreviewWithExpiry]);
+
+  const flushPendingPushToTalkFinalization = useCallback(() => {
+    const pendingFinal = pendingPushToTalkFinalRef.current;
+    if (!pendingFinal) {
+      return false;
+    }
+
+    pendingPushToTalkFinalRef.current = null;
+    voiceGestureFinalizedIdRef.current = pendingFinal.gestureId;
+    emitFinalized(pendingFinal.text, pendingFinal.source);
+    return true;
+  }, [emitFinalized]);
+
   const stopRecognitionOnly = useCallback(async () => {
     suppressFinalizeRef.current = true;
     userReleasedButtonRef.current = true;
@@ -135,6 +169,7 @@ export function useSpeechRecognizer(options: UseSpeechRecognizerOptions) {
       setListeningValue(false);
       setLiveTranscriptValue('');
       pendingHandsFreeFinalRef.current = '';
+      pendingPushToTalkFinalRef.current = null;
       nativeFinalRef.current = '';
       webFinalRef.current = '';
       webPressInSeenRef.current = false;
@@ -218,10 +253,7 @@ export function useSpeechRecognizer(options: UseSpeechRecognizerOptions) {
             const accumulatedText = mergeVoiceText(webFinalRef.current, liveTranscriptRef.current);
             setListeningValue(false);
             setLiveTranscriptValue('');
-            if (accumulatedText) {
-              setSttPreviewWithExpiry(accumulatedText);
-              voiceGestureFinalizedIdRef.current = voiceGestureIdRef.current;
-            }
+            deferPushToTalkFinalization(accumulatedText, 'web');
             webFinalRef.current = '';
             pendingHandsFreeFinalRef.current = '';
             return;
@@ -236,6 +268,7 @@ export function useSpeechRecognizer(options: UseSpeechRecognizerOptions) {
         );
 
         pendingHandsFreeFinalRef.current = '';
+        pendingPushToTalkFinalRef.current = null;
         setListeningValue(false);
         setLiveTranscriptValue('');
         if (finalText && !alreadyFinalizedPushToTalk) {
@@ -252,6 +285,7 @@ export function useSpeechRecognizer(options: UseSpeechRecognizerOptions) {
     return true;
   }, [
     clearHandsFreeDebounce,
+    deferPushToTalkFinalization,
     emitFinalized,
     handsFree,
     handsFreeDebounceMs,
@@ -277,6 +311,7 @@ export function useSpeechRecognizer(options: UseSpeechRecognizerOptions) {
     nativeFinalRef.current = '';
     webFinalRef.current = '';
     pendingHandsFreeFinalRef.current = '';
+    pendingPushToTalkFinalRef.current = null;
     clearHandsFreeDebounce();
 
     if (event) {
@@ -358,6 +393,14 @@ export function useSpeechRecognizer(options: UseSpeechRecognizerOptions) {
                     return;
                   }
                 } catch {}
+
+                const accumulatedText = mergeVoiceText(nativeFinalRef.current, liveTranscriptRef.current);
+                setListeningValue(false);
+                setLiveTranscriptValue('');
+                deferPushToTalkFinalization(accumulatedText, 'native');
+                pendingHandsFreeFinalRef.current = '';
+                nativeFinalRef.current = '';
+                return;
               }
 
               const gestureId = voiceGestureIdRef.current;
@@ -368,6 +411,7 @@ export function useSpeechRecognizer(options: UseSpeechRecognizerOptions) {
                 liveTranscriptRef.current,
               );
               pendingHandsFreeFinalRef.current = '';
+              pendingPushToTalkFinalRef.current = null;
               setLiveTranscriptValue('');
               if (finalText && !alreadyFinalizedPushToTalk) {
                 if (!handsFree) {
@@ -441,6 +485,7 @@ export function useSpeechRecognizer(options: UseSpeechRecognizerOptions) {
   }, [
     cleanupNativeSubs,
     clearHandsFreeDebounce,
+    deferPushToTalkFinalization,
     emitFinalized,
     ensureWebRecognizer,
     handsFree,
@@ -462,8 +507,8 @@ export function useSpeechRecognizer(options: UseSpeechRecognizerOptions) {
     userReleasedButtonRef.current = true;
 
     try {
-      const hasWebRecognizer = Platform.OS === 'web' && webRecognitionRef.current;
-      if (!listeningRef.current && !hasWebRecognizer) {
+      if (!listeningRef.current) {
+        flushPendingPushToTalkFinalization();
         return;
       }
 
@@ -486,7 +531,7 @@ export function useSpeechRecognizer(options: UseSpeechRecognizerOptions) {
       stoppingRef.current = false;
       log?.('recognizer-stop', 'Speech recognizer stopped.');
     }
-  }, [log, setListeningValue]);
+  }, [flushPendingPushToTalkFinalization, log, setListeningValue]);
 
   stopRecordingAndHandleRef.current = stopRecordingAndHandle;
 
@@ -498,21 +543,26 @@ export function useSpeechRecognizer(options: UseSpeechRecognizerOptions) {
     }
   }, [startRecording]);
 
+  const stopOrFinalizePushToTalk = useCallback(() => {
+    if (listeningRef.current) {
+      void stopRecordingAndHandle();
+      return;
+    }
+
+    flushPendingPushToTalkFinalization();
+  }, [flushPendingPushToTalkFinalization, stopRecordingAndHandle]);
+
   const handlePushToTalkPressOut = useCallback(() => {
     webPressInSeenRef.current = false;
     const delay = Math.max(0, MIN_HOLD_MS - (Date.now() - lastGrantTimeRef.current));
     if (delay > 0) {
       setTimeout(() => {
-        if (listeningRef.current) {
-          void stopRecordingAndHandle();
-        }
+        stopOrFinalizePushToTalk();
       }, delay);
       return;
     }
-    if (listeningRef.current) {
-      void stopRecordingAndHandle();
-    }
-  }, [stopRecordingAndHandle]);
+    stopOrFinalizePushToTalk();
+  }, [stopOrFinalizePushToTalk]);
 
   useEffect(() => {
     if (Platform.OS !== 'web' || !micButtonRef.current) return;

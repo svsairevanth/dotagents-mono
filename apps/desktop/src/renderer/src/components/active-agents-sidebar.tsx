@@ -16,6 +16,10 @@ import { cn } from "@renderer/lib/utils"
 import { useAgentStore } from "@renderer/stores"
 import { logUI, logStateChange, logExpand } from "@renderer/lib/debug"
 import { useConversationHistoryQuery } from "@renderer/lib/queries"
+import {
+  filterPastSessionsAgainstActiveSessions,
+  orderActiveSessionsByPinnedFirst,
+} from "@renderer/lib/sidebar-sessions"
 import { useNavigate } from "react-router-dom"
 
 interface AgentSession {
@@ -110,7 +114,7 @@ export function ActiveAgentsSidebar({
         .map((session) => session.conversationId)
         .filter((id): id is string => !!id),
     )
-    const seenFallbackIds = new Set<string>()
+    const seenFallbackIds = new Set<string>(activeSessions.map((session) => session.id))
 
     const addPastSession = (session: AgentSession, keyPrefix: string) => {
       const conversationId = session.conversationId
@@ -161,17 +165,25 @@ export function ActiveAgentsSidebar({
   )
 
   const { sidebarSessions, hasMorePastSessions } = useMemo(() => {
-    const activeItems: SidebarSession[] = activeSessions.map((session) => ({
+    const orderedActiveSessions = orderActiveSessionsByPinnedFirst(
+      activeSessions,
+      pinnedSessionIds,
+    )
+    const activeItems: SidebarSession[] = orderedActiveSessions.map((session) => ({
       session,
       isPast: false,
       key: `active:${session.id}`,
     }))
+    const dedupedPastSessions = filterPastSessionsAgainstActiveSessions<SidebarSession>(
+      allPastSessions,
+      orderedActiveSessions,
+    )
 
     // Ensure pinned past sessions always appear, even if beyond the visible count.
     // Split into pinned (always shown) and unpinned (paginated).
     const pinnedPast: SidebarSession[] = []
     const unpinnedPast: SidebarSession[] = []
-    for (const item of allPastSessions) {
+    for (const item of dedupedPastSessions) {
       const cid = item.session.conversationId
       if (cid && pinnedSessionIds.has(cid)) {
         pinnedPast.push(item)
