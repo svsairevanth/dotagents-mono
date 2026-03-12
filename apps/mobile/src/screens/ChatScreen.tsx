@@ -256,7 +256,7 @@ const getCollapsedMessagePreview = (content: string) =>
     .replace(/\s+/g, ' ')
     .trim();
 
-const TOOL_PAYLOAD_PREFIX_REGEX = /^(?:using tool:|tool result:|input:|output:)/i;
+const TOOL_PAYLOAD_PREFIX_REGEX = /^(?:using tool:|tool result:)/i;
 
 const getRespondToUserContentFromMessage = (message: ChatMessage): string | null => {
   if (message.role !== 'assistant' || !message.toolCalls?.length) {
