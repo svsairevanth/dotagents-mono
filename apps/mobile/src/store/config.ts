@@ -23,18 +23,14 @@ export type AppConfig = {
 export const DEFAULT_HANDS_FREE_WAKE_PHRASE = 'hey dot agents';
 export const DEFAULT_HANDS_FREE_SLEEP_PHRASE = 'go to sleep';
 export const DEFAULT_HANDS_FREE_MESSAGE_DEBOUNCE_MS = 1500;
-export const MIN_HANDS_FREE_MESSAGE_DEBOUNCE_MS = 500;
-export const MAX_HANDS_FREE_MESSAGE_DEBOUNCE_MS = 5000;
+export const MIN_HANDS_FREE_MESSAGE_DEBOUNCE_MS = 0;
 
 function normalizeHandsFreeMessageDebounceMs(value?: number) {
   if (!Number.isFinite(value)) {
     return DEFAULT_HANDS_FREE_MESSAGE_DEBOUNCE_MS;
   }
 
-  return Math.min(
-    MAX_HANDS_FREE_MESSAGE_DEBOUNCE_MS,
-    Math.max(MIN_HANDS_FREE_MESSAGE_DEBOUNCE_MS, Math.round(value as number)),
-  );
+  return Math.max(MIN_HANDS_FREE_MESSAGE_DEBOUNCE_MS, Math.round(value as number));
 }
 
 export const DEFAULT_APP_CONFIG: AppConfig = {
