@@ -2391,11 +2391,13 @@ export default function ChatScreen({ route, navigation }: any) {
             </View>
           )}
           {messages.map((m, i) => {
-            const shouldCollapse = shouldCollapseMessage(m.content, m.toolCalls, m.toolResults);
+            const visibleMessageContent = getVisibleMessageContent(m);
+            const shouldCollapse = m.role === 'assistant'
+              ? shouldCollapseMessage(visibleMessageContent)
+              : shouldCollapseMessage(m.content, m.toolCalls, m.toolResults);
             // expandedMessages is auto-updated via useEffect to expand the last assistant message
             // and persist the expansion state so it doesn't collapse when new messages arrive
             const isExpanded = expandedMessages[i] ?? false;
-            const visibleMessageContent = getVisibleMessageContent(m);
             const hasToolMetadata =
               (m.toolCalls?.length ?? 0) > 0 ||
               (m.toolResults?.length ?? 0) > 0;
@@ -2403,8 +2405,7 @@ export default function ChatScreen({ route, navigation }: any) {
             const shouldShowCollapsedTextPreview =
               visibleMessageContent.length > 0 &&
               !isExpanded &&
-              shouldCollapse &&
-              !hasToolMetadata;
+              shouldCollapse;
             const canSpeakVisibleContent =
               m.role === 'assistant' &&
               visibleMessageContent.trim().length > 0 &&
