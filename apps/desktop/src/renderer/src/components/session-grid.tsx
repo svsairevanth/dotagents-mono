@@ -191,52 +191,61 @@ export function SessionTileWrapper({
     handleWidthResizeStart,
     handleHeightResizeStart,
     handleCornerResizeStart,
+    hasPersistedSize,
     setSize,
   } = useResizable({
     initialWidth: containerWidth,
     initialHeight: calculatedHeight,
     storageKey: isMaximized ? "session-tile" : undefined,
   })
+  const shouldPreservePersistedMaximizedSize = isMaximized && hasPersistedSize
 
   // Use useLayoutEffect (runs before browser paint) to update tile size when
   // layout mode or resetKey changes. Regular useEffect caused a one-frame stale
   // render where tiles kept their old (e.g. 1x1 full-width) size before the
   // effect corrected them, breaking flex-wrap two-column layout.
   useLayoutEffect(() => {
-    if (resetKey !== lastResetKeyRef.current && containerWidth > 0) {
+    if (resetKey !== lastResetKeyRef.current) {
       lastResetKeyRef.current = resetKey
+      if (shouldPreservePersistedMaximizedSize || containerWidth <= 0) return
+
       setSize({
         width: containerWidth,
         height: calculatedHeight,
       })
     }
-  }, [resetKey, containerWidth, calculatedHeight, setSize])
+  }, [resetKey, containerWidth, calculatedHeight, setSize, shouldPreservePersistedMaximizedSize])
 
   useLayoutEffect(() => {
-    if (layoutMode !== lastLayoutModeRef.current && containerWidth > 0) {
+    if (layoutMode !== lastLayoutModeRef.current) {
       lastLayoutModeRef.current = layoutMode
+      if (shouldPreservePersistedMaximizedSize || containerWidth <= 0) return
+
       setSize({
         width: containerWidth,
         height: calculatedHeight,
       })
     }
-  }, [layoutMode, containerWidth, calculatedHeight, setSize])
+  }, [layoutMode, containerWidth, calculatedHeight, setSize, shouldPreservePersistedMaximizedSize])
 
   // Update width and height to fill container once it is measured (only on first valid measurement)
   // This handles the case where containerWidth/containerHeight are 0 on initial render
   useEffect(() => {
+    if (shouldPreservePersistedMaximizedSize) return
+
     // Only run once when container dimensions become valid and we haven't initialized yet
     if (containerWidth > 0 && !hasInitializedRef.current) {
       hasInitializedRef.current = true
       setSize({ width: containerWidth, height: calculatedHeight })
     }
-  }, [containerWidth, calculatedHeight, setSize])
+  }, [containerWidth, calculatedHeight, setSize, shouldPreservePersistedMaximizedSize])
 
   // Responsive reflow: when the container width changes significantly (e.g. sidebar toggle),
   // recalculate tile sizes to fill available space. Only fires after initial sizing and when
   // not actively resizing via drag handles.
   const lastContainerWidthRef = useRef(containerWidth)
   useEffect(() => {
+    if (shouldPreservePersistedMaximizedSize) return
     if (!hasInitializedRef.current || containerWidth <= 0 || isResizing) return
     const prevWidth = lastContainerWidthRef.current
     lastContainerWidthRef.current = containerWidth
@@ -244,7 +253,7 @@ export function SessionTileWrapper({
     if (prevWidth > 0 && Math.abs(containerWidth - prevWidth) > 20) {
       setSize({ width: containerWidth, height: calculatedHeight })
     }
-  }, [containerWidth, calculatedHeight, setSize, isResizing])
+  }, [containerWidth, calculatedHeight, setSize, isResizing, shouldPreservePersistedMaximizedSize])
 
   const tileRowSpan = isCollapsed ? 1 : getTileGridRowSpan(isMaximized ? height : calculatedHeight, gap)
 

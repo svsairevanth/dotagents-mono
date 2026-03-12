@@ -20,4 +20,9 @@ describe("session grid layout", () => {
     expect(sessionGridSource).toContain("grid-flow-row-dense")
     expect(sessionGridSource).toContain("gridAutoRows")
   })
+
+  it("preserves persisted maximized tile sizes across layout-driven updates", () => {
+    expect(sessionGridSource).toContain("shouldPreservePersistedMaximizedSize")
+    expect(sessionGridSource).toContain("hasPersistedSize")
+  })
 })
