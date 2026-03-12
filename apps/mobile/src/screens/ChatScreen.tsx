@@ -1354,7 +1354,6 @@ export default function ChatScreen({ route, navigation }: any) {
             const lastMessage = messages[messages.length - 1];
             if (lastMessage.role === 'assistant' && lastMessage.toolCalls && lastMessage.toolCalls.length > 0) {
               const hasToolResults = historyMsg.toolResults && historyMsg.toolResults.length > 0;
-              const hasContent = historyMsg.content && historyMsg.content.trim().length > 0;
 
               if (hasToolResults) {
                 // Merge toolResults into the existing assistant message
@@ -1362,11 +1361,6 @@ export default function ChatScreen({ route, navigation }: any) {
                   ...(lastMessage.toolResults || []),
                   ...(historyMsg.toolResults || []),
                 ];
-                // Also preserve any content from the tool message (e.g., error messages)
-                if (hasContent) {
-                  lastMessage.content = (lastMessage.content || '') +
-                    (lastMessage.content ? '\n' : '') + historyMsg.content;
-                }
                 // Skip adding this as a separate message only when we merged results
                 continue;
               }
@@ -1746,7 +1740,6 @@ export default function ChatScreen({ route, navigation }: any) {
             const lastMessage = newMessages[newMessages.length - 1];
             if (lastMessage.role === 'assistant' && lastMessage.toolCalls && lastMessage.toolCalls.length > 0) {
               const hasToolResults = historyMsg.toolResults && historyMsg.toolResults.length > 0;
-              const hasContent = historyMsg.content && historyMsg.content.trim().length > 0;
 
               if (hasToolResults) {
                 // Merge toolResults into the existing assistant message
@@ -1754,11 +1747,6 @@ export default function ChatScreen({ route, navigation }: any) {
                   ...(lastMessage.toolResults || []),
                   ...(historyMsg.toolResults || []),
                 ];
-                // Also preserve any content from the tool message (e.g., error messages)
-                if (hasContent) {
-                  lastMessage.content = (lastMessage.content || '') +
-                    (lastMessage.content ? '\n' : '') + historyMsg.content;
-                }
                 // Skip adding this as a separate message only when we merged results
                 continue;
               }
@@ -2884,7 +2872,6 @@ export default function ChatScreen({ route, navigation }: any) {
                               const lastMessage = recoveredMessages[recoveredMessages.length - 1];
                               if (lastMessage.role === 'assistant' && lastMessage.toolCalls && lastMessage.toolCalls.length > 0) {
                                 const hasToolResults = msg.toolResults && msg.toolResults.length > 0;
-                                const hasContent = msg.content && msg.content.trim().length > 0;
 
                                 if (hasToolResults) {
                                   // Merge toolResults into the existing assistant message
@@ -2892,11 +2879,6 @@ export default function ChatScreen({ route, navigation }: any) {
                                     ...(lastMessage.toolResults || []),
                                     ...(msg.toolResults || []),
                                   ];
-                                  // Also preserve any content from the tool message (e.g., error messages)
-                                  if (hasContent) {
-                                    lastMessage.content = (lastMessage.content || '') +
-                                      (lastMessage.content ? '\n' : '') + msg.content;
-                                  }
                                 }
                               }
                             }

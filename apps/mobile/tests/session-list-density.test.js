@@ -18,6 +18,10 @@ test('keeps session rows to a compact two-line layout with inline metadata', () 
   assert.doesNotMatch(screenSource, /styles\.sessionMeta/);
 });
 
+test('does not append raw tool payload text into session previews when merging tool results', () => {
+  assert.doesNotMatch(screenSource, /lastMessage\.content = \(lastMessage\.content \|\| ''\) \+\s*\(lastMessage\.content \? '\\n' : ''\) \+ historyMsg\.content/);
+});
+
 test('keeps the session title row shrinkable for narrow mobile widths', () => {
   assert.match(screenSource, /sessionTitleRow:\s*\{[\s\S]*?flex:\s*1,[\s\S]*?minWidth:\s*0,[\s\S]*?marginRight:\s*8,/);
   assert.match(screenSource, /sessionTitle:\s*\{[\s\S]*?flex:\s*1,[\s\S]*?minWidth:\s*0,/);

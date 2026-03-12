@@ -107,16 +107,11 @@ export default function SessionListScreen({ navigation }: Props) {
         const lastMessage = messages[messages.length - 1];
         if (lastMessage.role === 'assistant' && lastMessage.toolCalls && lastMessage.toolCalls.length > 0) {
           const hasToolResults = historyMsg.toolResults && historyMsg.toolResults.length > 0;
-          const hasContent = historyMsg.content && historyMsg.content.trim().length > 0;
           if (hasToolResults) {
             lastMessage.toolResults = [
               ...(lastMessage.toolResults || []),
               ...(historyMsg.toolResults || []),
             ];
-            if (hasContent) {
-              lastMessage.content = (lastMessage.content || '') +
-                (lastMessage.content ? '\n' : '') + historyMsg.content;
-            }
             continue;
           }
         }

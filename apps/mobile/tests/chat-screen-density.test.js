@@ -38,6 +38,8 @@ test('derives visible assistant content from respond_to_user output and suppress
   assert.match(screenSource, /const getVisibleMessageContent = \(message: ChatMessage\): string =>/);
   assert.match(screenSource, /extractRespondToUserContentFromArgs\(call\.arguments\)/);
   assert.match(screenSource, /looksLikeToolPayloadContent\(message\.content\)/);
+  assert.doesNotMatch(screenSource, /lastMessage\.content = \(lastMessage\.content \|\| ''\) \+\s*\(lastMessage\.content \? '\\n' : ''\) \+ historyMsg\.content/);
+  assert.doesNotMatch(screenSource, /lastMessage\.content = \(lastMessage\.content \|\| ''\) \+\s*\(lastMessage\.content \? '\\n' : ''\) \+ msg\.content/);
 });
 
 test('keeps the TTS control inline with assistant message text instead of on a detached row', () => {
