@@ -245,17 +245,33 @@ export function SessionTileWrapper({
   // not actively resizing via drag handles.
   const lastContainerWidthRef = useRef(containerWidth)
   useEffect(() => {
-    if (shouldPreservePersistedMaximizedSize) return
     if (!hasInitializedRef.current || containerWidth <= 0 || isResizing) return
     const prevWidth = lastContainerWidthRef.current
     lastContainerWidthRef.current = containerWidth
+
+    if (shouldPreservePersistedMaximizedSize) {
+      // Even with persisted sizes, clamp to container bounds so tiles never overflow
+      if (width > containerWidth || height > containerHeight) {
+        setSize({
+          width: Math.min(width, containerWidth),
+          height: Math.min(height, containerHeight),
+        })
+      }
+      return
+    }
+
     // Only reflow if width changed by more than 20px (avoids sub-pixel jitter)
     if (prevWidth > 0 && Math.abs(containerWidth - prevWidth) > 20) {
       setSize({ width: containerWidth, height: calculatedHeight })
     }
-  }, [containerWidth, calculatedHeight, setSize, isResizing, shouldPreservePersistedMaximizedSize])
+  }, [containerWidth, containerHeight, calculatedHeight, width, height, setSize, isResizing, shouldPreservePersistedMaximizedSize])
 
-  const tileRowSpan = isCollapsed ? 1 : getTileGridRowSpan(isMaximized ? height : calculatedHeight, gap)
+  // Clamp rendered dimensions to container bounds so tiles never visually overflow,
+  // even before the responsive reflow effect runs.
+  const renderedWidth = isMaximized && containerWidth > 0 ? Math.min(width, containerWidth) : width
+  const renderedHeight = isMaximized && containerHeight > 0 ? Math.min(height, containerHeight) : height
+
+  const tileRowSpan = isCollapsed ? 1 : getTileGridRowSpan(isMaximized ? renderedHeight : calculatedHeight, gap)
 
   const handleDragStart = (e: React.DragEvent) => {
     if (!isDraggable) return
@@ -280,15 +296,17 @@ export function SessionTileWrapper({
     <div
       ref={containerRef}
       className={cn(
-        "relative flex-shrink-0 transition-all duration-200",
+        "relative flex-shrink-0 overflow-hidden transition-all duration-200",
         isResizing && "select-none",
         isDragTarget && "ring-2 ring-blue-500 ring-offset-2",
         isDragging && "opacity-50",
         className
       )}
       style={{
-        width: isMaximized ? width : "100%",
-        height: isMaximized && !isCollapsed ? height : undefined,
+        width: isMaximized ? renderedWidth : "100%",
+        height: isMaximized && !isCollapsed ? renderedHeight : undefined,
+        maxWidth: "100%",
+        maxHeight: isMaximized && !isCollapsed && containerHeight > 0 ? containerHeight : undefined,
         gridColumn: "span 1 / span 1",
         gridRow: `span ${tileRowSpan} / span ${tileRowSpan}`,
       }}
