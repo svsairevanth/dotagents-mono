@@ -2551,6 +2551,7 @@ const MidTurnUserResponseBubble: React.FC<{
   isComplete: boolean
   isExpanded: boolean
   onToggleExpand: () => void
+  onMaximize?: () => void
 }> = ({
   userResponse,
   pastResponses,
@@ -2560,6 +2561,7 @@ const MidTurnUserResponseBubble: React.FC<{
   isComplete,
   isExpanded,
   onToggleExpand,
+  onMaximize,
 }) => {
   const [audioData, setAudioData] = useState<ArrayBuffer | null>(null)
   const [audioMimeType, setAudioMimeType] = useState<string | null>(null)
@@ -2726,25 +2728,39 @@ const MidTurnUserResponseBubble: React.FC<{
             {isExpanded ? "Latest response" : collapsedPreview}
           </div>
         </div>
-        {(isTTSPlaying || isGeneratingAudio) && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              ttsManager.stopAll("agent-progress-midturn-pause")
-            }}
-            className={cn(
-              "ml-auto shrink-0 self-start rounded p-1 transition-colors hover:bg-green-200/50 dark:hover:bg-green-800/50",
-              isTTSPlaying && "animate-pulse"
-            )}
-            title={isGeneratingAudio ? "Generating audio…" : "Pause TTS"}
-          >
-            {isGeneratingAudio ? (
-              <Loader2 className="h-3 w-3 animate-spin text-green-600 dark:text-green-400" />
-            ) : (
-              <Volume2 className="h-3 w-3 text-green-600 dark:text-green-400" />
-            )}
-          </button>
-        )}
+        <div className="ml-auto flex shrink-0 items-center gap-0.5">
+          {(isTTSPlaying || isGeneratingAudio) && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                ttsManager.stopAll("agent-progress-midturn-pause")
+              }}
+              className={cn(
+                "shrink-0 rounded p-1 transition-colors hover:bg-green-200/50 dark:hover:bg-green-800/50",
+                isTTSPlaying && "animate-pulse"
+              )}
+              title={isGeneratingAudio ? "Generating audio…" : "Pause TTS"}
+            >
+              {isGeneratingAudio ? (
+                <Loader2 className="h-3 w-3 animate-spin text-green-600 dark:text-green-400" />
+              ) : (
+                <Volume2 className="h-3 w-3 text-green-600 dark:text-green-400" />
+              )}
+            </button>
+          )}
+          {onMaximize && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onMaximize()
+              }}
+              className="shrink-0 rounded p-1 transition-colors hover:bg-green-200/50 dark:hover:bg-green-800/50"
+              title="Maximize"
+            >
+              <Maximize2 className="h-3 w-3 text-green-600 dark:text-green-400" />
+            </button>
+          )}
+        </div>
       </div>
 
       {isExpanded && (
@@ -3921,6 +3937,7 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
                             isComplete={isComplete}
                             isExpanded={expandedItems[itemKey] ?? true}
                             onToggleExpand={() => toggleItemExpansion(itemKey, expandedItems[itemKey] ?? true)}
+                            onMaximize={onExpand}
                           />
                         )
                       } else if (item.kind === "delegation") {
