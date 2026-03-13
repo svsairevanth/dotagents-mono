@@ -3954,8 +3954,8 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
                             agentLabel={primaryAgentLabel}
                             variant="tile"
                             isComplete={isComplete}
-                            isExpanded={expandedItems[itemKey] ?? true}
-                            onToggleExpand={() => toggleItemExpansion(itemKey, expandedItems[itemKey] ?? true)}
+                            isExpanded={expandedItems[itemKey] ?? false}
+                            onToggleExpand={() => toggleItemExpansion(itemKey, expandedItems[itemKey] ?? false)}
                             onMaximize={onExpand}
                           />
                         )
@@ -4342,8 +4342,8 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
                       agentLabel={primaryAgentLabel}
                       variant="overlay"
                       isComplete={isComplete}
-                      isExpanded={expandedItems[itemKey] ?? true}
-                      onToggleExpand={() => toggleItemExpansion(itemKey, expandedItems[itemKey] ?? true)}
+                      isExpanded={expandedItems[itemKey] ?? false}
+                      onToggleExpand={() => toggleItemExpansion(itemKey, expandedItems[itemKey] ?? false)}
                     />
                   )
                 } else if (item.kind === "delegation") {
