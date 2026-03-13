@@ -102,7 +102,7 @@ function sanitizeSlotName(name: string): string {
   return name
     .toLowerCase()
     .trim()
-    .replace(/[^a-z0-9-_ ]/g, "")
+    .replace(/[^a-z0-9\-_ ]/g, "")
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "")
@@ -449,14 +449,16 @@ export function deleteSlot(agentsDir: string, slotName: string): DeleteSlotResul
 }
 
 /**
- * Create a new sandbox slot from a bundle file. The bundle is imported into
- * a fresh copy of the current config, stored as a new slot.
+ * Create a new sandbox slot by snapshotting the current .agents config.
+ * Ensures a baseline slot exists before saving, so the user can always
+ * restore their original configuration.
  *
  * Steps:
- * 1. Save current config as the active/default slot (if not already saved)
- * 2. Import the bundle into the live .agents dir (using the existing import flow)
- * 3. Save the resulting state as the new named slot
- * 4. The caller can then switchToSlot to activate or stay on current
+ * 1. Ensure a baseline (default) slot exists; create one if missing
+ * 2. Snapshot the current .agents config into a new named slot
+ *
+ * Note: This function does NOT import a bundle — bundle importing is
+ * handled separately by the caller (e.g. importBundleToSandbox in tipc).
  */
 export function createSlotFromCurrentState(
   agentsDir: string,
