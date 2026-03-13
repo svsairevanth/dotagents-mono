@@ -460,15 +460,15 @@ const CompactMessageBase: React.FC<CompactMessageProps> = ({ message, ttsText, i
   const getRoleStyle = () => {
     switch (message.role) {
       case "user":
-        return "border-l-2 border-blue-400 bg-blue-400/5"
+        return "border border-blue-200/60 bg-blue-50/50 dark:border-blue-800/50 dark:bg-blue-950/30"
       case "assistant":
         return isComplete && isLast && !hasErrors
-          ? "border-l-2 border-green-400 bg-green-400/5"
-          : "border-l-2 border-gray-400 bg-gray-400/5"
+          ? "border border-green-200/60 bg-green-50/50 dark:border-green-800/50 dark:bg-green-950/30"
+          : "border border-border/40 bg-muted/30"
       case "tool":
-        return "border-l-2 border-orange-400 bg-orange-400/5"
+        return "border border-amber-200/60 bg-amber-50/40 dark:border-amber-800/50 dark:bg-amber-950/20"
       default:
-        return "border-l-2 border-gray-400 bg-gray-400/5"
+        return "border border-border/40 bg-muted/30"
     }
   }
 
@@ -485,13 +485,13 @@ const CompactMessageBase: React.FC<CompactMessageProps> = ({ message, ttsText, i
 
   return (
     <div className={cn(
-      "rounded text-xs transition-all duration-200",
+      "rounded-md text-xs transition-all duration-200",
       getRoleStyle(),
-      !isExpanded && shouldCollapse && "hover:bg-muted/20",
+      !isExpanded && shouldCollapse && "hover:brightness-95 dark:hover:brightness-110",
       shouldCollapse && "cursor-pointer"
     )}>
       <div
-        className="flex items-start px-2 py-1 text-left"
+        className="flex items-start px-2.5 py-1.5 text-left"
         onClick={handleToggleExpand}
       >
         <div className="flex-1 min-w-0">
@@ -943,14 +943,14 @@ const AssistantWithToolsBubble: React.FC<{
 
   return (
     <div className={cn(
-      "rounded text-xs transition-all duration-200",
-      "border-l-2 border-gray-400 bg-gray-400/5",
-      !isExpanded && shouldCollapse && "hover:bg-muted/20",
+      "rounded-md text-xs transition-all duration-200",
+      "border border-border/40 bg-muted/30",
+      !isExpanded && shouldCollapse && "hover:brightness-95 dark:hover:brightness-110",
       shouldCollapse && "cursor-pointer"
     )}>
       {/* Thought content section */}
       <div
-        className="flex items-start px-2 py-1 text-left"
+        className="flex items-start px-2.5 py-1.5 text-left"
         onClick={handleToggleExpand}
       >
         <div className="flex-1 min-w-0">
