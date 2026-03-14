@@ -3,7 +3,7 @@ import { AgentProgressUpdate, QueuedMessage } from '@shared/types'
 import { clearSessionTTSTracking } from '@renderer/lib/tts-tracking'
 import {
   sanitizeAgentProgressUpdateForDisplay,
-} from '@shared/message-display-utils'
+} from '@dotagents/shared/message-display-utils'
 import { logUI } from '@renderer/lib/debug'
 
 const getProgressActivityTimestamp = (progress: AgentProgressUpdate): number => {

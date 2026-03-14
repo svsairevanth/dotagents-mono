@@ -4,7 +4,7 @@ import { makeTextCompletionWithFetch } from "./llm-fetch"
 import { constructMinimalSystemPrompt } from "./system-prompts"
 import { agentSessionStateManager } from "./state"
 import { summarizationService } from "./summarization-service"
-import { sanitizeMessageContentForDisplay } from "../shared/message-display-utils"
+import { sanitizeMessageContentForDisplay } from "@dotagents/shared"
 
 export type LLMMessage = { role: string; content: string }
 

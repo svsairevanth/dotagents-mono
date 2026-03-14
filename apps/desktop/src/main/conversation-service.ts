@@ -11,7 +11,7 @@ import {
 } from "../shared/types"
 import { summarizeContent } from "./context-budget"
 import { assertSafeConversationId, validateAndSanitizeConversationId } from "./conversation-id"
-import { sanitizeMessageContentForDisplay } from "../shared/message-display-utils"
+import { sanitizeMessageContentForDisplay } from "@dotagents/shared"
 
 // Threshold for compacting conversations on load
 // When a conversation exceeds this many messages, older ones are summarized

@@ -32,7 +32,7 @@ import { AudioPlayer } from "@renderer/components/audio-player"
 import { useConfigQuery } from "@renderer/lib/queries"
 import { ttsManager } from "@renderer/lib/tts-manager"
 import { removeTTSKey } from "@renderer/lib/tts-tracking"
-import { isMissingApiKeyErrorMessage } from "@shared/api-key-error-utils"
+import { isMissingApiKeyErrorMessage } from "@dotagents/shared/api-key-error-utils"
 import { toast } from "sonner"
 import {
   normalizeAgentConversationState,

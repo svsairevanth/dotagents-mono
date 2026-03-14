@@ -35,7 +35,7 @@ import {
   DEFAULT_MODEL_PRESET_ID,
   getBuiltInModelPresets,
 } from "@shared/index"
-import { getDefaultSttModel } from "@shared/stt-models"
+import { getDefaultSttModel } from "@dotagents/shared/stt-models"
 import { Mic, FileText, Volume2, Bot, Zap, BookOpen, Settings2 } from "lucide-react"
 
 const SETTINGS_TEXT_SAVE_DEBOUNCE_MS = 400

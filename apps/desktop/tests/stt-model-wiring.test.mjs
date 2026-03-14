@@ -8,7 +8,7 @@ const settingsProvidersSource = readFileSync(new URL('../src/renderer/src/pages/
 const appLayoutSource = readFileSync(new URL('../src/renderer/src/components/app-layout.tsx', import.meta.url), 'utf8')
 const routerSource = readFileSync(new URL('../src/renderer/src/router.tsx', import.meta.url), 'utf8')
 const tipcSource = readFileSync(new URL('../src/main/tipc.ts', import.meta.url), 'utf8')
-const sttModelsSource = readFileSync(new URL('../src/shared/stt-models.ts', import.meta.url), 'utf8')
+const sttModelsSource = readFileSync(new URL('../../../packages/shared/src/stt-models.ts', import.meta.url), 'utf8')
 
 test('speech-to-text general settings link model configuration to the models page', () => {
   assert.match(settingsGeneralSource, /label="Model Selection"/)

@@ -210,7 +210,7 @@ async function loadAgentProgress(runtime: ReturnType<typeof createHookRuntime>) 
   vi.doMock("./agent-summary-view", () => ({ AgentSummaryView: Null }))
   vi.doMock("@renderer/lib/tts-tracking", () => ({ hasTTSPlayed: () => false, markTTSPlayed: vi.fn(), removeTTSKey: vi.fn() }))
   vi.doMock("@renderer/lib/tts-manager", () => ({ ttsManager: { stopAll: vi.fn(), registerAudio: () => () => {}, registerStopCallback: () => () => {}, playExclusive: vi.fn() } }))
-  vi.doMock("@shared/message-display-utils", () => ({ sanitizeMessageContentForSpeech: (text: string) => text }))
+  vi.doMock("@dotagents/shared/message-display-utils", () => ({ sanitizeMessageContentForSpeech: (text: string) => text }))
   vi.doMock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
   const mod = await import("./agent-progress")

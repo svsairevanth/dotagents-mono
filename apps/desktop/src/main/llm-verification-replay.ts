@@ -1,5 +1,5 @@
 import type { AgentConversationState } from "@dotagents/shared"
-import { sanitizeMessageContentForDisplay } from "../shared/message-display-utils"
+import { sanitizeMessageContentForDisplay } from "@dotagents/shared"
 import { resolveLatestUserFacingResponse } from "./respond-to-user-utils"
 
 type ToolCallLike = {

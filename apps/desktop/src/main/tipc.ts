@@ -50,7 +50,7 @@ import {
   SessionProfileSnapshot,
   LoopConfig,
 } from "../shared/types"
-import { DEFAULT_STT_MODELS, getConfiguredSttModel } from "../shared/stt-models"
+import { DEFAULT_STT_MODELS, getConfiguredSttModel } from "@dotagents/shared"
 import { inferTransportType, normalizeMcpConfig } from "../shared/mcp-utils"
 import { conversationService } from "./conversation-service"
 import { RendererHandlers } from "./renderer-handlers"
@@ -82,7 +82,7 @@ import * as parakeetStt from "./parakeet-stt"
 import { loopService } from "./loop-service"
 import { clearSessionUserResponse } from "./session-user-response-store"
 import { BUILTIN_SERVER_NAME } from "./builtin-tool-definitions"
-import { isMissingApiKeyErrorMessage } from "../shared/api-key-error-utils"
+import { isMissingApiKeyErrorMessage } from "@dotagents/shared"
 
 /**
  * Convert Float32Array audio samples to WAV format buffer
@@ -1068,6 +1068,10 @@ export const router = {
       // Session is being explicitly dismissed from UI; clear persisted
       // respond_to_user state for this session.
       clearSessionUserResponse(input.sessionId)
+
+      // Also remove from the tracker's completed sessions list so it
+      // doesn't re-appear in the sidebar on the next agentSessionsUpdated.
+      agentSessionTracker.removeCompletedSession(input.sessionId)
 
       // Send to all windows (panel and main) so both can update their state
       for (const [id, win] of WINDOWS.entries()) {

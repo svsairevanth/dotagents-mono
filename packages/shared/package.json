@@ -70,6 +70,21 @@
       "types": "./dist/agent-progress.d.ts",
       "import": "./dist/agent-progress.mjs",
       "require": "./dist/agent-progress.js"
+    },
+    "./message-display-utils": {
+      "types": "./dist/message-display-utils.d.ts",
+      "import": "./dist/message-display-utils.mjs",
+      "require": "./dist/message-display-utils.js"
+    },
+    "./stt-models": {
+      "types": "./dist/stt-models.d.ts",
+      "import": "./dist/stt-models.mjs",
+      "require": "./dist/stt-models.js"
+    },
+    "./api-key-error-utils": {
+      "types": "./dist/api-key-error-utils.d.ts",
+      "import": "./dist/api-key-error-utils.mjs",
+      "require": "./dist/api-key-error-utils.js"
     }
   },
   "scripts": {

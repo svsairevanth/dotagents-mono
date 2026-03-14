@@ -1,0 +1,120 @@
+import { describe, it, expect } from 'vitest'
+import {
+  DEFAULT_STT_MODELS,
+  KNOWN_STT_MODEL_IDS,
+  isCloudSttProvider,
+  isKnownSttModel,
+  getDefaultSttModel,
+  getConfiguredSttModel,
+} from './stt-models'
+import type { CloudSttProviderId, SttModelConfig } from './stt-models'
+
+describe('DEFAULT_STT_MODELS', () => {
+  it('has openai default', () => {
+    expect(DEFAULT_STT_MODELS.openai).toBe('whisper-1')
+  })
+
+  it('has groq default', () => {
+    expect(DEFAULT_STT_MODELS.groq).toBe('whisper-large-v3-turbo')
+  })
+})
+
+describe('KNOWN_STT_MODEL_IDS', () => {
+  it('includes openai transcription models', () => {
+    expect(KNOWN_STT_MODEL_IDS.openai).toContain('gpt-4o-transcribe')
+    expect(KNOWN_STT_MODEL_IDS.openai).toContain('gpt-4o-mini-transcribe')
+    expect(KNOWN_STT_MODEL_IDS.openai).toContain('whisper-1')
+  })
+
+  it('includes groq transcription models', () => {
+    expect(KNOWN_STT_MODEL_IDS.groq).toContain('whisper-large-v3')
+    expect(KNOWN_STT_MODEL_IDS.groq).toContain('whisper-large-v3-turbo')
+    expect(KNOWN_STT_MODEL_IDS.groq).toContain('distil-whisper-large-v3-en')
+  })
+})
+
+describe('isCloudSttProvider', () => {
+  it('returns true for "openai"', () => {
+    expect(isCloudSttProvider('openai')).toBe(true)
+  })
+
+  it('returns true for "groq"', () => {
+    expect(isCloudSttProvider('groq')).toBe(true)
+  })
+
+  it('returns false for "parakeet"', () => {
+    expect(isCloudSttProvider('parakeet')).toBe(false)
+  })
+
+  it('returns false for undefined', () => {
+    expect(isCloudSttProvider(undefined)).toBe(false)
+  })
+})
+
+describe('isKnownSttModel', () => {
+  it('recognises known openai model', () => {
+    expect(isKnownSttModel('openai', 'whisper-1')).toBe(true)
+  })
+
+  it('recognises known groq model', () => {
+    expect(isKnownSttModel('groq', 'whisper-large-v3-turbo')).toBe(true)
+  })
+
+  it('is case-insensitive', () => {
+    expect(isKnownSttModel('openai', 'Whisper-1')).toBe(true)
+  })
+
+  it('returns false for unknown model', () => {
+    expect(isKnownSttModel('openai', 'gpt-4o')).toBe(false)
+  })
+})
+
+describe('getDefaultSttModel', () => {
+  it('returns openai default for "openai"', () => {
+    expect(getDefaultSttModel('openai')).toBe('whisper-1')
+  })
+
+  it('returns groq default for "groq"', () => {
+    expect(getDefaultSttModel('groq')).toBe('whisper-large-v3-turbo')
+  })
+
+  it('returns undefined for unknown provider', () => {
+    expect(getDefaultSttModel('parakeet')).toBeUndefined()
+  })
+
+  it('returns undefined for undefined', () => {
+    expect(getDefaultSttModel(undefined)).toBeUndefined()
+  })
+})
+
+describe('getConfiguredSttModel', () => {
+  it('returns configured openai model', () => {
+    const config: SttModelConfig = { sttProviderId: 'openai', openaiSttModel: 'gpt-4o-transcribe' }
+    expect(getConfiguredSttModel(config)).toBe('gpt-4o-transcribe')
+  })
+
+  it('falls back to openai default when openaiSttModel is empty', () => {
+    const config: SttModelConfig = { sttProviderId: 'openai', openaiSttModel: '' }
+    expect(getConfiguredSttModel(config)).toBe('whisper-1')
+  })
+
+  it('returns configured groq model', () => {
+    const config: SttModelConfig = { sttProviderId: 'groq', groqSttModel: 'whisper-large-v3' }
+    expect(getConfiguredSttModel(config)).toBe('whisper-large-v3')
+  })
+
+  it('falls back to groq default when groqSttModel is empty', () => {
+    const config: SttModelConfig = { sttProviderId: 'groq', groqSttModel: '  ' }
+    expect(getConfiguredSttModel(config)).toBe('whisper-large-v3-turbo')
+  })
+
+  it('returns undefined for unknown provider', () => {
+    const config: SttModelConfig = { sttProviderId: 'parakeet' }
+    expect(getConfiguredSttModel(config)).toBeUndefined()
+  })
+
+  it('returns undefined when no provider is set', () => {
+    const config: SttModelConfig = {}
+    expect(getConfiguredSttModel(config)).toBeUndefined()
+  })
+})

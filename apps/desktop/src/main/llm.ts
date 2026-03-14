@@ -50,7 +50,7 @@ import { filterEphemeralMessages } from "./conversation-history-utils"
 import {
   filterNamedItemsToAllowedTools,
 } from "./llm-tool-gating"
-import { sanitizeMessageContentForDisplay } from "../shared/message-display-utils"
+import { sanitizeMessageContentForDisplay } from "@dotagents/shared"
 import {
   isDeliverableResponseContent,
   normalizeMissingItemsList,
