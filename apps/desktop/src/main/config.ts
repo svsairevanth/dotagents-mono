@@ -267,7 +267,7 @@ const getConfig = (): LoadedConfig => {
     apiRetryMaxDelay: 30000, // 30 seconds
     // Context reduction defaults
     mcpContextReductionEnabled: true,
-    mcpContextTargetRatio: 0.7,
+    mcpContextTargetRatio: 0.4,
     mcpContextLastNMessages: 3,
     mcpContextSummarizeCharThreshold: 2000,
 

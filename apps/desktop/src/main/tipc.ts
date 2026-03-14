@@ -4922,7 +4922,7 @@ export const router = {
       const { saveCurrentAsSlot } = await import("./sandbox-service")
       const saveResult = saveCurrentAsSlot(globalAgentsFolder, input.slotName, { sourceBundleName })
       if (!saveResult.success) {
-        return { success: false, errors: [saveResult.error || "Failed to save sandbox slot after import"] }
+        return { success: false, errors: [saveResult.error || "Failed to save sandbox slot after importing bundle"] }
       }
 
       await refreshRuntimeAfterBundleImport()

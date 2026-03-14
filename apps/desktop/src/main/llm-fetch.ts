@@ -33,6 +33,7 @@ import {
   endLLMGeneration,
   isLangfuseEnabled,
 } from "./langfuse-service"
+import { recordActualTokenUsage } from "./context-budget"
 
 /**
  * Build token usage object for Langfuse, only including it when at least one token field is present.
@@ -774,6 +775,11 @@ export async function makeLLMCallWithFetch(
             })
           }
 
+          // Record actual token usage for context budget calibration
+          if (sessionId && result.usage?.inputTokens) {
+            recordActualTokenUsage(sessionId, result.usage.inputTokens, result.usage.outputTokens ?? 0)
+          }
+
           return {
             content: text || undefined,
             toolCalls,
@@ -1082,6 +1088,11 @@ export async function makeLLMCallWithStreamingAndTools(
               : accumulated,
             usage: buildTokenUsage(finishUsage),
           })
+        }
+
+        // Record actual token usage for context budget calibration
+        if (sessionId && finishUsage?.inputTokens) {
+          recordActualTokenUsage(sessionId, finishUsage.inputTokens, finishUsage.outputTokens ?? 0)
         }
 
         if (!accumulated && collectedToolCalls.length === 0) {

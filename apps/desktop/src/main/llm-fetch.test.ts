@@ -71,6 +71,11 @@ vi.mock('./langfuse-service', () => ({
   endLLMGeneration: vi.fn(),
 }))
 
+// Mock the context-budget module (imported for recordActualTokenUsage)
+vi.mock('./context-budget', () => ({
+  recordActualTokenUsage: vi.fn(),
+}))
+
 describe('LLM Fetch with AI SDK', () => {
   beforeEach(() => {
     vi.clearAllMocks()

@@ -399,6 +399,64 @@ export function estimateTokensFromMessages(messages: LLMMessage[]): number {
   return Math.ceil(totalChars / 4)
 }
 
+// ============================================================================
+// ACTUAL TOKEN TRACKING
+// ============================================================================
+
+/**
+ * Track actual API-reported token counts per session.
+ * Used to calibrate context budget decisions with real data instead of estimates.
+ */
+const actualTokenUsageBySession = new Map<string, { inputTokens: number; outputTokens: number; timestamp: number }>()
+
+/**
+ * Record actual token usage from an API response for a session.
+ * Called from llm-fetch.ts after each LLM call completes.
+ */
+export function recordActualTokenUsage(sessionId: string, inputTokens: number, outputTokens: number): void {
+  actualTokenUsageBySession.set(sessionId, { inputTokens, outputTokens, timestamp: Date.now() })
+}
+
+/**
+ * Get the last known actual input token count for a session.
+ * Returns undefined if no actual usage has been recorded.
+ */
+export function getActualInputTokens(sessionId?: string): number | undefined {
+  if (!sessionId) return undefined
+  return actualTokenUsageBySession.get(sessionId)?.inputTokens
+}
+
+/**
+ * Clear actual token tracking for a session (call on session end).
+ */
+export function clearActualTokenUsage(sessionId: string): void {
+  actualTokenUsageBySession.delete(sessionId)
+}
+
+// ============================================================================
+// ITERATIVE SUMMARY CACHE (Pi-style)
+// ============================================================================
+
+/**
+ * Store running summaries per session. Each compaction merges with the previous
+ * summary instead of re-summarizing from scratch, preserving cumulative history.
+ */
+const iterativeSummaryCache = new Map<string, string>()
+
+/**
+ * Get the current iterative summary for a session.
+ */
+export function getIterativeSummary(sessionId: string): string | undefined {
+  return iterativeSummaryCache.get(sessionId)
+}
+
+/**
+ * Clear iterative summary for a session (call on session end).
+ */
+export function clearIterativeSummary(sessionId: string): void {
+  iterativeSummaryCache.delete(sessionId)
+}
+
 export function getProviderAndModel(): { providerId: string; model: string } {
   const config = configStore.get()
   const providerId = config.mcpToolsProviderId || "openai"
@@ -603,11 +661,13 @@ export interface ShrinkOptions {
   /** Optional compact skill index (IDs) so Tier-3 minimal prompts don't drop skills entirely. */
   skillsIndex?: string
   isAgentMode?: boolean
-  targetRatio?: number // default 0.7
+  targetRatio?: number // default 0.4
   lastNMessages?: number // default 3
   summarizeCharThreshold?: number // default 2000
   sessionId?: string // optional session ID for abort control and progress injection
   onSummarizationProgress?: (current: number, total: number, message: string) => void // callback for progress updates
+  /** Actual input tokens from last API response (overrides chars/4 estimate when available) */
+  actualInputTokens?: number
 }
 
 export interface ShrinkResult {
@@ -624,7 +684,11 @@ export async function shrinkMessagesForLLM(opts: ShrinkOptions): Promise<ShrinkR
   const applied: string[] = []
 
   const enabled = config.mcpContextReductionEnabled ?? true
-  const targetRatio = opts.targetRatio ?? (config.mcpContextTargetRatio ?? 0.7)
+  // CHANGED: Default target ratio lowered from 0.7 to 0.4
+  // Research shows LLM quality degrades significantly past 30-50% of context window
+  // for complex agentic tasks (tool calling + multi-step reasoning).
+  // See: "Maximum Effective Context Window" (Paulsen 2026), "Context Length Alone Hurts" (Du et al. 2025)
+  const targetRatio = opts.targetRatio ?? (config.mcpContextTargetRatio ?? 0.4)
   const lastN = opts.lastNMessages ?? (config.mcpContextLastNMessages ?? 3)
   const summarizeThreshold = opts.summarizeCharThreshold ?? (config.mcpContextSummarizeCharThreshold ?? 2000)
 
@@ -645,11 +709,68 @@ export async function shrinkMessagesForLLM(opts: ShrinkOptions): Promise<ShrinkR
   let messages = [...opts.messages]
   let tokens = estimateTokensFromMessages(messages)
 
-  if (isDebugLLM()) {
-    logLLM("ContextBudget: initial", { providerId, model, maxTokens, targetTokens, estTokens: tokens, count: messages.length })
+  // Use actual API-reported token count when available (more accurate than chars/4)
+  const actualTokens = opts.actualInputTokens ?? getActualInputTokens(opts.sessionId)
+  if (actualTokens !== undefined && actualTokens > 0) {
+    // Use the higher of estimate vs actual to be conservative
+    tokens = Math.max(tokens, actualTokens)
+    if (isDebugLLM()) {
+      logLLM("ContextBudget: using actual token count", { estimated: estimateTokensFromMessages(messages), actual: actualTokens, used: tokens })
+    }
   }
 
-  // Tier 0: ALWAYS truncate very large individual messages regardless of budget
+  if (isDebugLLM()) {
+    logLLM("ContextBudget: initial", { providerId, model, maxTokens, targetTokens, estTokens: tokens, count: messages.length, totalChars: messages.reduce((s, m) => s + (m.content?.length || 0), 0) })
+  }
+
+  // ========================================================================
+  // Tier 0a: MICROCOMPACTION (always-on, no LLM needed)
+  // Like Claude Code: replace old tool results with a brief marker.
+  // Keep only the last MICROCOMPACT_KEEP_RECENT tool/assistant messages intact.
+  // This runs ALWAYS, regardless of budget, to prevent context bloat.
+  // ========================================================================
+  const MICROCOMPACT_KEEP_RECENT = 5 // keep last 5 tool results verbatim
+  const MICROCOMPACT_MIN_CHARS = 500 // only compact messages longer than this
+  const MICROCOMPACT_CLEARED_MARKER = "[Tool result cleared for context management]"
+
+  // Find all tool-role messages and large assistant messages with tool-like content
+  const toolMessageIndices: number[] = []
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i]
+    if (msg.role === "system") continue
+    if (msg.role === "tool" && msg.content && msg.content.length > MICROCOMPACT_MIN_CHARS) {
+      toolMessageIndices.push(i)
+    }
+  }
+
+  // Clear old tool results, keeping only the most recent ones
+  if (toolMessageIndices.length > MICROCOMPACT_KEEP_RECENT) {
+    const toClear = toolMessageIndices.slice(0, toolMessageIndices.length - MICROCOMPACT_KEEP_RECENT)
+    for (const idx of toClear) {
+      const original = messages[idx]
+      // Extract tool name if present for a more informative marker
+      const { toolName } = parseToolNameFromContent(original.content || "")
+      messages[idx] = {
+        ...original,
+        content: toolName !== "unknown"
+          ? `[${toolName}] ${MICROCOMPACT_CLEARED_MARKER}`
+          : MICROCOMPACT_CLEARED_MARKER,
+      }
+    }
+    applied.push("microcompact")
+    tokens = estimateTokensFromMessages(messages)
+    if (actualTokens !== undefined) {
+      // Re-estimate since we changed content; scale actual tokens proportionally
+      tokens = Math.max(tokens, Math.floor(actualTokens * (tokens / estimateTokensFromMessages(opts.messages))))
+    }
+  }
+
+  if (tokens <= targetTokens) {
+    if (isDebugLLM()) logLLM("ContextBudget: after microcompact", { estTokens: tokens, count: messages.length })
+    return { messages, appliedStrategies: applied, estTokensBefore: tokens, estTokensAfter: tokens, maxTokens }
+  }
+
+  // Tier 0b: ALWAYS truncate very large individual messages regardless of budget
   // This prevents sending massive payloads to the LLM even if total tokens seem OK
   const AGGRESSIVE_TRUNCATE_THRESHOLD = 5000
   for (let i = 0; i < messages.length; i++) {
@@ -745,11 +866,15 @@ export async function shrinkMessagesForLLM(opts: ShrinkOptions): Promise<ShrinkR
     if (k >= 0) keptSet.add(k)
   }
 
-  // Find tool messages that would be dropped (not in keptSet)
+  // Collect messages that would be dropped for iterative summary
+  const droppedMessages: LLMMessage[] = []
   const toolMessagesToBeDropped: LLMMessage[] = []
   for (let i = 0; i < messages.length; i++) {
-    if (!keptSet.has(i) && messages[i].role === "tool") {
-      toolMessagesToBeDropped.push(messages[i])
+    if (!keptSet.has(i)) {
+      droppedMessages.push(messages[i])
+      if (messages[i].role === "tool") {
+        toolMessagesToBeDropped.push(messages[i])
+      }
     }
   }
 
@@ -765,11 +890,87 @@ export async function shrinkMessagesForLLM(opts: ShrinkOptions): Promise<ShrinkR
     }
   }
 
-  // Preserve order: system -> first user -> tool summary (if any) -> (chronological tail without duplicates)
+  // ========================================================================
+  // Pi-style iterative summary: merge dropped messages with previous summary
+  // instead of losing them entirely. This preserves cumulative history.
+  // Works independently of dualModelEnabled — always active during compaction.
+  // ========================================================================
+  if (opts.sessionId && droppedMessages.length > 0) {
+    const previousSummary = iterativeSummaryCache.get(opts.sessionId)
+    const droppedText = droppedMessages
+      .map(m => {
+        const content = sanitizeMessageContentForDisplay(m.content || "")
+        return `${m.role}: ${content.substring(0, 300)}`
+      })
+      .join("\n")
+
+    try {
+      if (!agentSessionStateManager.shouldStopSession(opts.sessionId)) {
+        const updatePrompt = previousSummary
+          ? `You are maintaining a running summary of an AI agent session.
+
+PREVIOUS SUMMARY:
+${previousSummary}
+
+NEW MESSAGES BEING DROPPED FROM CONTEXT:
+${droppedText.substring(0, 4000)}
+
+Update the summary to incorporate the new information. Preserve all important details from the previous summary. Focus on:
+- What tasks were attempted and their outcomes
+- Key files, paths, IDs, and values discovered
+- Errors encountered and how they were resolved
+- Current state and what the agent should do next
+
+Keep the summary under 1000 characters. Be factual and specific.`
+          : `Summarize these AI agent conversation messages that are being dropped from context:
+
+${droppedText.substring(0, 4000)}
+
+Focus on:
+- What tasks were attempted and their outcomes
+- Key files, paths, IDs, and values discovered
+- Errors encountered and how they were resolved
+
+Keep the summary under 1000 characters. Be factual and specific.`
+
+        if (opts.onSummarizationProgress) {
+          opts.onSummarizationProgress(0, 1, "Building iterative session summary...")
+        }
+
+        const iterativeSummary = await makeTextCompletionWithFetch(updatePrompt, getProviderAndModel().providerId, opts.sessionId)
+        if (iterativeSummary?.trim()) {
+          iterativeSummaryCache.set(opts.sessionId, iterativeSummary.trim())
+          if (isDebugLLM()) logLLM("[Context Budget] Updated iterative session summary", { length: iterativeSummary.length })
+        }
+      }
+    } catch (e) {
+      // Non-fatal: if summary generation fails, continue without it
+      if (isDebugLLM()) logLLM("[Context Budget] Iterative summary generation failed, continuing", { error: String(e) })
+    }
+  }
+
+  // Preserve order: system -> first user -> iterative summary -> tool summary -> (chronological tail)
   const ordered: LLMMessage[] = []
   if (systemIdx >= 0) ordered.push(messages[systemIdx])
   if (firstUserIdx >= 0 && firstUserIdx !== systemIdx) ordered.push(messages[firstUserIdx])
-  // Insert tool summary right after first user message
+
+  // Inject iterative summary (Pi-style) — works independently of dualModelEnabled
+  if (opts.sessionId) {
+    const iterSummary = iterativeSummaryCache.get(opts.sessionId)
+    if (iterSummary) {
+      ordered.push({ role: "assistant", content: `[Session Progress Summary]\n${iterSummary}` })
+    }
+  }
+
+  // Also inject dual-model summaries if available (backwards compatible)
+  if (toolResultsSummarized && opts.sessionId) {
+    const progressSummary = buildContextFromSummaries(opts.sessionId)
+    if (progressSummary) {
+      ordered.push({ role: "assistant", content: progressSummary })
+    }
+  }
+
+  // Insert tool summary
   if (toolSummaryMessage) ordered.push(toolSummaryMessage)
   for (let k = baseLen - effectiveLastN; k < baseLen; k++) {
     if (k >= 0 && k !== systemIdx && k !== firstUserIdx) ordered.push(messages[k])
@@ -777,20 +978,6 @@ export async function shrinkMessagesForLLM(opts: ShrinkOptions): Promise<ShrinkR
   messages = ordered
   applied.push("drop_middle")
   tokens = estimateTokensFromMessages(messages)
-
-  // If we dropped tools, try to inject session progress from summaries
-  if (toolResultsSummarized && opts.sessionId) {
-    const progressSummary = buildContextFromSummaries(opts.sessionId)
-    if (progressSummary) {
-      // Find first user message and inject progress after it
-      const firstUserIdx = messages.findIndex(m => m.role === "user")
-      if (firstUserIdx >= 0 && firstUserIdx < messages.length - 1) {
-        messages.splice(firstUserIdx + 1, 0, { role: "assistant", content: progressSummary })
-        tokens = estimateTokensFromMessages(messages)
-        if (isDebugLLM()) logLLM("[Context Budget] Injected session progress summary from summarization service")
-      }
-    }
-  }
 
   if (tokens <= targetTokens) {
     if (isDebugLLM()) logLLM("ContextBudget: after drop_middle", { estTokens: tokens, kept: messages.length })

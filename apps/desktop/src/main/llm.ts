@@ -12,7 +12,7 @@ import { makeLLMCallWithFetch, makeTextCompletionWithFetch, verifyCompletionWith
 import { constructSystemPrompt } from "./system-prompts"
 import { state, agentSessionStateManager } from "./state"
 import { isDebugLLM, logLLM, isDebugTools, logTools } from "./debug"
-import { shrinkMessagesForLLM, estimateTokensFromMessages } from "./context-budget"
+import { shrinkMessagesForLLM, estimateTokensFromMessages, clearActualTokenUsage, clearIterativeSummary } from "./context-budget"
 import { emitAgentProgress } from "./emit-agent-progress"
 import { agentSessionTracker } from "./agent-session-tracker"
 import { conversationService } from "./conversation-service"
@@ -2929,6 +2929,10 @@ export async function processTranscriptWithAgentMode(
       // Flush to ensure trace is sent
       flushLangfuse().catch(() => {})
     }
+
+    // Clean up context budget tracking for this session
+    clearActualTokenUsage(currentSessionId)
+    clearIterativeSummary(currentSessionId)
 
     // Clean up runtime session state at the end of agent processing.
     // Keep session userResponse/history so revived sessions can reinstate
