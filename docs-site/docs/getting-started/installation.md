@@ -9,11 +9,33 @@ Get DotAgents running on your machine in minutes.
 
 ---
 
+## One-Line Install
+
+The fastest way to get DotAgents on any machine:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/aj47/dotagents-mono/main/scripts/install.sh | bash
+```
+
+This auto-detects your OS and architecture, downloads the latest release (macOS `.dmg`, Linux `.AppImage`, Windows `.exe`), and installs it. If no pre-built binary exists for your platform, it falls back to building from source.
+
+**Options:**
+
+```bash
+# Force build from source instead of downloading a binary
+curl -fsSL https://raw.githubusercontent.com/aj47/dotagents-mono/main/scripts/install.sh | DOTAGENTS_FROM_SOURCE=1 bash
+
+# Custom install directory (default: ~/.dotagents)
+curl -fsSL https://raw.githubusercontent.com/aj47/dotagents-mono/main/scripts/install.sh | DOTAGENTS_DIR=~/my-agents bash
+```
+
+---
+
 ## Desktop App
 
 ### Download Pre-built Release
 
-The fastest way to get started:
+Alternatively, download manually:
 
 **[Download Latest Release](https://github.com/aj47/dotagents-mono/releases/latest)**
 
@@ -91,47 +113,60 @@ Speech recognition on web requires Chrome or Edge over HTTPS.
 
 ---
 
-## Build from Source (Desktop)
+## Running from Source
 
-For contributors or those who want the latest development version:
+For contributors, or if you want the bleeding-edge development version.
 
 ### Prerequisites
 
-- **Node.js 24.x** recommended (minimum: `20.19.4`)
-- **pnpm 9** (required — npm and yarn are not supported)
-- **Rust toolchain** (for the native keyboard/input binary)
-- **Xcode** (macOS only, for code signing)
+| Tool | Version | Install |
+|------|---------|--------|
+| **Node.js** | 24.x recommended (min 20.19.4) | [nodejs.org](https://nodejs.org) or `nvm use` |
+| **pnpm** | 9.x | `npm i -g pnpm` |
+| **Rust** | stable (optional — needed for voice input binary) | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
+| **Xcode** | latest (macOS only, for code signing) | Mac App Store |
 
-### Steps
+> **pnpm is required.** npm and yarn are not supported.
+
+### Clone & Run
 
 ```bash
-# Clone the repository
 git clone https://github.com/aj47/dotagents-mono.git
 cd dotagents-mono
-
-# Use the correct Node version
-nvm use
-
-# Install dependencies (pnpm only)
+nvm use                  # uses .nvmrc → Node 24.x
 pnpm install
-
-# Build the Rust native binary
-pnpm build-rs
-
-# Start in development mode
-pnpm dev
+pnpm build:shared        # build the shared package first
+pnpm dev                 # start the desktop app in dev mode
 ```
 
-### Production Build
+### Build the Rust Native Binary (optional)
+
+The Rust binary powers native keyboard input and voice recording. Without it the app still runs, but those features won't work.
 
 ```bash
-pnpm build              # Current platform
+pnpm build-rs
+```
+
+### Production Builds
+
+```bash
+pnpm build              # current platform
 pnpm build:mac          # macOS (Apple Silicon + Intel universal)
 pnpm build:win          # Windows (x64)
 pnpm build:linux        # Linux (host architecture)
 ```
 
-See the [Development Setup guide](/development/setup) for Docker builds and troubleshooting.
+### Updating
+
+```bash
+cd dotagents-mono
+git pull
+pnpm install
+pnpm build:shared
+pnpm dev
+```
+
+See the [Development Setup guide](/development/setup) for Docker builds, debug flags, and troubleshooting.
 
 ---
 
