@@ -10,19 +10,21 @@ export interface AudioDeviceInfo {
  * Hook to enumerate available audio input (microphone) and output (speaker) devices.
  * Re-enumerates when devices change (e.g. plugging in a USB mic).
  */
-export function useAudioDevices() {
+export function useAudioDevices(enabled: boolean = true) {
   const [inputDevices, setInputDevices] = useState<AudioDeviceInfo[]>([])
   const [outputDevices, setOutputDevices] = useState<AudioDeviceInfo[]>([])
   const [error, setError] = useState<string | null>(null)
 
   const enumerate = useCallback(async () => {
+    // First, try to get permission for device labels (non-blocking)
     try {
-      // We need permission to see device labels; request mic access if not already granted
-      await navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
-        // Immediately stop the stream — we only needed it to trigger the permission prompt
-        stream.getTracks().forEach((t) => t.stop())
-      })
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      stream.getTracks().forEach((t) => t.stop())
+    } catch {
+      // Permission denied or no mic — we'll still enumerate, labels may be missing
+    }
 
+    try {
       const devices = await navigator.mediaDevices.enumerateDevices()
 
       const inputs: AudioDeviceInfo[] = devices
@@ -50,6 +52,7 @@ export function useAudioDevices() {
   }, [])
 
   useEffect(() => {
+    if (!enabled) return undefined
     enumerate()
 
     // Re-enumerate when devices change (e.g. USB device plugged/unplugged)
@@ -57,7 +60,7 @@ export function useAudioDevices() {
     return () => {
       navigator.mediaDevices.removeEventListener("devicechange", enumerate)
     }
-  }, [enumerate])
+  }, [enumerate, enabled])
 
   return { inputDevices, outputDevices, error, refresh: enumerate }
 }

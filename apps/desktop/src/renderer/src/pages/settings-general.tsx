@@ -71,8 +71,9 @@ export function Component() {
   )
   const mcpMaxIterationsSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Enumerate audio input/output devices for the device selectors
-  const { inputDevices: audioInputDevices, outputDevices: audioOutputDevices } = useAudioDevices()
+  // Defer audio device enumeration until the user expands the Audio Devices section
+  const [audioSectionOpen, setAudioSectionOpen] = useState(false)
+  const { inputDevices: audioInputDevices, outputDevices: audioOutputDevices } = useAudioDevices(audioSectionOpen)
 
   // Check if langfuse package is installed
   const langfuseInstalledQuery = useQuery({
@@ -898,7 +899,7 @@ export function Component() {
           </Control>
         </ControlGroup>
 
-        <ControlGroup collapsible defaultCollapsed title="Audio Devices">
+        <ControlGroup collapsible defaultCollapsed title="Audio Devices" onOpenChange={setAudioSectionOpen}>
           <Control label={<ControlLabel label="Microphone" tooltip="Select which microphone to use for speech recognition. 'System Default' uses your OS default input device." />} className="px-3">
             <Select
               value={configQuery.data.audioInputDeviceId || "default"}
