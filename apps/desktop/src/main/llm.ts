@@ -36,7 +36,7 @@ import {
   getSessionUserResponse,
   getSessionUserResponseHistory,
 } from "./session-user-response-store"
-import { resolveLatestUserFacingResponse } from "./respond-to-user-utils"
+import { resolveLatestUserFacingResponse, getLatestRespondToUserContentFromConversationHistory } from "./respond-to-user-utils"
 import {
   MARK_WORK_COMPLETE_TOOL,
   RESPOND_TO_USER_TOOL,
@@ -582,7 +582,14 @@ export async function processTranscriptWithAgentMode(
     ? getCurrentPresetName(config.currentModelPresetId, config.modelPresets)
     : providerId === "groq" ? "Groq" : providerId === "gemini" ? "Gemini" : providerId
   const modelInfoRef = { provider: providerDisplayName, model: modelName }
-  let lastEmittedUserResponse: string | undefined
+  // Seed lastEmittedUserResponse with the latest respond_to_user content from
+  // previous conversation history. This prevents the emit() guard from
+  // re-emitting a stale response from a prior turn on the very first progress
+  // event of a follow-up (which would trigger outdated TTS on mobile).
+  let lastEmittedUserResponse: string | undefined =
+    getLatestRespondToUserContentFromConversationHistory(
+      (previousConversationHistory as any) ?? []
+    )
 
   // Create bound emitter that always includes sessionId, conversationId, snooze state, sessionStartIndex, conversationTitle, and contextInfo
   const emit = (

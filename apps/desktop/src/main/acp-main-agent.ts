@@ -481,6 +481,12 @@ export async function processTranscriptWithACPAgent(
     }
   }
 
+  // Seed lastEmittedUserResponse with the latest respond_to_user from previous
+  // conversation history so we don't re-emit stale content from prior turns
+  // (which would trigger outdated TTS on mobile).
+  let lastEmittedUserResponse: string | undefined =
+    deriveAcpUserResponseState(conversationHistory).userResponse
+
   // Emit progress with optional streaming content and conversation history
   const emitProgress = async (
     steps: AgentProgressStep[],
@@ -490,6 +496,10 @@ export async function processTranscriptWithACPAgent(
   ) => {
     const { userResponse, userResponseHistory } = deriveAcpUserResponseState(conversationHistory)
     const conversationState: AgentConversationState = isComplete ? "complete" : "running"
+    // Only include userResponse when it changed to avoid re-emitting stale
+    // responses from prior turns (same pattern as llm.ts emit guard)
+    const shouldEmitUserResponse =
+      userResponse !== undefined && userResponse !== lastEmittedUserResponse
     const update: AgentProgressUpdate = {
       sessionId,
       runId,
@@ -502,10 +512,13 @@ export async function processTranscriptWithACPAgent(
       finalContent: finalContent ?? (isComplete ? userResponse : undefined),
       streamingContent,
       conversationHistory,
-      ...(userResponse ? { userResponse } : {}),
-      ...(userResponseHistory?.length ? { userResponseHistory } : {}),
+      ...(shouldEmitUserResponse ? { userResponse } : {}),
+      ...(shouldEmitUserResponse && userResponseHistory?.length ? { userResponseHistory } : {}),
       // Include ACP session info in progress updates (Task 3.1)
       acpSessionInfo: getAcpSessionInfo(),
+    }
+    if (shouldEmitUserResponse) {
+      lastEmittedUserResponse = userResponse
     }
     await emitAgentProgress(update)
     onProgress?.(update)
