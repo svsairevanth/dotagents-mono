@@ -1,8 +1,13 @@
 import { resolveLatestUserFacingResponse } from "./respond-to-user-utils"
 import { normalizeAgentConversationState, type AgentConversationState } from "@dotagents/shared"
 
-const TOOL_CALL_PLACEHOLDER_REGEX = /^\[(?:Calling tools?|Tool|Tools?):[^\]]+\]$/i
+const TOOL_CALL_PLACEHOLDER_REGEX = /^\[(?:Calling tools?|Tool|Tools?):[^\]]+\]/i
 const RAW_TOOL_TRANSCRIPT_REGEX = /^\[[a-z0-9_:-]+\]\s*(?:ERROR:\s*)?(?:\{[\s\S]*\}|\[[\s\S]*\])\s*$/i
+// Detect garbled tool-call-as-text output where the model hallucinates tool call
+// syntax as plain text content instead of structured tool calls. This happens with
+// long conversations when the model starts outputting OpenAI-internal formats like
+// multi_tool_use.parallel or functions.* as text with garbled Unicode.
+const GARBLED_TOOL_CALL_TEXT_REGEX = /(?:multi_tool_use[.\s]|to=(?:multi_tool_use|functions)\.|recipient_name.*functions\.|\[Calling tools?:.*\].*(?:to=|json\s*\{))/i
 const PROGRESS_UPDATE_REGEX = /(?:^|[.!?]\s+)(?:let me|i'?ll|i will|i'm going to|now i'?ll|next i'?ll|working on it|still working on it)\b/i
 const NON_PROGRESS_SIGNOFF_REGEX = /(?:^|[.!?]\s+)(?:let me know if you need(?: anything else| more help| anything more)?|feel free to reach out if you need anything else)\b/i
 const OPTIONAL_INPUT_SIGNAL_REGEX = /\b(if you want|if you'd like|if you’d like|do you want me to|want me to|quick preference|before i do it|which style|which tone)\b/i
@@ -135,6 +140,7 @@ export function isDeliverableResponseContent(content?: string): boolean {
   if (!trimmed) return false
   if (TOOL_CALL_PLACEHOLDER_REGEX.test(trimmed)) return false
   if (RAW_TOOL_TRANSCRIPT_REGEX.test(trimmed)) return false
+  if (GARBLED_TOOL_CALL_TEXT_REGEX.test(trimmed)) return false
   if (isProgressUpdateResponse(trimmed)) return false
   return true
 }

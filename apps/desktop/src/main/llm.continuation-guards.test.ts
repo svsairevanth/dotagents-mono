@@ -173,6 +173,23 @@ describe("continuation guard helpers", () => {
     expect(isDeliverableResponseContent("[Calling tools: read_file]")).toBe(false)
   })
 
+  it("rejects tool placeholders with trailing content (relaxed anchor)", () => {
+    expect(isDeliverableResponseContent("[Calling tools: mark_work_complete] some trailing text")).toBe(false)
+  })
+
+  it("rejects garbled tool-call-as-text output (regression)", () => {
+    // Real examples from production: model hallucinates tool call syntax as text
+    expect(isDeliverableResponseContent(
+      '[Calling tools: multi_tool_use.parallel] to=multi_tool_use.parallel  qq天天中彩票 json\n{"tool_uses":[{"recipient_name":"functions.save_memory","parameters":{"content":"test"}}]}'
+    )).toBe(false)
+    expect(isDeliverableResponseContent(
+      '[Calling tools: respond_to_user]ҩцәа to=functions.respond_to_user json\n{"text":"some response"}'
+    )).toBe(false)
+    expect(isDeliverableResponseContent(
+      'multi_tool_use.parallel to=functions.execute_command'
+    )).toBe(false)
+  })
+
   it("treats common sign-offs as deliverable content", () => {
     expect(isDeliverableResponseContent("Done — let me know if you need anything else.")).toBe(true)
     expect(resolveIterationLimitFinalContent({

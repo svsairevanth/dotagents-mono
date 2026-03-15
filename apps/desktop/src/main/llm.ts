@@ -1872,6 +1872,16 @@ export async function processTranscriptWithAgentMode(
         const canBypassVerification = !config.mcpVerifyCompletionEnabled || !hasToolsAvailable
 
         if (canBypassVerification) {
+          // Even without verification, reject garbled tool-call-as-text output
+          // where the model hallucinated tool call syntax as plain text content.
+          // These are never valid deliverable responses — force the loop to continue.
+          if (!isDeliverableResponseContent(contentText)) {
+            if (trimmedContent.length > 0) {
+              addMessage("assistant", contentText)
+            }
+            addEphemeralMessage("user", "Your previous response contained garbled tool call syntax instead of actual tool calls. Please retry the intended action using proper tool calls.")
+            continue
+          }
           finalContent = contentText
           addMessage("assistant", finalContent)
           emit({
