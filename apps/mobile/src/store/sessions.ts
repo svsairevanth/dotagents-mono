@@ -277,15 +277,18 @@ export function useSessions(): SessionStore {
         const toggledSession = sessionsToSave.find(s => s.id === id);
         if (toggledSession?.serverConversationId) {
           const serverSettings = await client.getSettings().catch(() => null);
-          const serverPinnedIds = new Set<string>(
-            Array.isArray(serverSettings?.pinnedSessionIds) ? serverSettings.pinnedSessionIds : []
-          );
-          if (toggledSession.isPinned) {
-            serverPinnedIds.add(toggledSession.serverConversationId);
-          } else {
-            serverPinnedIds.delete(toggledSession.serverConversationId);
+          // Only merge+push when we successfully fetched settings with the relevant field
+          if (serverSettings && 'pinnedSessionIds' in serverSettings) {
+            const serverPinnedIds = new Set<string>(
+              Array.isArray(serverSettings.pinnedSessionIds) ? serverSettings.pinnedSessionIds : []
+            );
+            if (toggledSession.isPinned) {
+              serverPinnedIds.add(toggledSession.serverConversationId);
+            } else {
+              serverPinnedIds.delete(toggledSession.serverConversationId);
+            }
+            await client.updateSettings({ pinnedSessionIds: [...serverPinnedIds] });
           }
-          await client.updateSettings({ pinnedSessionIds: [...serverPinnedIds] });
         }
       } catch {
         // best-effort: local state is already updated
@@ -320,15 +323,18 @@ export function useSessions(): SessionStore {
         const toggledSession = sessionsToSave.find(s => s.id === id);
         if (toggledSession?.serverConversationId) {
           const serverSettings = await client.getSettings().catch(() => null);
-          const serverArchivedIds = new Set<string>(
-            Array.isArray(serverSettings?.archivedSessionIds) ? serverSettings.archivedSessionIds : []
-          );
-          if (toggledSession.isArchived) {
-            serverArchivedIds.add(toggledSession.serverConversationId);
-          } else {
-            serverArchivedIds.delete(toggledSession.serverConversationId);
+          // Only merge+push when we successfully fetched settings with the relevant field
+          if (serverSettings && 'archivedSessionIds' in serverSettings) {
+            const serverArchivedIds = new Set<string>(
+              Array.isArray(serverSettings.archivedSessionIds) ? serverSettings.archivedSessionIds : []
+            );
+            if (toggledSession.isArchived) {
+              serverArchivedIds.add(toggledSession.serverConversationId);
+            } else {
+              serverArchivedIds.delete(toggledSession.serverConversationId);
+            }
+            await client.updateSettings({ archivedSessionIds: [...serverArchivedIds] });
           }
-          await client.updateSettings({ archivedSessionIds: [...serverArchivedIds] });
         }
       } catch {
         // best-effort: local state is already updated
