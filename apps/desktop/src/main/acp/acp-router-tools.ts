@@ -1465,15 +1465,47 @@ export async function executeACPRouterTool(
 
       case 'check_agent_status':
         // Handle both 'runId' and 'taskId' parameter names
-        const statusArgs = args as { runId?: string; taskId?: string; historyLength?: number };
-        const statusRunId = statusArgs.runId || statusArgs.taskId;
+        const statusArgs = args as { runId?: string; taskId?: string; agentName?: string; historyLength?: number };
+        let statusRunId = statusArgs.runId || statusArgs.taskId;
+
+        // Fallback: if no runId provided, try to find the most recent run
+        // This handles the common case where the LLM forgets to pass the runId.
+        // Scoped to parentSessionId to prevent cross-session leakage.
+        if (!statusRunId) {
+          // Try by agentName first, scoped to this session's runs
+          if (statusArgs.agentName) {
+            const agentRuns = agentNameToActiveRunIds.get(statusArgs.agentName);
+            if (agentRuns && agentRuns.size > 0) {
+              // Filter to runs belonging to this parent session
+              for (const candidateRunId of Array.from(agentRuns).reverse()) {
+                const run = delegatedRuns.get(candidateRunId);
+                if (run && (!parentSessionId || run.parentSessionId === parentSessionId)) {
+                  statusRunId = candidateRunId;
+                  break;
+                }
+              }
+            }
+          }
+          // If still no runId, find the most recent delegated run scoped to this session
+          if (!statusRunId) {
+            let latestTime = 0;
+            delegatedRuns.forEach((state, runId) => {
+              if (parentSessionId && state.parentSessionId !== parentSessionId) return;
+              if (state.startTime > latestTime) {
+                latestTime = state.startTime;
+                statusRunId = runId;
+              }
+            });
+          }
+        }
+
         if (!statusRunId) {
           result = {
             success: false,
-            error: 'Missing required parameter: runId or taskId must be provided',
+            error: 'No runId provided and no active delegated runs found. Provide the runId returned from delegate_to_agent.',
           };
         } else {
-          result = await handleCheckAgentStatus({ 
+          result = await handleCheckAgentStatus({
             runId: statusRunId,
             historyLength: statusArgs.historyLength,
           });
