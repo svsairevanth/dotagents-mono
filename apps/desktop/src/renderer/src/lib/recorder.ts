@@ -77,12 +77,12 @@ export class Recorder extends EventEmitter<{
     }
   }
 
-  async startRecording() {
+  async startRecording(deviceId?: string) {
     this.stopRecording()
 
     const stream = (this.stream = await navigator.mediaDevices.getUserMedia({
       audio: {
-        deviceId: "default",
+        deviceId: deviceId ? { exact: deviceId } : undefined,
       },
       video: false,
     }))
