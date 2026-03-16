@@ -2574,6 +2574,7 @@ const MidTurnUserResponseBubble: React.FC<{
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false)
   const [ttsError, setTtsError] = useState<string | null>(null)
   const [isTTSPlaying, setIsTTSPlaying] = useState(false)
+  const [isPastResponsesExpanded, setIsPastResponsesExpanded] = useState(false)
   const inFlightTtsKeyRef = useRef<string | null>(null)
   const configQuery = useConfigQuery()
   const ttsGenerationIdRef = useRef(0)
@@ -2703,6 +2704,8 @@ const MidTurnUserResponseBubble: React.FC<{
     () => buildCollapsedUserResponsePreview(userResponse),
     [userResponse],
   )
+  const pastResponseCount = pastResponses?.length ?? 0
+  const hasPastResponses = pastResponseCount > 0
 
   const shouldKeepAudioPlayerMounted =
     shouldShowTTSButton &&
@@ -2804,26 +2807,39 @@ const MidTurnUserResponseBubble: React.FC<{
       {isExpanded && (
         <>
           {/* Past Responses History */}
-          {pastResponses && pastResponses.length > 0 && (
+          {hasPastResponses && (
             <div className="border-t border-green-200/60 bg-green-50/30 px-3 py-2 dark:border-green-800/40 dark:bg-green-950/20">
-              <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setIsPastResponsesExpanded(prev => !prev)}
+                aria-expanded={isPastResponsesExpanded}
+                title={isPastResponsesExpanded ? "Collapse past responses" : "Expand past responses"}
+                className="mb-1 flex w-full items-center gap-1.5 rounded-sm px-0.5 py-0.5 text-left transition-colors hover:bg-green-100/40 dark:hover:bg-green-900/20"
+              >
+                {isPastResponsesExpanded ? (
+                  <ChevronDown className="h-3 w-3 shrink-0 text-green-500 dark:text-green-400" />
+                ) : (
+                  <ChevronRight className="h-3 w-3 shrink-0 text-green-500 dark:text-green-400" />
+                )}
                 <span className="text-[10px] font-medium uppercase tracking-wider text-green-600/70 dark:text-green-400/60">
                   Past Responses
                 </span>
                 <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700 dark:bg-green-900/50 dark:text-green-200">
-                  {pastResponses.length}
+                  {pastResponseCount}
                 </span>
-              </div>
-              <div className="space-y-1">
-                {pastResponses.map((response, idx) => (
-                  <PastResponseItem
-                    key={`past-response-${idx}`}
-                    response={response}
-                    index={idx}
-                    sessionId={sessionId}
-                  />
-                ))}
-              </div>
+              </button>
+              {isPastResponsesExpanded && (
+                <div className="space-y-1 pt-0.5">
+                  {pastResponses!.map((response, idx) => (
+                    <PastResponseItem
+                      key={`past-response-${idx}`}
+                      response={response}
+                      index={idx}
+                      sessionId={sessionId}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </>

@@ -20,7 +20,7 @@ describe("agent progress tile layout", () => {
   it("wraps the tile footer metadata row and preserves trailing status visibility", () => {
     expect(agentProgressSource).toContain('className="flex items-center justify-between gap-2"')
     expect(agentProgressSource).toContain('className="flex min-w-0 flex-1 items-center gap-x-2"')
-    expect(agentProgressSource).toContain('<ACPSessionBadge info={acpSessionInfo} className="min-w-0 max-w-full" />')
+    expect(agentProgressSource).toContain('className="min-w-0 max-w-full truncate text-[10px]"')
     expect(agentProgressSource).toContain('className="shrink-0 whitespace-nowrap">Step')
   })
 
@@ -133,7 +133,11 @@ describe("agent progress tile layout", () => {
     expect(agentProgressSource).toContain(
       'className="mt-1 rounded-md bg-red-50 p-2 text-xs text-red-700 break-words [overflow-wrap:anywhere] dark:bg-red-900/20 dark:text-red-300"'
     )
-    expect(agentProgressSource).toContain('className="mb-1.5 flex flex-wrap items-center gap-1.5"')
+    expect(agentProgressSource).toContain('title={isPastResponsesExpanded ? "Collapse past responses" : "Expand past responses"}')
+    expect(agentProgressSource).toContain('aria-expanded={isPastResponsesExpanded}')
+    expect(agentProgressSource).toContain(
+      'className="mb-1 flex w-full items-center gap-1.5 rounded-sm px-0.5 py-0.5 text-left transition-colors hover:bg-green-100/40 dark:hover:bg-green-900/20"'
+    )
     expect(agentProgressSource).toContain(
       'className="min-w-0 max-w-full overflow-hidden rounded-md border border-green-200/60 dark:border-green-800/40"'
     )
@@ -219,16 +223,18 @@ describe("agent progress tile layout", () => {
     )
   })
 
-  it("uses shared conversation-state labels and badges across agent progress surfaces", () => {
+  it("uses shared conversation-state normalization across agent progress surfaces", () => {
     expect(agentProgressSource).toContain('getAgentConversationStateLabel')
     expect(agentProgressSource).toContain('normalizeAgentConversationState(progress.conversationState, isComplete ? "complete" : "running")')
     expect(agentProgressSource).toContain('conversationState === "needs_input"')
     expect(agentProgressSource).toContain('conversationState === "blocked"')
-    expect(agentProgressSource).toContain('className={cn("shrink-0 text-xs", conversationStateBadgeClass)}')
-    expect(agentProgressSource).toContain('className={cn("text-xs px-1.5 py-0.5", conversationStateBadgeClass)}')
-    expect(sessionTileSource).toContain('const statusLabel = getAgentConversationStateLabel(conversationState)')
+    expect(agentProgressSource).toContain(
+      'Badge variant="outline" className={cn("h-5 rounded-full px-1.5 text-[10px] font-medium", statusBadgeClass)}'
+    )
+    expect(agentProgressSource).toContain('const conversationStateBadgeClass = conversationState === "complete"')
+    expect(sessionTileSource).toContain('normalizeAgentConversationState(progress.conversationState, progress.isComplete ? "complete" : "running")')
+    expect(sessionTileSource).toContain('const conversationState = progress?.conversationState')
     expect(sessionTileSource).toContain('conversationState === "needs_input"')
     expect(sessionTileSource).toContain('conversationState === "blocked"')
-    expect(sessionTileSource).toContain('className={cn("text-xs", statusBadgeClass)}')
   })
 })

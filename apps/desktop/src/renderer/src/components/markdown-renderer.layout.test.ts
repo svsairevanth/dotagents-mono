@@ -16,6 +16,12 @@ describe("markdown renderer layout", () => {
     )
   })
 
+  it("uses compact prose spacing for assistant markdown and think sections", () => {
+    expect(markdownRendererSource).toContain("prose-p:my-1")
+    expect(markdownRendererSource).toContain("prose-ul:my-2 prose-ol:my-2 prose-blockquote:my-2")
+    expect(markdownRendererSource).toContain('className="my-1 leading-normal text-foreground"')
+  })
+
   it("reuses the overflow-safe markdown chrome for think sections and table content", () => {
     expect(markdownRendererSource).toContain("components={sharedMarkdownComponents}")
     expect(markdownRendererSource).toContain(

@@ -23,6 +23,12 @@ interface ThinkSectionProps {
   onToggle?: () => void
 }
 
+const COMPACT_PROSE_CLASS_NAME =
+  "prose prose-sm max-w-none dark:prose-invert prose-p:my-1 prose-headings:mb-2 prose-headings:mt-2 prose-ul:my-2 prose-ol:my-2 prose-blockquote:my-2 prose-pre:my-2 prose-img:my-2"
+
+const COMPACT_THINK_PROSE_CLASS_NAME =
+  `${COMPACT_PROSE_CLASS_NAME} prose-amber`
+
 const ALLOWED_MARKDOWN_DATA_IMAGE_URL_REGEX =
   /^data:image\/(?:png|apng|gif|jpe?g|webp|bmp|avif)(?:;|,)/
 
@@ -205,7 +211,7 @@ const ThinkSection: React.FC<ThinkSectionProps> = ({
           id={`think-content-${uid}`}
           className="px-3 pb-3 text-sm text-amber-900 dark:text-amber-100"
         >
-          <div className="prose prose-sm prose-amber dark:prose-invert max-w-none">
+          <div className={COMPACT_THINK_PROSE_CLASS_NAME}>
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               rehypePlugins={[rehypeHighlight]}
@@ -270,7 +276,7 @@ const MarkdownRendererBase: React.FC<MarkdownRendererProps> = ({
 
   return (
     <div
-      className={cn("prose prose-sm dark:prose-invert max-w-none", className)}
+      className={cn(COMPACT_PROSE_CLASS_NAME, className)}
     >
       {parts.map((part, index) => {
         if (part.type === "think") {
@@ -311,7 +317,7 @@ const MarkdownRendererBase: React.FC<MarkdownRendererProps> = ({
                   </h3>
                 ),
                 p: ({ children }) => (
-                  <p className="mb-1.5 leading-normal text-foreground">
+                  <p className="my-1 leading-normal text-foreground">
                     {children}
                   </p>
                 ),

@@ -127,14 +127,28 @@ function countTextOccurrences(text: string, needle: string) {
   return text.match(new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"))?.length ?? 0
 }
 
-function findResponseHistoryToggle(tree: any) {
-  const toggle = findAll(tree, (value) => value?.type === "button" && getTextContent(value).includes("Agent Responses"))[0]
-  if (!toggle) throw new Error("Response history toggle not found")
+function findLatestResponseToggle(tree: any, previewText: string) {
+  const toggle = findAll(
+    tree,
+    (value) => typeof value?.props?.onClick === "function" && getTextContent(value).includes(previewText),
+  )[0]
+  if (!toggle) throw new Error("Latest response toggle not found")
+  return toggle
+}
+
+function findPastResponsesToggle(tree: any) {
+  const toggle = findAll(tree, (value) => value?.type === "button" && getTextContent(value).includes("Past Responses"))[0]
+  if (!toggle) throw new Error("Past responses toggle not found")
   return toggle
 }
 
 async function loadAgentProgress(runtime: ReturnType<typeof createHookRuntime>) {
   vi.resetModules()
+
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: { getItem: vi.fn(() => null), setItem: vi.fn(), removeItem: vi.fn(), clear: vi.fn() },
+  })
 
   const Null = () => null
   const icon = (name: string) => (props: any) => ({ type: name, props })
@@ -204,7 +218,11 @@ async function loadAgentProgress(runtime: ReturnType<typeof createHookRuntime>) 
     TILE_DIMENSIONS: { height: { default: 360, min: 240, max: 720 } },
     useResizable: () => ({ height: 360, isResizing: false, handleHeightResizeStart: vi.fn() }),
   }))
-  vi.doMock("@dotagents/shared", () => ({ getToolResultsSummary: () => "" }))
+  vi.doMock("@dotagents/shared", () => ({
+    getAgentConversationStateLabel: (state: string) => state,
+    getToolResultsSummary: () => "",
+    normalizeAgentConversationState: (state: string | null | undefined, fallback: string) => state ?? fallback,
+  }))
   vi.doMock("./tool-execution-stats", () => ({ ToolExecutionStats: Null }))
   vi.doMock("./acp-session-badge", () => ({ ACPSessionBadge: Null }))
   vi.doMock("./agent-summary-view", () => ({ AgentSummaryView: Null }))
@@ -223,7 +241,7 @@ afterEach(() => {
 })
 
 describe("agent progress response history", () => {
-  it("renders repeated past responses distinctly and lets the history panel collapse and re-open", async () => {
+  it("keeps the latest response collapsed by default, then reveals nested past responses when expanded", async () => {
     const runtime = createHookRuntime()
     const { AgentProgress } = await loadAgentProgress(runtime)
     const progress = {
@@ -232,50 +250,33 @@ describe("agent progress response history", () => {
       currentIteration: 1,
       maxIterations: 1,
       steps: [],
-      isComplete: true,
-      finalContent: "done",
+      isComplete: false,
+      finalContent: "",
       conversationHistory: [],
       userResponse: "Final answer",
       userResponseHistory: ["Repeated draft", "Repeated draft"],
     }
-    const props = { progress }
 
-    let tree = runtime.render(AgentProgress, props)
+    let tree = runtime.render(AgentProgress, { progress })
     let text = getTextContent(tree)
 
     expect(text).toContain("Final answer")
-    expect(text).toContain("Response 2")
-    expect(text).toContain("Response 1")
-    expect(countTextOccurrences(text, "Repeated draft")).toBe(2)
+    expect(text).not.toContain("Past Responses")
 
-    let toggle = findResponseHistoryToggle(tree)
-    expect(toggle.props.title).toBe("Full height")
+    const latestResponseToggle = findLatestResponseToggle(tree, "Final answer")
+    latestResponseToggle.props.onClick()
 
-    toggle.props.onClick()
-    tree = runtime.render(AgentProgress, props)
+    tree = runtime.render(AgentProgress, { progress })
     text = getTextContent(tree)
-    toggle = findResponseHistoryToggle(tree)
-    expect(toggle.props.title).toBe("Collapse")
-    expect(countTextOccurrences(text, "Repeated draft")).toBe(2)
 
-    toggle.props.onClick()
-    tree = runtime.render(AgentProgress, props)
-    text = getTextContent(tree)
-    toggle = findResponseHistoryToggle(tree)
-    expect(toggle.props.title).toBe("Expand")
-    expect(text).not.toContain("Final answer")
-    expect(text).not.toContain("Response 2")
+    expect(text).toContain("Past Responses")
     expect(countTextOccurrences(text, "Repeated draft")).toBe(0)
-
-    toggle.props.onClick()
-    tree = runtime.render(AgentProgress, props)
-    text = getTextContent(tree)
-    toggle = findResponseHistoryToggle(tree)
-    expect(toggle.props.title).toBe("Full height")
-    expect(countTextOccurrences(text, "Repeated draft")).toBe(2)
+    const pastResponsesToggle = findPastResponsesToggle(tree)
+    expect(pastResponsesToggle.props.title).toBe("Expand past responses")
+    expect(pastResponsesToggle.props["aria-expanded"]).toBe(false)
   })
 
-  it("keeps response history visible when only past responses exist", async () => {
+  it("lets the nested past responses section collapse and re-open independently", async () => {
     const runtime = createHookRuntime()
     const { AgentProgress } = await loadAgentProgress(runtime)
     const progress = {
@@ -284,19 +285,64 @@ describe("agent progress response history", () => {
       currentIteration: 1,
       maxIterations: 1,
       steps: [],
-      isComplete: true,
-      finalContent: "done",
+      isComplete: false,
+      finalContent: "",
       conversationHistory: [],
-      userResponseHistory: ["Older response", "Newest archived response"],
+      userResponse: "Final answer",
+      userResponseHistory: ["Earlier draft", "Another draft"],
     }
 
-    const tree = runtime.render(AgentProgress, { progress })
-    const text = getTextContent(tree)
+    let tree = runtime.render(AgentProgress, { progress })
+    const latestResponseToggle = findLatestResponseToggle(tree, "Final answer")
 
-    expect(text).toContain("Agent Responses")
-    expect(text).toContain("Response 2")
-    expect(text).toContain("Newest archived response")
-    expect(text).toContain("Response 1")
-    expect(text).toContain("Older response")
+    latestResponseToggle.props.onClick()
+    tree = runtime.render(AgentProgress, { progress })
+
+    let pastResponsesToggle = findPastResponsesToggle(tree)
+    expect(pastResponsesToggle.props.title).toBe("Expand past responses")
+    expect(pastResponsesToggle.props["aria-expanded"]).toBe(false)
+
+    pastResponsesToggle.props.onClick()
+    tree = runtime.render(AgentProgress, { progress })
+
+    pastResponsesToggle = findPastResponsesToggle(tree)
+    expect(pastResponsesToggle.props.title).toBe("Collapse past responses")
+    expect(pastResponsesToggle.props["aria-expanded"]).toBe(true)
+
+    pastResponsesToggle.props.onClick()
+    tree = runtime.render(AgentProgress, { progress })
+
+    pastResponsesToggle = findPastResponsesToggle(tree)
+    expect(pastResponsesToggle.props.title).toBe("Expand past responses")
+    expect(pastResponsesToggle.props["aria-expanded"]).toBe(false)
+  })
+
+  it("keeps duplicated archived responses visible as distinct entries when the section is open", async () => {
+    const runtime = createHookRuntime()
+    const { AgentProgress } = await loadAgentProgress(runtime)
+    const progress = {
+      sessionId: "session-3",
+      conversationId: "conversation-3",
+      currentIteration: 1,
+      maxIterations: 1,
+      steps: [],
+      isComplete: false,
+      finalContent: "",
+      conversationHistory: [],
+      userResponse: "Final answer",
+      userResponseHistory: ["Repeated draft", "Repeated draft"],
+    }
+
+    let tree = runtime.render(AgentProgress, { progress })
+    const latestResponseToggle = findLatestResponseToggle(tree, "Final answer")
+    latestResponseToggle.props.onClick()
+    tree = runtime.render(AgentProgress, { progress })
+
+    const pastResponsesToggle = findPastResponsesToggle(tree)
+    pastResponsesToggle.props.onClick()
+    tree = runtime.render(AgentProgress, { progress })
+
+    const text = getTextContent(tree)
+    expect(countTextOccurrences(text, "Repeated draft")).toBe(2)
   })
 })
