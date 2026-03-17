@@ -500,4 +500,38 @@ describe("agent progress response history", () => {
 
     expect(onExpand).toHaveBeenCalledTimes(2)
   })
+
+  it("clears the latest-response pointer-down maximize guard when the pointer interaction is canceled", async () => {
+    const runtime = createHookRuntime()
+    const { AgentProgress } = await loadAgentProgress(runtime)
+    const onExpand = vi.fn()
+    const progress = {
+      sessionId: "session-7",
+      conversationId: "conversation-7",
+      currentIteration: 1,
+      maxIterations: 2,
+      steps: [],
+      isComplete: false,
+      finalContent: "",
+      conversationHistory: [],
+      userResponse: "Still waiting on you",
+    }
+
+    const tree = runtime.render(AgentProgress, { progress, variant: "tile", onExpand, isExpanded: false })
+    const maximizeButton = findElementByTitle(tree, "Maximize")
+
+    maximizeButton.props.onPointerDown({
+      button: 0,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    })
+    maximizeButton.props.onPointerCancel()
+    maximizeButton.props.onClick({
+      detail: 0,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    })
+
+    expect(onExpand).toHaveBeenCalledTimes(2)
+  })
 })

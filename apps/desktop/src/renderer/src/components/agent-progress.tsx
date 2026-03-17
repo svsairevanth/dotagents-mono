@@ -2703,6 +2703,10 @@ const MidTurnUserResponseBubble: React.FC<{
     onMaximize()
   }, [onMaximize])
 
+  const handleMaximizePointerCancel = useCallback(() => {
+    maximizeTriggeredOnPointerDownRef.current = false
+  }, [])
+
   return (
     <div className="min-w-0 max-w-full overflow-hidden rounded-lg border-2 border-green-400 bg-green-50/50 dark:bg-green-950/30">
       {/* Header */}
@@ -2752,6 +2756,7 @@ const MidTurnUserResponseBubble: React.FC<{
           {onMaximize && (
             <button
               onPointerDown={handleMaximizePointerDown}
+              onPointerCancel={handleMaximizePointerCancel}
               onClick={handleMaximizeClick}
               className="shrink-0 rounded p-1 transition-colors hover:bg-green-200/50 dark:hover:bg-green-800/50"
               title="Maximize"
