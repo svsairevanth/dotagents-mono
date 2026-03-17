@@ -255,6 +255,16 @@ const extractRespondToUserHistory = (
 ): AgentUserResponseEvent[] =>
   extractRespondToUserResponseEvents(messages, { idPrefix: 'mobile-history' });
 
+const sortResponseEvents = (events: AgentUserResponseEvent[]): AgentUserResponseEvent[] =>
+  [...events].sort((a, b) => {
+    if ((a.runId ?? 0) !== (b.runId ?? 0)) return (a.runId ?? 0) - (b.runId ?? 0);
+    if (a.ordinal !== b.ordinal) return a.ordinal - b.ordinal;
+    return a.timestamp - b.timestamp;
+  });
+
+const getNextResponseEventOrdinal = (events: AgentUserResponseEvent[]): number =>
+  events.reduce((maxOrdinal, event) => Math.max(maxOrdinal, event.ordinal), 0) + 1;
+
 const getMessageLogMeta = (content: string) => ({
   length: content.length,
   inlineImageCount: (content.match(/!\[[^\]]*\]\((?:data:image\/[^)]+)\)/gi) || []).length,
@@ -820,6 +830,8 @@ export default function ChatScreen({ route, navigation }: any) {
   const progressMessagesRef = useRef<ChatMessage[]>([]);
   // Track respond_to_user history for the current session (Issue #26)
   const [respondToUserHistory, setRespondToUserHistory] = useState<AgentUserResponseEvent[]>([]);
+  const respondToUserHistoryRef = useRef<AgentUserResponseEvent[]>([]);
+  const nextResponseEventOrdinalRef = useRef(1);
   const playedResponseEventIdsRef = useRef<Set<string>>(new Set());
   const queuedResponseEventsRef = useRef<AgentUserResponseEvent[]>([]);
   const activeAutoSpeechEventIdRef = useRef<string | null>(null);
@@ -983,21 +995,47 @@ export default function ChatScreen({ route, navigation }: any) {
 		return true;
 		  }, [config.ttsPitch, config.ttsRate, config.ttsVoiceId, handsFree, handsFreeController, voiceLog]);
 
-  const mergeResponseEvents = useCallback((incomingEvents: AgentUserResponseEvent[]) => {
-    if (!incomingEvents.length) return;
-    setRespondToUserHistory((prev) => {
-      const merged = new Map(prev.map((event) => [event.id, event]));
-      for (const event of incomingEvents) {
-        merged.set(event.id, event);
-      }
+	  const syncResponseHistoryRefs = useCallback((events: AgentUserResponseEvent[]) => {
+	    respondToUserHistoryRef.current = events;
+	    nextResponseEventOrdinalRef.current = getNextResponseEventOrdinal(events);
+	  }, []);
 
-      return Array.from(merged.values()).sort((a, b) => {
-        if ((a.runId ?? 0) !== (b.runId ?? 0)) return (a.runId ?? 0) - (b.runId ?? 0);
-        if (a.ordinal !== b.ordinal) return a.ordinal - b.ordinal;
-        return a.timestamp - b.timestamp;
-      });
-    });
-  }, []);
+	  const replaceResponseHistory = useCallback((events: AgentUserResponseEvent[]) => {
+	    const sortedEvents = sortResponseEvents(events);
+	    syncResponseHistoryRefs(sortedEvents);
+	    setRespondToUserHistory(sortedEvents);
+	  }, [syncResponseHistoryRefs]);
+
+	  const createFallbackResponseEvent = useCallback((
+	    sessionId: string | null | undefined,
+	    runId: number | undefined,
+	    text: string,
+	  ): AgentUserResponseEvent => {
+	    const ordinal = nextResponseEventOrdinalRef.current;
+	    nextResponseEventOrdinalRef.current = ordinal + 1;
+	    const timestamp = Date.now();
+
+	    return {
+	      id: `legacy-progress-${sessionId ?? 'session'}-${runId ?? 'run'}-${ordinal}-${timestamp}`,
+	      sessionId: sessionId ?? 'session',
+	      runId,
+	      ordinal,
+	      text,
+	      timestamp,
+	    };
+	  }, []);
+
+	  const mergeResponseEvents = useCallback((incomingEvents: AgentUserResponseEvent[]) => {
+	    if (!incomingEvents.length) return;
+	    const merged = new Map(respondToUserHistoryRef.current.map((event) => [event.id, event]));
+	    for (const event of incomingEvents) {
+	      merged.set(event.id, event);
+	    }
+
+	    const mergedEvents = sortResponseEvents(Array.from(merged.values()));
+	    syncResponseHistoryRefs(mergedEvents);
+	    setRespondToUserHistory(mergedEvents);
+	  }, [syncResponseHistoryRefs]);
 
   const processAutoSpeechQueue = useCallback(() => {
     if (activeAutoSpeechEventIdRef.current || queuedResponseEventsRef.current.length === 0) {
@@ -1295,7 +1333,7 @@ export default function ChatScreen({ route, navigation }: any) {
       setExpandedMessages({});
       setExpandedToolCalls({});
       // Clear respond_to_user history for the new session
-      setRespondToUserHistory([]);
+	      replaceResponseHistory([]);
       playedResponseEventIdsRef.current = new Set();
       queuedResponseEventsRef.current = [];
       activeAutoSpeechEventIdRef.current = null;
@@ -1322,13 +1360,14 @@ export default function ChatScreen({ route, navigation }: any) {
 
         // Extract respond_to_user content from saved messages for display (#32, #33)
         const savedResponses = extractRespondToUserHistory(chatMessages as RespondToUserHistorySourceMessage[]);
-        setRespondToUserHistory(savedResponses);
+	        replaceResponseHistory(savedResponses);
         playedResponseEventIdsRef.current = new Set(savedResponses.map((event) => event.id));
         queuedResponseEventsRef.current = [];
         activeAutoSpeechEventIdRef.current = null;
       } else if (currentSession.serverConversationId && hasServerAuth) {
         // Stub session — lazy-load messages from server
         setMessages([]);
+	        replaceResponseHistory([]);
         const stubSessionId = currentSession.id;
         if (pendingLazyLoadSessionIdRef.current === stubSessionId) {
           return;
@@ -1361,7 +1400,7 @@ export default function ChatScreen({ route, navigation }: any) {
             const lazyResponses = extractRespondToUserHistory(
               loadedMessages as RespondToUserHistorySourceMessage[]
             );
-            setRespondToUserHistory(lazyResponses);
+	            replaceResponseHistory(lazyResponses);
             playedResponseEventIdsRef.current = new Set(lazyResponses.map((event) => event.id));
             queuedResponseEventsRef.current = [];
             activeAutoSpeechEventIdRef.current = null;
@@ -1376,6 +1415,7 @@ export default function ChatScreen({ route, navigation }: any) {
           });
       } else {
         setMessages([]);
+	        replaceResponseHistory([]);
       }
       return;
     }
@@ -1401,14 +1441,15 @@ export default function ChatScreen({ route, navigation }: any) {
 
       // Extract respond_to_user content from new session messages (#32, #33)
       const newResponses = extractRespondToUserHistory(chatMessages as RespondToUserHistorySourceMessage[]);
-      setRespondToUserHistory(newResponses);
+	      replaceResponseHistory(newResponses);
       playedResponseEventIdsRef.current = new Set(newResponses.map((event) => event.id));
       queuedResponseEventsRef.current = [];
       activeAutoSpeechEventIdRef.current = null;
     } else {
       setMessages([]);
+	      replaceResponseHistory([]);
     }
-  }, [sessionStore.currentSessionId, sessionStore, sessionStore.deletingSessionIds.size, config.baseUrl, config.apiKey, settingsClient]);
+	  }, [sessionStore.currentSessionId, sessionStore, sessionStore.deletingSessionIds.size, config.baseUrl, config.apiKey, settingsClient, replaceResponseHistory]);
 
   // Auto-send initialMessage from route params (e.g. from rapid fire mode in SessionListScreen)
   const initialMessageRef = useRef<string | null>(route?.params?.initialMessage ?? null);
@@ -1857,14 +1898,11 @@ export default function ChatScreen({ route, navigation }: any) {
 	        } else if (update.userResponse || update.spokenContent) {
 	          const responseText = update.userResponse || update.spokenContent;
 	          if (responseText && responseText !== lastUserResponse) {
-	            const fallbackEvent: AgentUserResponseEvent = {
-	              id: `legacy-progress-${requestSessionId ?? 'session'}-${update.runId ?? 'run'}-${Date.now()}`,
-	              sessionId: requestSessionId ?? 'session',
-	              runId: update.runId,
-	              ordinal: (respondToUserHistory.length + 1),
-	              text: responseText,
-	              timestamp: Date.now(),
-	            };
+		            const fallbackEvent = createFallbackResponseEvent(
+		              requestSessionId,
+		              update.runId,
+		              responseText,
+		            );
 	            mergeResponseEvents([fallbackEvent]);
 	          }
 	          lastUserResponse = responseText;
@@ -2292,14 +2330,11 @@ export default function ChatScreen({ route, navigation }: any) {
 	        } else if (update.userResponse || update.spokenContent) {
 	          const responseText = update.userResponse || update.spokenContent;
 	          if (responseText && responseText !== lastUserResponse) {
-	            const fallbackEvent: AgentUserResponseEvent = {
-	              id: `legacy-progress-${requestSessionId ?? 'session'}-${update.runId ?? 'run'}-${Date.now()}`,
-	              sessionId: requestSessionId ?? 'session',
-	              runId: update.runId,
-	              ordinal: (respondToUserHistory.length + 1),
-	              text: responseText,
-	              timestamp: Date.now(),
-	            };
+		            const fallbackEvent = createFallbackResponseEvent(
+		              requestSessionId,
+		              update.runId,
+		              responseText,
+		            );
 	            mergeResponseEvents([fallbackEvent]);
 	          }
 	          lastUserResponse = responseText;
