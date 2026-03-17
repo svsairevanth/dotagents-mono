@@ -24,6 +24,7 @@ import {
   extractRespondToUserContentFromArgs,
   extractRespondToUserResponseEvents,
   extractRespondToUserResponses,
+  resolveMessageTimestamps,
   isToolOnlyMessage,
 } from './chat-utils'
 import type { MessageRole, RoleConfig } from './chat-utils'
@@ -364,6 +365,19 @@ describe('extractRespondToUserResponses', () => {
       },
     ]
     expect(extractRespondToUserResponses(messages)).toEqual(['Hello'])
+  })
+})
+
+describe('resolveMessageTimestamps', () => {
+  it('treats non-finite timestamps as missing and fills them monotonically', () => {
+    const messages = [
+      { timestamp: Number.NaN },
+      { timestamp: 100 },
+      { timestamp: Number.POSITIVE_INFINITY },
+      {},
+    ]
+
+    expect(resolveMessageTimestamps(messages)).toEqual([99, 100, 101, 102])
   })
 })
 

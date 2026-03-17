@@ -20,7 +20,7 @@ import { logApp } from "./debug"
 import { conversationService } from "./conversation-service"
 import { buildProfileContext } from "./agent-run-utils"
 import { extractRespondToUserContentFromArgs } from "./respond-to-user-utils"
-import { type AgentConversationState, type AgentUserResponseEvent } from "@dotagents/shared"
+import { resolveMessageTimestamps, type AgentConversationState, type AgentUserResponseEvent } from "@dotagents/shared"
 
 type ConversationHistoryMessage = NonNullable<AgentProgressUpdate["conversationHistory"]>[number]
 
@@ -219,9 +219,12 @@ function deriveAcpUserResponseState(conversationHistory: ConversationHistoryMess
 } {
   const responseEvents: AgentUserResponseEvent[] = []
   const sinceIndex = Math.max(0, options?.sinceIndex ?? 0)
+  const scopedConversationHistory = conversationHistory.slice(sinceIndex)
+  const resolvedTimestamps = resolveMessageTimestamps(scopedConversationHistory)
 
-  for (let messageIndex = sinceIndex; messageIndex < conversationHistory.length; messageIndex += 1) {
-    const message = conversationHistory[messageIndex]
+  for (let localMessageIndex = 0; localMessageIndex < scopedConversationHistory.length; localMessageIndex += 1) {
+    const messageIndex = sinceIndex + localMessageIndex
+    const message = scopedConversationHistory[localMessageIndex]
     if (message.role !== "assistant" || !message.toolCalls?.length) continue
 
     for (let toolCallIndex = 0; toolCallIndex < message.toolCalls.length; toolCallIndex += 1) {
@@ -235,7 +238,7 @@ function deriveAcpUserResponseState(conversationHistory: ConversationHistoryMess
         runId: options?.runId,
         ordinal: responseEvents.length + 1,
         text: content,
-        timestamp: message.timestamp ?? messageIndex * 1000 + toolCallIndex,
+        timestamp: resolvedTimestamps[localMessageIndex],
       })
     }
   }

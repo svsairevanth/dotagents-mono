@@ -555,7 +555,11 @@ export function extractRespondToUserResponses(
   return responses;
 }
 
-function resolveMessageTimestamps(
+/**
+ * Resolve a monotonic timestamp for each message, filling missing or invalid
+ * timestamps relative to neighboring messages when possible.
+ */
+export function resolveMessageTimestamps(
   messages: Array<{
     timestamp?: number;
   }>,
