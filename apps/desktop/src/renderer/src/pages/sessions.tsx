@@ -842,13 +842,26 @@ export function Component() {
               onSelectAgent={setSelectedAgentId}
               compact
             />
-            <Button size="sm" onClick={handleTextClick} className="gap-1.5">
+            <Button
+              size="sm"
+              onClick={handleTextClick}
+              className="gap-1.5 px-2 lg:px-3"
+              aria-label="Start with text"
+              title="Start with text"
+            >
               <Plus className="h-4 w-4 shrink-0" />
-              <span className="hidden sm:inline">Start with Text</span>
+              <span className="sr-only lg:not-sr-only lg:inline">Start with Text</span>
             </Button>
-            <Button variant="secondary" size="sm" onClick={handleVoiceStart} className="gap-1.5">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleVoiceStart}
+              className="gap-1.5 px-2 lg:px-3"
+              aria-label="Start with voice"
+              title="Start with voice"
+            >
               <Mic className="h-4 w-4 shrink-0" />
-              <span className="hidden sm:inline">Start with Voice</span>
+              <span className="sr-only lg:not-sr-only lg:inline">Start with Voice</span>
             </Button>
             <PredefinedPromptsMenu
               onSelectPrompt={handleSelectPrompt}

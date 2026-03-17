@@ -21,6 +21,12 @@ describe("sessions in-app actions", () => {
     expect(sessionsSource).toContain("onExpand={handleMaximize}")
   })
 
+  it("collapses top-bar start actions to icon-only buttons on tighter widths", () => {
+    expect(sessionsSource).toContain('aria-label="Start with text"')
+    expect(sessionsSource).toContain('aria-label="Start with voice"')
+    expect(sessionsSource).toContain('sr-only lg:not-sr-only lg:inline')
+  })
+
   it("preserves an explicitly restored tile layout if it remains viable at the minimum tile size", () => {
     expect(sessionsSource).toContain('isTileLayoutModeViable(gridMetrics.width, gridMetrics.height, gridMetrics.gap, tileLayoutMode, "min")')
   })
