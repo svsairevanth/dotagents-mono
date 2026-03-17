@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { cn } from "@renderer/lib/utils"
 import { AgentProgressUpdate, ACPDelegationProgress, ACPSubAgentMessage } from "../../../shared/types"
 import { INTERNAL_COMPLETION_NUDGE_TEXT, RESPOND_TO_USER_TOOL, MARK_WORK_COMPLETE_TOOL } from "../../../shared/builtin-tool-names"
-import { ChevronDown, ChevronUp, ChevronRight, X, AlertTriangle, Minimize2, Shield, Check, XCircle, Loader2, Clock, Copy, CheckCheck, GripHorizontal, Activity, Moon, Maximize2, RefreshCw, Bot, OctagonX, MessageSquare, Brain, Volume2, Wrench } from "lucide-react"
+import { ChevronDown, ChevronUp, ChevronRight, X, AlertTriangle, Minimize2, Shield, Check, XCircle, Loader2, Clock, Copy, CheckCheck, GripHorizontal, Activity, Moon, Maximize2, LayoutGrid, Bot, OctagonX, MessageSquare, Brain, Volume2, Wrench } from "lucide-react"
 import { MarkdownRenderer } from "@renderer/components/markdown-renderer"
 import { Button } from "./ui/button"
 import { Badge } from "./ui/badge"
@@ -2533,6 +2533,7 @@ const MidTurnUserResponseBubble: React.FC<{
   const [isPastResponsesExpanded, setIsPastResponsesExpanded] = useState(false)
   const inFlightTtsKeyRef = useRef<string | null>(null)
   const inFlightCompletionTTSKeysRef = useRef<string[]>([])
+  const maximizeTriggeredOnPointerDownRef = useRef(false)
   const configQuery = useConfigQuery()
   const ttsGenerationIdRef = useRef(0)
   const ttsSource = sanitizeMessageContentForSpeech(userResponse)
@@ -2675,6 +2676,33 @@ const MidTurnUserResponseBubble: React.FC<{
     shouldShowTTSButton &&
     (isExpanded || (variant === "overlay" && (configQuery.data?.ttsAutoPlay ?? true)))
 
+  const handleHeaderClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement | null
+    if (target?.closest("button, a, input, textarea, select, [role='button']")) {
+      return
+    }
+    onToggleExpand()
+  }, [onToggleExpand])
+
+  const handleMaximizePointerDown = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!onMaximize || e.button !== 0) return
+    maximizeTriggeredOnPointerDownRef.current = true
+    e.preventDefault()
+    e.stopPropagation()
+    onMaximize()
+  }, [onMaximize])
+
+  const handleMaximizeClick = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation()
+    if (!onMaximize) return
+    if (maximizeTriggeredOnPointerDownRef.current) {
+      maximizeTriggeredOnPointerDownRef.current = false
+      return
+    }
+    e.preventDefault()
+    onMaximize()
+  }, [onMaximize])
+
   return (
     <div className="min-w-0 max-w-full overflow-hidden rounded-lg border-2 border-green-400 bg-green-50/50 dark:bg-green-950/30">
       {/* Header */}
@@ -2683,7 +2711,7 @@ const MidTurnUserResponseBubble: React.FC<{
           "flex min-w-0 flex-wrap items-center gap-1.5 cursor-pointer bg-green-100/50 px-2.5 py-1.5 transition-colors hover:bg-green-100/70 dark:bg-green-900/30 dark:hover:bg-green-900/40",
           isExpanded && "border-b border-green-200 dark:border-green-800",
         )}
-        onClick={onToggleExpand}
+        onClick={handleHeaderClick}
       >
         {isExpanded ? (
           <ChevronDown className="h-3 w-3 text-green-600 dark:text-green-400 flex-shrink-0" />
@@ -2723,10 +2751,8 @@ const MidTurnUserResponseBubble: React.FC<{
           )}
           {onMaximize && (
             <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onMaximize()
-              }}
+              onPointerDown={handleMaximizePointerDown}
+              onClick={handleMaximizeClick}
               className="shrink-0 rounded p-1 transition-colors hover:bg-green-200/50 dark:hover:bg-green-800/50"
               title="Maximize"
             >
@@ -2970,6 +2996,40 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
   const handleCancelKill = () => {
     setShowKillConfirmation(false)
   }
+
+  const handleRestoreSession = useCallback(async () => {
+    if (!progress?.sessionId) return false
+
+    // Update local store first so the tile reflects the restored session immediately.
+    setSessionSnoozed(progress.sessionId, false)
+    setFocusedSessionId(progress.sessionId)
+
+    try {
+      await tipcClient.unsnoozeAgentSession({ sessionId: progress.sessionId })
+    } catch (error) {
+      setSessionSnoozed(progress.sessionId, true)
+      setFocusedSessionId(null)
+      console.error("Failed to unsnooze session:", error)
+      return false
+    }
+
+    try {
+      await tipcClient.focusAgentSession({ sessionId: progress.sessionId })
+    } catch (error) {
+      console.error("Failed to update UI after unsnooze:", error)
+    }
+
+    return true
+  }, [progress?.sessionId, setFocusedSessionId, setSessionSnoozed])
+
+  const handleExpandTile = useCallback(async () => {
+    if (!onExpand) return
+    if (progress?.isSnoozed) {
+      const restored = await handleRestoreSession()
+      if (!restored) return
+    }
+    onExpand()
+  }, [handleRestoreSession, onExpand, progress?.isSnoozed])
 
   // Handle snooze/minimize
   const handleSnooze = async (e?: React.MouseEvent) => {
@@ -3807,57 +3867,33 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
               {isCollapsed ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}
             </Button>
 
-            {!isSnoozed && onExpand && !isExpanded && (
+            {onExpand && (
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-6 w-6 shrink-0"
+                onPointerDown={(e) => {
+                  if (e.button !== 0) return
+                  e.preventDefault()
+                  e.stopPropagation()
+                  void handleExpandTile()
+                }}
                 onClick={(e) => {
                   e.stopPropagation()
-                  onExpand()
+                  if (e.detail === 0) {
+                    e.preventDefault()
+                    void handleExpandTile()
+                  }
                 }}
-                title="Maximize tile"
+                title={isExpanded ? "Restore tile layout" : "Maximize tile"}
               >
-                <Maximize2 className="h-3 w-3" />
+                {isExpanded ? <LayoutGrid className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
               </Button>
             )}
 
             {!isSnoozed && !isComplete && (
               <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={(e) => { e.stopPropagation(); handleSnooze(e); }} title="Minimize">
                 <Minimize2 className="h-3 w-3" />
-              </Button>
-            )}
-            {isSnoozed && (
-              <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={async (e) => {
-                e.stopPropagation()
-                if (!progress?.sessionId) return
-
-                // Update local store first so panel shows content immediately
-                setSessionSnoozed(progress.sessionId, false)
-                // Focus this session in state
-                setFocusedSessionId(progress.sessionId)
-
-                try {
-                  // Unsnooze the session in backend
-                  await tipcClient.unsnoozeAgentSession({ sessionId: progress.sessionId })
-                } catch (error) {
-                  // Rollback local state only when the API call fails to keep UI and backend in sync
-                  setSessionSnoozed(progress.sessionId, true)
-                  setFocusedSessionId(null)
-                  console.error("Failed to unsnooze session:", error)
-                  return
-                }
-
-                // UI updates after successful API call - don't rollback if these fail
-                try {
-                  // Keep panel state in sync for the restored session without forcing panel open.
-                  await tipcClient.focusAgentSession({ sessionId: progress.sessionId })
-                } catch (error) {
-                  // Log UI errors but don't rollback - the backend state is already updated
-                  console.error("Failed to update UI after unsnooze:", error)
-                }
-              }} title="Restore session">
-                <Maximize2 className="h-3 w-3" />
               </Button>
             )}
             {/* Combined close button: stops agent if running, dismisses if complete */}
@@ -3989,7 +4025,7 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
                             isComplete={isComplete}
                             isExpanded={expandedItems[itemKey] ?? false}
                             onToggleExpand={() => toggleItemExpansion(itemKey, expandedItems[itemKey] ?? false)}
-                            onMaximize={onExpand}
+                            onMaximize={handleExpandTile}
                           />
                         )
                       } else if (item.kind === "delegation") {
