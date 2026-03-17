@@ -12,13 +12,25 @@
  * the correct environment variables.
  */
 
-import { spawn, type ChildProcess } from "child_process"
+import { spawn, spawnSync, type ChildProcess } from "child_process"
 import * as fs from "fs"
 import * as os from "os"
 import * as path from "path"
 import { fileURLToPath } from "url"
 
 const FORCE_KILL_TIMEOUT_MS = 5000
+
+type WindowsProcessTreeTerminator = (pid: number) => {
+  status: number | null
+  error?: Error
+}
+
+function terminateWin32ProcessTree(pid: number) {
+  return spawnSync("taskkill", ["/T", "/F", "/PID", String(pid)], {
+    stdio: "ignore",
+    windowsHide: true,
+  })
+}
 
 export function getDevCommand(userArgs: string[]): {
   command: string
@@ -45,11 +57,25 @@ export function terminateChildProcessTree(
   child: Pick<ChildProcess, "pid" | "kill">,
   signal: NodeJS.Signals,
   platform = process.platform,
+  terminateWindowsProcessTree: WindowsProcessTreeTerminator = terminateWin32ProcessTree,
 ): boolean {
   if (!child.pid) return false
 
   if (platform === "win32") {
-    return child.kill(signal)
+    // On Windows we launch with shell:true so child.pid is typically the shell wrapper.
+    // taskkill /T /F is the most reliable way to tear down the full child tree.
+    const result = terminateWindowsProcessTree(child.pid)
+    const error = result.error as NodeJS.ErrnoException | undefined
+
+    if (!error && result.status === 0) {
+      return true
+    }
+
+    if (error?.code === "ENOENT") {
+      return child.kill(signal)
+    }
+
+    return false
   }
 
   try {

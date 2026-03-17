@@ -88,13 +88,57 @@ describe("dev-with-sherpa launcher helpers", () => {
     expect(child.kill).not.toHaveBeenCalled()
   })
 
-  it("falls back to child.kill on win32", () => {
+  it("uses taskkill to terminate the full win32 child process tree", () => {
     const child = { pid: 4321, kill: vi.fn(() => true) }
+    const terminateWindowsProcessTree = vi.fn(() => ({ status: 0 }))
 
-    const result = terminateChildProcessTree(child, "SIGINT", "win32")
+    const result = terminateChildProcessTree(
+      child,
+      "SIGINT",
+      "win32",
+      terminateWindowsProcessTree,
+    )
 
     expect(result).toBe(true)
-    expect(child.kill).toHaveBeenCalledWith("SIGINT")
+    expect(terminateWindowsProcessTree).toHaveBeenCalledWith(4321)
+    expect(child.kill).not.toHaveBeenCalled()
+  })
+
+  it("falls back to child.kill on win32 when taskkill is unavailable", () => {
+    const child = { pid: 4321, kill: vi.fn(() => true) }
+    const terminateWindowsProcessTree = vi.fn(() => {
+      const error = new Error("missing taskkill") as NodeJS.ErrnoException
+      error.code = "ENOENT"
+
+      return { status: null, error }
+    })
+
+    const result = terminateChildProcessTree(
+      child,
+      "SIGTERM",
+      "win32",
+      terminateWindowsProcessTree,
+    )
+
+    expect(result).toBe(true)
+    expect(terminateWindowsProcessTree).toHaveBeenCalledWith(4321)
+    expect(child.kill).toHaveBeenCalledWith("SIGTERM")
+  })
+
+  it("returns false on win32 when taskkill fails for another reason", () => {
+    const child = { pid: 4321, kill: vi.fn(() => true) }
+    const terminateWindowsProcessTree = vi.fn(() => ({ status: 1 }))
+
+    const result = terminateChildProcessTree(
+      child,
+      "SIGTERM",
+      "win32",
+      terminateWindowsProcessTree,
+    )
+
+    expect(result).toBe(false)
+    expect(terminateWindowsProcessTree).toHaveBeenCalledWith(4321)
+    expect(child.kill).not.toHaveBeenCalled()
   })
 
   it("maps signal exit codes consistently", () => {
