@@ -5,6 +5,7 @@
  * across both platforms while allowing platform-specific rendering.
  */
 
+import type { AgentUserResponseEvent } from './agent-progress';
 import { BaseChatMessage, ToolCall, ToolResult } from './types';
 
 /**
@@ -543,6 +544,49 @@ export function extractRespondToUserResponses(
   }
 
   return responses;
+}
+
+/**
+ * Extract ordered respond_to_user events from saved chat messages.
+ * Unlike `extractRespondToUserResponses`, this preserves duplicates and order.
+ */
+export function extractRespondToUserResponseEvents(
+  messages: Array<{
+    role: 'user' | 'assistant' | 'tool';
+    timestamp?: number;
+    toolCalls?: Array<{ name: string; arguments: unknown }>;
+  }>,
+  options?: {
+    sessionId?: string;
+    runId?: number;
+    idPrefix?: string;
+  },
+): AgentUserResponseEvent[] {
+  const events: AgentUserResponseEvent[] = [];
+  const idPrefix = options?.idPrefix ?? 'history';
+
+  for (let messageIndex = 0; messageIndex < messages.length; messageIndex += 1) {
+    const message = messages[messageIndex];
+    if (message.role !== 'assistant' || !message.toolCalls?.length) continue;
+
+    for (let toolCallIndex = 0; toolCallIndex < message.toolCalls.length; toolCallIndex += 1) {
+      const call = message.toolCalls[toolCallIndex];
+      if (call.name !== RESPOND_TO_USER_TOOL) continue;
+      const content = extractRespondToUserContentFromArgs(call.arguments);
+      if (!content) continue;
+
+      events.push({
+        id: `${idPrefix}-${messageIndex}-${toolCallIndex}-${events.length + 1}`,
+        sessionId: options?.sessionId ?? 'history',
+        runId: options?.runId,
+        ordinal: events.length + 1,
+        text: content,
+        timestamp: message.timestamp ?? messageIndex * 1000 + toolCallIndex,
+      });
+    }
+  }
+
+  return events;
 }
 
 /**

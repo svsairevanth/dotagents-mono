@@ -22,6 +22,7 @@ import {
   getRoleConfig,
   RESPOND_TO_USER_TOOL,
   extractRespondToUserContentFromArgs,
+  extractRespondToUserResponseEvents,
   extractRespondToUserResponses,
   isToolOnlyMessage,
 } from './chat-utils'
@@ -322,6 +323,53 @@ describe('extractRespondToUserResponses', () => {
       },
     ]
     expect(extractRespondToUserResponses(messages)).toEqual(['Hello'])
+  })
+})
+
+describe('extractRespondToUserResponseEvents', () => {
+  it('preserves ordering and duplicates across assistant messages', () => {
+    const messages = [
+      {
+        role: 'assistant' as const,
+        timestamp: 10,
+        toolCalls: [{ name: 'respond_to_user', arguments: { text: 'Draft' } }],
+      },
+      {
+        role: 'assistant' as const,
+        timestamp: 20,
+        toolCalls: [
+          { name: 'respond_to_user', arguments: { text: 'Draft' } },
+          { name: 'respond_to_user', arguments: { text: 'Final' } },
+        ],
+      },
+    ]
+
+    expect(extractRespondToUserResponseEvents(messages, { sessionId: 'session-1', runId: 2 })).toEqual([
+      {
+        id: 'history-0-0-1',
+        sessionId: 'session-1',
+        runId: 2,
+        ordinal: 1,
+        text: 'Draft',
+        timestamp: 10,
+      },
+      {
+        id: 'history-1-0-2',
+        sessionId: 'session-1',
+        runId: 2,
+        ordinal: 2,
+        text: 'Draft',
+        timestamp: 20,
+      },
+      {
+        id: 'history-1-1-3',
+        sessionId: 'session-1',
+        runId: 2,
+        ordinal: 3,
+        text: 'Final',
+        timestamp: 20,
+      },
+    ])
   })
 })
 
