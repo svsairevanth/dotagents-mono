@@ -164,6 +164,7 @@ export {
   getAgentsKnowledgeBackupDir,
   knowledgeNoteSlugToDirPath,
   knowledgeNoteSlugToFilePath,
+  buildKnowledgeNoteStorageLocation,
   stringifyKnowledgeNoteMarkdown,
   parseKnowledgeNoteMarkdown,
   loadAgentsKnowledgeNotesLayer,

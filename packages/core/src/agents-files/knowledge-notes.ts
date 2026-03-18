@@ -1,6 +1,6 @@
 import fs from "fs"
 import path from "path"
-import type { KnowledgeNote, KnowledgeNoteContext } from "../types"
+import type { KnowledgeNote, KnowledgeNoteContext, KnowledgeNoteEntryType } from "../types"
 import type { AgentsLayerPaths } from "./modular-config"
 import { parseFrontmatterOrBody, stringifyFrontmatterDocument } from "./frontmatter"
 import { readTextFileIfExistsSync, safeWriteFileSync } from "./safe-file"
@@ -20,6 +20,7 @@ export type LoadedAgentsKnowledgeNotesLayer = {
 }
 
 const VALID_CONTEXT_VALUES = new Set<KnowledgeNoteContext>(["auto", "search-only"])
+const VALID_ENTRY_TYPE_VALUES = new Set<KnowledgeNoteEntryType>(["note", "entry", "overview"])
 
 function normalizeSingleLine(text: string): string {
   return text.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim()
@@ -27,6 +28,59 @@ function normalizeSingleLine(text: string): string {
 
 function sanitizeFileComponent(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]/g, "_")
+}
+
+function normalizePathLikeValue(raw: string | undefined): string | undefined {
+  const normalized = (raw ?? "")
+    .trim()
+    .replace(/\\+/g, "/")
+    .split("/")
+    .map(normalizeSingleLine)
+    .filter(Boolean)
+    .join("/")
+
+  return normalized || undefined
+}
+
+function sanitizeRelativeLocation(location: string): string {
+  const normalized = normalizePathLikeValue(location)
+  if (!normalized) return "note"
+  const parts = normalized.split("/").map(sanitizeFileComponent).filter(Boolean)
+  return parts.join(path.sep) || "note"
+}
+
+function splitLocationSegments(location: string): string[] {
+  const normalized = normalizePathLikeValue(location)
+  if (!normalized) return []
+  return normalized.split("/").map(sanitizeFileComponent).filter(Boolean)
+}
+
+function inferEntryTypeFromLocation(relativeDirSegments: string[]): KnowledgeNoteEntryType | undefined {
+  const leaf = relativeDirSegments[relativeDirSegments.length - 1]?.toLowerCase()
+  if (!leaf) return undefined
+  if (["index", "overview", "current-state"].includes(leaf)) return "overview"
+  if (relativeDirSegments.length > 1) return "entry"
+  return undefined
+}
+
+function applyInferredGrouping(note: KnowledgeNote, relativeDirSegments: string[]): KnowledgeNote {
+  const group = normalizePathLikeValue(note.group)
+  const series = normalizePathLikeValue(note.series)
+  const inferredGroup = group ?? (relativeDirSegments.length > 1 ? relativeDirSegments[0] : undefined)
+  const inferredSeries = series ?? (() => {
+    if (relativeDirSegments.length <= 2) return undefined
+    return normalizePathLikeValue(relativeDirSegments.slice(1, -1).join("/"))
+  })()
+  const entryType = VALID_ENTRY_TYPE_VALUES.has(note.entryType as KnowledgeNoteEntryType)
+    ? note.entryType
+    : inferEntryTypeFromLocation(relativeDirSegments)
+
+  return {
+    ...note,
+    group: inferredGroup,
+    series: inferredSeries,
+    entryType,
+  }
 }
 
 function parseListValue(raw: string | undefined): string[] {
@@ -101,12 +155,20 @@ export function getAgentsKnowledgeBackupDir(layer: AgentsLayerPaths): string {
 }
 
 export function knowledgeNoteSlugToDirPath(layer: AgentsLayerPaths, slug: string): string {
-  return path.join(getAgentsKnowledgeDir(layer), sanitizeFileComponent(slug))
+  return path.join(getAgentsKnowledgeDir(layer), sanitizeRelativeLocation(slug))
 }
 
 export function knowledgeNoteSlugToFilePath(layer: AgentsLayerPaths, slug: string): string {
-  const sanitizedSlug = sanitizeFileComponent(slug)
-  return path.join(knowledgeNoteSlugToDirPath(layer, sanitizedSlug), `${sanitizedSlug}.md`)
+  const locationSegments = splitLocationSegments(slug)
+  const fileName = locationSegments[locationSegments.length - 1] || "note"
+  return path.join(knowledgeNoteSlugToDirPath(layer, slug), `${fileName}.md`)
+}
+
+export function buildKnowledgeNoteStorageLocation(note: Pick<KnowledgeNote, "id" | "group" | "series">, leafOverride?: string): string {
+  const groupSegments = splitLocationSegments(note.group ?? "")
+  const seriesSegments = splitLocationSegments(note.series ?? "")
+  const leafSegments = splitLocationSegments(leafOverride ?? note.id)
+  return [...groupSegments, ...seriesSegments, ...leafSegments].join("/")
 }
 
 export function stringifyKnowledgeNoteMarkdown(note: KnowledgeNote): string {
@@ -127,8 +189,16 @@ export function stringifyKnowledgeNoteMarkdown(note: KnowledgeNote): string {
   }
 
   const summary = normalizeSingleLine(note.summary ?? "")
+  const group = normalizePathLikeValue(note.group)
+  const series = normalizePathLikeValue(note.series)
+  const entryType = VALID_ENTRY_TYPE_VALUES.has(note.entryType as KnowledgeNoteEntryType)
+    ? note.entryType
+    : undefined
   if (summary) frontmatter.summary = summary
   if (references) frontmatter.references = references
+  if (group) frontmatter.group = group
+  if (series) frontmatter.series = series
+  if (entryType) frontmatter.entryType = entryType
 
   return stringifyFrontmatterDocument({
     frontmatter,
@@ -160,6 +230,11 @@ export function parseKnowledgeNoteMarkdown(
   const summary = normalizeSingleLine(fm.summary ?? "") || undefined
   const tags = parseListValue(fm.tags)
   const references = parseListValue(fm.references)
+  const group = normalizePathLikeValue(fm.group)
+  const series = normalizePathLikeValue(fm.series)
+  const entryType = VALID_ENTRY_TYPE_VALUES.has((fm.entryType ?? "").trim() as KnowledgeNoteEntryType)
+    ? (fm.entryType ?? "").trim() as KnowledgeNoteEntryType
+    : undefined
 
   return {
     id,
@@ -171,7 +246,31 @@ export function parseKnowledgeNoteMarkdown(
     summary,
     createdAt,
     references: references.length > 0 ? references : undefined,
+    group,
+    series,
+    entryType,
   }
+}
+
+function discoverCanonicalNoteDirs(currentDir: string): string[] {
+  const matches: string[] = []
+  const entries = fs.readdirSync(currentDir, { withFileTypes: true })
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    if (entry.name.startsWith(".")) continue
+
+    const entryPath = path.join(currentDir, entry.name)
+    const canonicalFile = path.join(entryPath, `${entry.name}.md`)
+    if (fs.existsSync(canonicalFile) && fs.statSync(canonicalFile).isFile()) {
+      matches.push(entryPath)
+      continue
+    }
+
+    matches.push(...discoverCanonicalNoteDirs(entryPath))
+  }
+
+  return matches
 }
 
 export function loadAgentsKnowledgeNotesLayer(layer: AgentsLayerPaths): LoadedAgentsKnowledgeNotesLayer {
@@ -184,34 +283,33 @@ export function loadAgentsKnowledgeNotesLayer(layer: AgentsLayerPaths): LoadedAg
     if (!fs.existsSync(knowledgeDir) || !fs.statSync(knowledgeDir).isDirectory()) {
       return { notes, originById }
     }
+    const noteDirs = discoverCanonicalNoteDirs(knowledgeDir)
 
-    const entries = fs.readdirSync(knowledgeDir, { withFileTypes: true })
-
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue
-      if (entry.name.startsWith(".")) continue
-
-      const slug = entry.name
-      const noteDir = path.join(knowledgeDir, slug)
+    for (const noteDir of noteDirs) {
+      const relativeDir = path.relative(knowledgeDir, noteDir)
+      const relativeDirSegments = relativeDir.split(path.sep).filter(Boolean)
+      const slug = relativeDirSegments[relativeDirSegments.length - 1]
+      if (!slug) continue
       const noteFilePath = path.join(noteDir, `${slug}.md`)
       const raw = readTextFileIfExistsSync(noteFilePath, "utf8")
       if (raw === null) continue
 
       const parsed = parseKnowledgeNoteMarkdown(raw, { fallbackId: slug })
       if (!parsed) continue
+      const normalized = applyInferredGrouping(parsed, relativeDirSegments)
 
       const assetFilePaths = collectNoteAssetFilePaths(noteDir, noteFilePath)
-      const existing = originById.get(parsed.id)
+      const existing = originById.get(normalized.id)
       if (existing) {
-        const existingNote = notes.find((note) => note.id === parsed.id)
-        if (existingNote && existingNote.updatedAt > parsed.updatedAt) continue
-        const idx = notes.findIndex((note) => note.id === parsed.id)
-        if (idx >= 0) notes[idx] = parsed
+        const existingNote = notes.find((note) => note.id === normalized.id)
+        if (existingNote && existingNote.updatedAt > normalized.updatedAt) continue
+        const idx = notes.findIndex((note) => note.id === normalized.id)
+        if (idx >= 0) notes[idx] = normalized
       } else {
-        notes.push(parsed)
+        notes.push(normalized)
       }
 
-      originById.set(parsed.id, {
+      originById.set(normalized.id, {
         dirPath: noteDir,
         filePath: noteFilePath,
         slug,
@@ -230,7 +328,10 @@ export function writeKnowledgeNoteFile(
   note: KnowledgeNote,
   options: { slug?: string; filePathOverride?: string; maxBackups?: number } = {},
 ): { dirPath: string; filePath: string } {
-  const filePath = options.filePathOverride ?? knowledgeNoteSlugToFilePath(layer, options.slug ?? note.id)
+  const resolvedLocation = options.slug && /[\\/]/.test(options.slug)
+    ? options.slug
+    : buildKnowledgeNoteStorageLocation(note, options.slug)
+  const filePath = options.filePathOverride ?? knowledgeNoteSlugToFilePath(layer, resolvedLocation)
   const backupDir = getAgentsKnowledgeBackupDir(layer)
   const maxBackups = options.maxBackups ?? 10
   const markdown = stringifyKnowledgeNoteMarkdown(note)

@@ -122,6 +122,9 @@ export interface BundleKnowledgeNote {
   references?: string[]
   createdAt?: number
   updatedAt: number
+  group?: string
+  series?: string
+  entryType?: KnowledgeNote["entryType"]
 }
 
 export interface DotAgentsBundle {
@@ -691,6 +694,9 @@ function loadKnowledgeNotesForBundle(layer: AgentsLayerPaths, options?: BundleIt
       references: note.references,
       createdAt: note.createdAt,
       updatedAt: note.updatedAt,
+      group: note.group,
+      series: note.series,
+      entryType: note.entryType,
     }))
 }
 
@@ -1142,6 +1148,9 @@ function isBundleKnowledgeNote(value: unknown): value is BundleKnowledgeNote {
   if (!isStringArray(value.tags)) return false
   if (value.summary !== undefined && typeof value.summary !== "string") return false
   if (value.references !== undefined && !isStringArray(value.references)) return false
+  if (value.group !== undefined && typeof value.group !== "string") return false
+  if (value.series !== undefined && typeof value.series !== "string") return false
+  if (value.entryType !== undefined && !["note", "entry", "overview"].includes(String(value.entryType))) return false
   if (value.createdAt !== undefined && !isNonNegativeFiniteNumber(value.createdAt)) return false
   return isNonNegativeFiniteNumber(value.updatedAt)
 }
@@ -1685,6 +1694,9 @@ export async function importBundle(
           summary: bundleKnowledgeNote.summary,
           tags: bundleKnowledgeNote.tags || [],
           references: bundleKnowledgeNote.references,
+          group: bundleKnowledgeNote.group,
+          series: bundleKnowledgeNote.series,
+          entryType: bundleKnowledgeNote.entryType,
           createdAt: bundleKnowledgeNote.createdAt ?? now,
           updatedAt: now,
         }

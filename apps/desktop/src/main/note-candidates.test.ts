@@ -242,4 +242,28 @@ describe("KnowledgeNotesService.createNoteFromSummary", () => {
     expect(note?.body).toContain("## Notes")
     expect(note?.references).toEqual(["conv_1"])
   })
+
+  it("infers grouped placement for recurring Discord recap notes", async () => {
+    const { knowledgeNotesService } = await import("./knowledge-notes-service")
+
+    const summary: AgentStepSummary = {
+      id: "summary_discord_recap",
+      sessionId: "sess",
+      stepNumber: 6,
+      timestamp: Date.now(),
+      actionSummary: "captured discord recap",
+      importance: "high",
+      tags: ["discord", "summary"],
+      noteCandidates: [
+        "insight: Discord recap for the community and product updates",
+      ],
+    }
+
+    const note = knowledgeNotesService.createNoteFromSummary(summary, "Discord recap for Mar 18")
+
+    expect(note).not.toBeNull()
+    expect(note?.group).toBe("discord")
+    expect(note?.series).toBe("recaps")
+    expect(note?.entryType).toBe("entry")
+  })
 })

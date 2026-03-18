@@ -34,12 +34,18 @@ describe("agents-files/knowledge-notes", () => {
       summary: "Service-oriented\nElectron app.",
       createdAt: 1760000000000,
       references: ["docs/arch.md", "https://example.com/spec"],
+      group: "product",
+      series: "architecture",
+      entryType: "overview",
       body: "## Details\n\nLonger-form markdown content goes here.\n",
     }
 
     const md = stringifyKnowledgeNoteMarkdown(note)
     expect(md).toContain("kind: note")
     expect(md).toContain("context: auto")
+    expect(md).toContain("group: product")
+    expect(md).toContain("series: architecture")
+    expect(md).toContain("entryType: overview")
 
     const parsed = parseKnowledgeNoteMarkdown(md)
     expect(parsed).not.toBeNull()
@@ -125,6 +131,39 @@ tags: misc
     ])
   })
 
+  it("loads grouped nested note folders and infers grouping metadata from the path", () => {
+    const dir = mkTempDir("dotagents-knowledge-grouped-")
+    const agentsDir = path.join(dir, ".agents")
+    const layer = getAgentsLayerPaths(agentsDir)
+    const knowledgeDir = getAgentsKnowledgeDir(layer)
+
+    writeFile(
+      path.join(knowledgeDir, "discord", "recaps", "2026-03-18", "2026-03-18.md"),
+      `---
+kind: note
+id: discord-recap-2026-03-18
+title: Discord recap for Mar 18
+context: search-only
+updatedAt: 1770000000001
+tags: discord, recap
+---
+
+Highlights`,
+    )
+
+    const loaded = loadAgentsKnowledgeNotesLayer(layer)
+    expect(loaded.notes).toHaveLength(1)
+    expect(loaded.notes[0]).toMatchObject({
+      id: "discord-recap-2026-03-18",
+      group: "discord",
+      series: "recaps",
+      entryType: "entry",
+    })
+    expect(loaded.originById.get("discord-recap-2026-03-18")?.filePath).toBe(
+      path.join(knowledgeDir, "discord", "recaps", "2026-03-18", "2026-03-18.md"),
+    )
+  })
+
   it("keeps the newest duplicate by updatedAt", () => {
     const dir = mkTempDir("dotagents-knowledge-dupes-")
     const agentsDir = path.join(dir, ".agents")
@@ -188,5 +227,30 @@ tags: architecture
     const backups = fs.existsSync(backupDir) ? fs.readdirSync(backupDir).filter((f) => f.endsWith(".bak")) : []
     expect(backups.length).toBe(1)
     expect(fs.readFileSync(path.join(backupDir, backups[0]), "utf8")).toContain("V1")
+  })
+
+  it("writes grouped note files under nested collection folders", () => {
+    const dir = mkTempDir("dotagents-knowledge-group-write-")
+    const agentsDir = path.join(dir, ".agents")
+    const layer = getAgentsLayerPaths(agentsDir)
+
+    const note: KnowledgeNote = {
+      id: "2026-03-18",
+      title: "Discord recap",
+      context: "search-only",
+      updatedAt: 1,
+      tags: ["discord"],
+      body: "Grouped note",
+      group: "discord",
+      series: "recaps",
+      entryType: "entry",
+    }
+
+    writeKnowledgeNoteFile(layer, note)
+
+    const filePath = path.join(getAgentsKnowledgeDir(layer), "discord", "recaps", "2026-03-18", "2026-03-18.md")
+    expect(fs.existsSync(filePath)).toBe(true)
+    expect(fs.readFileSync(filePath, "utf8")).toContain("group: discord")
+    expect(fs.readFileSync(filePath, "utf8")).toContain("series: recaps")
   })
 })

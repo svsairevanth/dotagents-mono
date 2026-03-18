@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback } from "react"
+import React, { useState, useEffect, useCallback, useMemo } from "react"
 import { useNavigate } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { tipcClient } from "@renderer/lib/tipc-client"
 import { ChevronDown, ChevronRight, Sparkles, Server, Wrench } from "lucide-react"
 import { cn } from "@renderer/lib/utils"
+import { sortAgentsWithDefaultFirst } from "@renderer/lib/agent-order"
 import { Switch } from "@renderer/components/ui/switch"
 import { Badge } from "@renderer/components/ui/badge"
 import type {
@@ -59,7 +60,10 @@ export function AgentCapabilitiesSidebar() {
     enabled: expandedAgentId !== null,
   })
 
-  const enabledAgents = agents.filter(a => a.enabled)
+  const enabledAgents = useMemo(
+    () => sortAgentsWithDefaultFirst(agents.filter(a => a.enabled)),
+    [agents],
+  )
   const runtimeTools = allTools.filter(t => t.sourceKind === "runtime")
   const externalTools = allTools.filter(t => t.sourceKind === "mcp")
   const serverNames = Object.keys(serverStatus)

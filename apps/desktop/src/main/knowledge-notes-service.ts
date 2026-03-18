@@ -1,6 +1,6 @@
 import fs from "fs"
 import path from "path"
-import type { AgentStepSummary, KnowledgeNote, KnowledgeNoteContext } from "@shared/types"
+import type { AgentStepSummary, KnowledgeNote, KnowledgeNoteContext, KnowledgeNoteEntryType } from "@shared/types"
 import { logLLM, isDebugLLM } from "./debug"
 import { globalAgentsFolder, resolveWorkspaceAgentsFolder } from "./config"
 import { getAgentsLayerPaths, type AgentsLayerPaths } from "./agents-files/modular-config"
@@ -8,9 +8,11 @@ import {
   getAgentsKnowledgeBackupDir,
   knowledgeNoteSlugToFilePath,
   loadAgentsKnowledgeNotesLayer,
+  stringifyKnowledgeNoteMarkdown,
   writeKnowledgeNoteFile,
 } from "./agents-files/knowledge-notes"
 import { readTextFileIfExistsSync, safeWriteFileSync } from "./agents-files/safe-file"
+import { inferKnowledgeNoteGrouping } from "@shared/knowledge-note-grouping"
 
 function normalizeSingleLine(text: string): string {
   return text.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim()
@@ -37,6 +39,7 @@ function buildReadableId(...candidates: Array<string | undefined>): string {
 
 const DURABLE_NOTE_CANDIDATE_TYPES = new Set(["preference", "constraint", "decision", "fact", "insight"])
 const VALID_CONTEXT_VALUES = new Set<KnowledgeNoteContext>(["auto", "search-only"])
+const VALID_ENTRY_TYPE_VALUES = new Set<KnowledgeNoteEntryType>(["note", "entry", "overview"])
 const LEGACY_NOTE_META_PREFIX = "<!-- dotagents-memory-meta:"
 
 type KnowledgeOrigin = {
@@ -45,6 +48,13 @@ type KnowledgeOrigin = {
   filePath: string
   slug: string
   assetFilePaths: string[]
+}
+
+export type ConsolidateKnowledgeNotesResult = {
+  reorganizedCount: number
+  skippedCount: number
+  errorCount: number
+  errors: string[]
 }
 
 function stripLegacyEmbeddedMetadata(body: string): string {
@@ -58,6 +68,28 @@ function stripLegacyEmbeddedMetadata(body: string): string {
   return trimmed.slice(0, prefixIndex).trim()
 }
 
+function normalizePathLikeValue(value: string | undefined): string | undefined {
+  const normalized = (value ?? "")
+    .trim()
+    .replace(/\\+/g, "/")
+    .split("/")
+    .map(normalizeSingleLine)
+    .filter(Boolean)
+    .join("/")
+
+  return normalized || undefined
+}
+
+function isSamePath(a: string, b: string): boolean {
+  return path.resolve(a) === path.resolve(b)
+}
+
+function buildNoteStorageLocation(note: Pick<KnowledgeNote, "id" | "group" | "series">): string {
+  const segments = [note.group, note.series, note.id]
+    .flatMap((value) => (normalizePathLikeValue(value) ?? "").split("/").filter(Boolean))
+  return segments.join("/")
+}
+
 function normalizeKnowledgeNoteForStorage(note: KnowledgeNote): KnowledgeNote {
   const now = Date.now()
   const providedId = normalizeSingleLine(note.id ?? "")
@@ -69,6 +101,11 @@ function normalizeKnowledgeNoteForStorage(note: KnowledgeNote): KnowledgeNote {
   const updatedAt = typeof note.updatedAt === "number" && Number.isFinite(note.updatedAt) ? note.updatedAt : createdAt
   const summary = normalizeSingleLine(note.summary ?? "") || undefined
   const body = visibleBody || summary || title
+  const group = normalizePathLikeValue(note.group)
+  const series = normalizePathLikeValue(note.series)
+  const entryType = VALID_ENTRY_TYPE_VALUES.has(note.entryType as KnowledgeNoteEntryType)
+    ? note.entryType
+    : undefined
 
   return {
     id,
@@ -79,6 +116,9 @@ function normalizeKnowledgeNoteForStorage(note: KnowledgeNote): KnowledgeNote {
     tags: Array.from(new Set(asStringArray(note.tags))),
     body,
     summary,
+    group,
+    series,
+    entryType,
     references: (() => {
       const refs = Array.from(new Set(asStringArray(note.references)))
       return refs.length > 0 ? refs : undefined
@@ -111,6 +151,58 @@ export class KnowledgeNotesService {
       safeWriteFileSync(origin.filePath, raw, { encoding: "utf8", backupDir, maxBackups: 10 })
     }
     fs.rmSync(origin.dirPath, { recursive: true, force: true })
+  }
+
+  private copyDirectoryContentsSync(sourceDir: string, targetDir: string): void {
+    fs.mkdirSync(targetDir, { recursive: true })
+    const entries = fs.readdirSync(sourceDir, { withFileTypes: true })
+    for (const entry of entries) {
+      const sourcePath = path.join(sourceDir, entry.name)
+      const targetPath = path.join(targetDir, entry.name)
+      if (entry.isDirectory()) {
+        fs.cpSync(sourcePath, targetPath, { recursive: true, force: true })
+      } else if (entry.isFile()) {
+        fs.copyFileSync(sourcePath, targetPath)
+      }
+    }
+  }
+
+  private relocateExistingNoteSync(
+    origin: KnowledgeOrigin,
+    layer: AgentsLayerPaths,
+    nextNote: KnowledgeNote,
+  ): { dirPath: string; filePath: string } {
+    const storageLocation = buildNoteStorageLocation(nextNote)
+    const desiredFilePath = knowledgeNoteSlugToFilePath(layer, storageLocation)
+    const desiredDirPath = path.dirname(desiredFilePath)
+
+    if (isSamePath(origin.filePath, desiredFilePath)) {
+      return writeKnowledgeNoteFile(layer, nextNote, {
+        filePathOverride: origin.filePath,
+        maxBackups: 10,
+      })
+    }
+
+    if (fs.existsSync(desiredDirPath)) {
+      throw new Error(`Cannot reorganize note ${nextNote.id}; target path already exists: ${desiredDirPath}`)
+    }
+
+    const tempDirPath = path.join(path.dirname(desiredDirPath), `.tmp-note-relocate-${nextNote.id}-${Date.now()}`)
+    const tempFilePath = path.join(tempDirPath, path.basename(desiredFilePath))
+    const backupDir = getAgentsKnowledgeBackupDir(layer)
+
+    this.copyDirectoryContentsSync(origin.dirPath, tempDirPath)
+    safeWriteFileSync(tempFilePath, stringifyKnowledgeNoteMarkdown(nextNote), { encoding: "utf8" })
+    const copiedOldNotePath = path.join(tempDirPath, path.basename(origin.filePath))
+    if (!isSamePath(copiedOldNotePath, tempFilePath) && fs.existsSync(copiedOldNotePath)) {
+      fs.rmSync(copiedOldNotePath, { force: true })
+    }
+
+    fs.mkdirSync(path.dirname(desiredDirPath), { recursive: true })
+    fs.renameSync(tempDirPath, desiredDirPath)
+    this.backupThenDeleteNoteSync(origin, backupDir)
+
+    return { dirPath: desiredDirPath, filePath: desiredFilePath }
   }
 
   private async loadFromDisk(): Promise<void> {
@@ -244,6 +336,13 @@ export class KnowledgeNotesService {
       bodyParts.push(`## Source\n\n${refs.join(" · ")}`)
     }
 
+    const grouped = inferKnowledgeNoteGrouping({
+      id: buildReadableId(resolvedTitle, chosenContent),
+      title: resolvedTitle,
+      summary: chosenContent,
+      tags: mergedTags,
+    })
+
     return normalizeKnowledgeNoteForStorage({
       id: buildReadableId(resolvedTitle, chosenContent),
       title: resolvedTitle,
@@ -254,6 +353,9 @@ export class KnowledgeNotesService {
       summary: chosenContent,
       body: bodyParts.join("\n\n"),
       references: conversationId ? [conversationId] : undefined,
+      group: grouped.group,
+      series: grouped.series,
+      entryType: grouped.entryType,
     })
   }
 
@@ -275,6 +377,9 @@ export class KnowledgeNotesService {
       note.title.toLowerCase().includes(lowerQuery)
       || note.body.toLowerCase().includes(lowerQuery)
       || (note.summary ?? "").toLowerCase().includes(lowerQuery)
+      || (note.group ?? "").toLowerCase().includes(lowerQuery)
+      || (note.series ?? "").toLowerCase().includes(lowerQuery)
+      || (note.entryType ?? "").toLowerCase().includes(lowerQuery)
       || note.tags.some((tag) => tag.toLowerCase().includes(lowerQuery))
       || (note.references ?? []).some((ref) => ref.toLowerCase().includes(lowerQuery)),
     )
@@ -319,6 +424,71 @@ export class KnowledgeNotesService {
         logLLM("[KnowledgeNotesService] Error saving note:", error)
       }
       return false
+    }
+  }
+
+  async consolidateRecurringNotes(): Promise<ConsolidateKnowledgeNotesResult> {
+    await this.initialize()
+
+    let reorganizedCount = 0
+    let skippedCount = 0
+    const errors: string[] = []
+
+    for (const note of [...this.notes]) {
+      const inferred = inferKnowledgeNoteGrouping(note)
+      const nextNote = normalizeKnowledgeNoteForStorage({
+        ...note,
+        group: inferred.group ?? note.group,
+        series: inferred.series ?? note.series,
+        entryType: inferred.entryType ?? note.entryType,
+      })
+
+      if (
+        nextNote.group === note.group
+        && nextNote.series === note.series
+        && nextNote.entryType === note.entryType
+      ) {
+        skippedCount++
+        continue
+      }
+
+      const existingIndex = this.notes.findIndex((item) => item.id === note.id)
+      const previousOrigin = this.originById.get(note.id)
+      const { globalLayer, workspaceLayer } = this.getLayers()
+      const targetLayerName = previousOrigin?.layer ?? "global"
+      const targetLayer = targetLayerName === "workspace" && workspaceLayer ? workspaceLayer : globalLayer
+
+      try {
+        const location = previousOrigin
+          ? this.relocateExistingNoteSync(previousOrigin, targetLayer, nextNote)
+          : writeKnowledgeNoteFile(targetLayer, nextNote, { maxBackups: 10 })
+
+        if (existingIndex >= 0) this.notes[existingIndex] = nextNote
+        this.originById.set(nextNote.id, {
+          layer: targetLayerName,
+          dirPath: location.dirPath,
+          filePath: location.filePath,
+          slug: path.basename(location.dirPath),
+          assetFilePaths: fs.existsSync(location.dirPath)
+            ? fs.readdirSync(location.dirPath).map((name) => path.join(location.dirPath, name)).filter((filePath) => filePath !== location.filePath)
+            : [],
+        })
+        reorganizedCount++
+      } catch (error) {
+        skippedCount++
+        const message = error instanceof Error ? error.message : String(error)
+        errors.push(`Failed to reorganize ${note.id}: ${message}`)
+        if (isDebugLLM()) {
+          logLLM("[KnowledgeNotesService] Error reorganizing note:", { noteId: note.id, error })
+        }
+      }
+    }
+
+    return {
+      reorganizedCount,
+      skippedCount,
+      errorCount: errors.length,
+      errors,
     }
   }
 

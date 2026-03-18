@@ -292,6 +292,7 @@ export interface SkillsResponse {
 
 // Knowledge Note Types
 export type KnowledgeNoteContext = 'auto' | 'search-only';
+export type KnowledgeNoteEntryType = 'note' | 'entry' | 'overview';
 
 export interface KnowledgeNote {
   id: string;
@@ -303,6 +304,9 @@ export interface KnowledgeNote {
   references?: string[];
   createdAt?: number;
   updatedAt: number;
+  group?: string;
+  series?: string;
+  entryType?: KnowledgeNoteEntryType;
 }
 
 export interface KnowledgeNotesResponse {

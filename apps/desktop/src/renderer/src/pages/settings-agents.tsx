@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { useSearchParams, useNavigate } from "react-router-dom"
 import { useQueryClient } from "@tanstack/react-query"
 import { Button } from "@renderer/components/ui/button"
@@ -27,6 +27,7 @@ function agentColors(seed: string): string[] {
   return [0, 7, 13].map(offset => AVATAR_PALETTE[(h + offset) % AVATAR_PALETTE.length])
 }
 import { tipcClient } from "@renderer/lib/tipc-client"
+import { sortAgentsWithDefaultFirst } from "@renderer/lib/agent-order"
 import { ModelSelector } from "@renderer/components/model-selector"
 import { BundleImportDialog } from "@renderer/components/bundle-import-dialog"
 import { BundleExportDialog } from "@renderer/components/bundle-export-dialog"
@@ -198,6 +199,7 @@ export function SettingsAgents() {
   const avatarFileInputRef = useRef<HTMLInputElement>(null)
   const [commandVerification, setCommandVerification] = useState<ExternalAgentCommandVerificationResult | null>(null)
   const [isVerifyingCommand, setIsVerifyingCommand] = useState(false)
+  const sortedAgents = useMemo(() => sortAgentsWithDefaultFirst(agents), [agents])
 
   useEffect(() => {
     loadAgents()
@@ -616,7 +618,7 @@ export function SettingsAgents() {
   function renderAgentList() {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 pb-12">
-        {agents.map(agent => {
+        {sortedAgents.map(agent => {
           const summaryItems = getAgentCardSummaryItems(agent, skills.length)
 
           return (
@@ -667,7 +669,7 @@ export function SettingsAgents() {
             </Card>
           )
         })}
-        {agents.length === 0 && (
+        {sortedAgents.length === 0 && (
           <div className="col-span-full rounded-lg border border-dashed bg-muted/20 px-4 py-7 text-center">
             <p className="text-sm font-medium text-foreground">No agents yet.</p>
             <p className="mt-1 text-sm text-muted-foreground">Create one with Add Agent or import an existing bundle.</p>
