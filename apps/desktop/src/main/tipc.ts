@@ -5009,16 +5009,6 @@ export const router = {
       return result.deletedCount
     }),
 
-  consolidateKnowledgeNotes: t.procedure
-    .action(async () => {
-      return knowledgeNotesService.consolidateRecurringNotes()
-    }),
-
-  previewConsolidateKnowledgeNotes: t.procedure
-    .action(async () => {
-      return knowledgeNotesService.previewConsolidateRecurringNotes()
-    }),
-
   searchKnowledgeNotes: t.procedure
     .input<{ query: string }>()
     .action(async ({ input }) => {

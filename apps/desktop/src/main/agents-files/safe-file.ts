@@ -1,8 +1,14 @@
-// Re-export from @dotagents/core
+import {
+  readTextFileIfExistsSync,
+  safeWriteFileSync,
+  safeWriteJsonFileSync,
+  safeReadJsonFileSync,
+} from "../../../../../packages/core/src/agents-files/safe-file"
+
 export {
   readTextFileIfExistsSync,
   safeWriteFileSync,
   safeWriteJsonFileSync,
   safeReadJsonFileSync,
-} from "@dotagents/core"
-export type { SafeWriteOptions } from "@dotagents/core"
+}
+export type { SafeWriteOptions } from "../../../../../packages/core/src/agents-files/safe-file"

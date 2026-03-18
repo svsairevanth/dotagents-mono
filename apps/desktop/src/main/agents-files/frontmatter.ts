@@ -1,7 +1,12 @@
-// Re-export from @dotagents/core
+import {
+  parseFrontmatterDocument,
+  parseFrontmatterOrBody,
+  stringifyFrontmatterDocument,
+} from "../../../../../packages/core/src/agents-files/frontmatter"
+
 export {
   parseFrontmatterDocument,
   parseFrontmatterOrBody,
   stringifyFrontmatterDocument,
-} from "@dotagents/core"
-export type { FrontmatterDocument } from "@dotagents/core"
+}
+export type { FrontmatterDocument } from "../../../../../packages/core/src/agents-files/frontmatter"

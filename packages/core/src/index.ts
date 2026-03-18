@@ -38,6 +38,7 @@ export type {
   Config,
   KnowledgeNote,
   KnowledgeNoteContext,
+  KnowledgeNoteEntryType,
   AgentSkill,
   LoopConfig,
   AgentProfile,

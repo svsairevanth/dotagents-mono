@@ -8,7 +8,6 @@ import {
   getAgentsKnowledgeBackupDir,
   knowledgeNoteSlugToFilePath,
   loadAgentsKnowledgeNotesLayer,
-  stringifyKnowledgeNoteMarkdown,
   writeKnowledgeNoteFile,
 } from "./agents-files/knowledge-notes"
 import { readTextFileIfExistsSync, safeWriteFileSync } from "./agents-files/safe-file"
@@ -57,33 +56,6 @@ export type ConsolidateKnowledgeNotesResult = {
   errors: string[]
 }
 
-export type ConsolidateKnowledgeNotePreviewItem = {
-  id: string
-  title: string
-  layer: "global" | "workspace"
-  fromPath: string
-  toPath: string
-  group?: string
-  series?: string
-  entryType?: KnowledgeNoteEntryType
-}
-
-export type ConsolidateKnowledgeNotesPreviewResult = {
-  items: ConsolidateKnowledgeNotePreviewItem[]
-  totalCount: number
-}
-
-type ConsolidationCandidate = {
-  note: KnowledgeNote
-  nextNote: KnowledgeNote
-  existingIndex: number
-  origin?: KnowledgeOrigin
-  targetLayerName: "global" | "workspace"
-  targetLayer: AgentsLayerPaths
-  fromPath: string
-  toPath: string
-}
-
 function stripLegacyEmbeddedMetadata(body: string): string {
   const trimmed = body.trim()
   const prefixIndex = trimmed.lastIndexOf(LEGACY_NOTE_META_PREFIX)
@@ -107,19 +79,7 @@ function normalizePathLikeValue(value: string | undefined): string | undefined {
   return normalized || undefined
 }
 
-function isSamePath(a: string, b: string): boolean {
-  return path.resolve(a) === path.resolve(b)
-}
 
-function buildNoteStorageLocation(note: Pick<KnowledgeNote, "id" | "group" | "series">): string {
-  const segments = [note.group, note.series, note.id]
-    .flatMap((value) => (normalizePathLikeValue(value) ?? "").split("/").filter(Boolean))
-  return segments.join("/")
-}
-
-function toDisplayRelativePath(layer: AgentsLayerPaths, dirPath: string): string {
-  return path.relative(layer.agentsDir, dirPath) || "."
-}
 
 function normalizeKnowledgeNoteForStorage(note: KnowledgeNote): KnowledgeNote {
   const now = Date.now()
@@ -182,58 +142,6 @@ export class KnowledgeNotesService {
       safeWriteFileSync(origin.filePath, raw, { encoding: "utf8", backupDir, maxBackups: 10 })
     }
     fs.rmSync(origin.dirPath, { recursive: true, force: true })
-  }
-
-  private copyDirectoryContentsSync(sourceDir: string, targetDir: string): void {
-    fs.mkdirSync(targetDir, { recursive: true })
-    const entries = fs.readdirSync(sourceDir, { withFileTypes: true })
-    for (const entry of entries) {
-      const sourcePath = path.join(sourceDir, entry.name)
-      const targetPath = path.join(targetDir, entry.name)
-      if (entry.isDirectory()) {
-        fs.cpSync(sourcePath, targetPath, { recursive: true, force: true })
-      } else if (entry.isFile()) {
-        fs.copyFileSync(sourcePath, targetPath)
-      }
-    }
-  }
-
-  private relocateExistingNoteSync(
-    origin: KnowledgeOrigin,
-    layer: AgentsLayerPaths,
-    nextNote: KnowledgeNote,
-  ): { dirPath: string; filePath: string } {
-    const storageLocation = buildNoteStorageLocation(nextNote)
-    const desiredFilePath = knowledgeNoteSlugToFilePath(layer, storageLocation)
-    const desiredDirPath = path.dirname(desiredFilePath)
-
-    if (isSamePath(origin.filePath, desiredFilePath)) {
-      return writeKnowledgeNoteFile(layer, nextNote, {
-        filePathOverride: origin.filePath,
-        maxBackups: 10,
-      })
-    }
-
-    if (fs.existsSync(desiredDirPath)) {
-      throw new Error(`Cannot reorganize note ${nextNote.id}; target path already exists: ${desiredDirPath}`)
-    }
-
-    const tempDirPath = path.join(path.dirname(desiredDirPath), `.tmp-note-relocate-${nextNote.id}-${Date.now()}`)
-    const tempFilePath = path.join(tempDirPath, path.basename(desiredFilePath))
-    const backupDir = getAgentsKnowledgeBackupDir(layer)
-
-    this.copyDirectoryContentsSync(origin.dirPath, tempDirPath)
-    safeWriteFileSync(tempFilePath, stringifyKnowledgeNoteMarkdown(nextNote), { encoding: "utf8" })
-    const copiedOldNotePath = path.join(tempDirPath, path.basename(origin.filePath))
-    if (!isSamePath(copiedOldNotePath, tempFilePath) && fs.existsSync(copiedOldNotePath)) {
-      fs.rmSync(copiedOldNotePath, { force: true })
-    }
-
-    fs.mkdirSync(path.dirname(desiredDirPath), { recursive: true })
-    fs.renameSync(tempDirPath, desiredDirPath)
-    this.backupThenDeleteNoteSync(origin, backupDir)
-
-    return { dirPath: desiredDirPath, filePath: desiredFilePath }
   }
 
   private async loadFromDisk(): Promise<void> {
@@ -458,108 +366,6 @@ export class KnowledgeNotesService {
     }
   }
 
-  private getConsolidationCandidates(): ConsolidationCandidate[] {
-    const { globalLayer, workspaceLayer } = this.getLayers()
-
-    return this.notes.flatMap((note) => {
-      const inferred = inferKnowledgeNoteGrouping(note)
-      const nextNote = normalizeKnowledgeNoteForStorage({
-        ...note,
-        group: inferred.group ?? note.group,
-        series: inferred.series ?? note.series,
-        entryType: inferred.entryType ?? note.entryType,
-      })
-
-      if (
-        nextNote.group === note.group
-        && nextNote.series === note.series
-        && nextNote.entryType === note.entryType
-      ) {
-        return []
-      }
-
-      const existingIndex = this.notes.findIndex((item) => item.id === note.id)
-      const origin = this.originById.get(note.id)
-      const targetLayerName = origin?.layer ?? "global"
-      const targetLayer = targetLayerName === "workspace" && workspaceLayer ? workspaceLayer : globalLayer
-      const fallbackCurrentDir = path.dirname(knowledgeNoteSlugToFilePath(targetLayer, note.id))
-      const nextDir = path.dirname(knowledgeNoteSlugToFilePath(targetLayer, buildNoteStorageLocation(nextNote)))
-
-      return [{
-        note,
-        nextNote,
-        existingIndex,
-        origin,
-        targetLayerName,
-        targetLayer,
-        fromPath: toDisplayRelativePath(targetLayer, origin?.dirPath ?? fallbackCurrentDir),
-        toPath: toDisplayRelativePath(targetLayer, nextDir),
-      }]
-    })
-  }
-
-  async previewConsolidateRecurringNotes(): Promise<ConsolidateKnowledgeNotesPreviewResult> {
-    await this.initialize()
-    const items = this.getConsolidationCandidates().map((candidate) => ({
-      id: candidate.note.id,
-      title: candidate.note.title,
-      layer: candidate.targetLayerName,
-      fromPath: candidate.fromPath,
-      toPath: candidate.toPath,
-      group: candidate.nextNote.group,
-      series: candidate.nextNote.series,
-      entryType: candidate.nextNote.entryType,
-    }))
-
-    return {
-      items,
-      totalCount: items.length,
-    }
-  }
-
-  async consolidateRecurringNotes(): Promise<ConsolidateKnowledgeNotesResult> {
-    await this.initialize()
-
-    let reorganizedCount = 0
-    const errors: string[] = []
-
-    const candidates = this.getConsolidationCandidates()
-
-    for (const candidate of candidates) {
-      const { note, nextNote, existingIndex, origin, targetLayerName, targetLayer } = candidate
-
-      try {
-        const location = origin
-          ? this.relocateExistingNoteSync(origin, targetLayer, nextNote)
-          : writeKnowledgeNoteFile(targetLayer, nextNote, { maxBackups: 10 })
-
-        if (existingIndex >= 0) this.notes[existingIndex] = nextNote
-        this.originById.set(nextNote.id, {
-          layer: targetLayerName,
-          dirPath: location.dirPath,
-          filePath: location.filePath,
-          slug: path.basename(location.dirPath),
-          assetFilePaths: fs.existsSync(location.dirPath)
-            ? fs.readdirSync(location.dirPath).map((name) => path.join(location.dirPath, name)).filter((filePath) => filePath !== location.filePath)
-            : [],
-        })
-        reorganizedCount++
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        errors.push(`Failed to reorganize ${note.id}: ${message}`)
-        if (isDebugLLM()) {
-          logLLM("[KnowledgeNotesService] Error reorganizing note:", { noteId: note.id, error })
-        }
-      }
-    }
-
-    return {
-      reorganizedCount,
-      skippedCount: this.notes.length - candidates.length + errors.length,
-      errorCount: errors.length,
-      errors,
-    }
-  }
 
   async updateNote(id: string, updates: Partial<Omit<KnowledgeNote, "id" | "createdAt">>): Promise<boolean> {
     await this.initialize()

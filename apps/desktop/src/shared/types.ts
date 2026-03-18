@@ -3,7 +3,7 @@ import type { ToolCall, ToolResult, AgentConversationState } from '@dotagents/sh
 
 export type { ToolCall, ToolResult, BaseChatMessage, ConversationHistoryMessage, ChatApiResponse, AgentConversationState } from '@dotagents/shared'
 export type { AgentProgressUpdate, AgentProgressStep, ACPSubAgentMessage, ACPDelegationProgress, ACPDelegationState, ACPConfigOption, ACPConfigOptionValue, AgentStepSummary, OnProgressCallback } from '@dotagents/shared'
-export type { KnowledgeNote, KnowledgeNoteContext, KnowledgeNoteEntryType } from '@dotagents/core'
+export type { KnowledgeNote, KnowledgeNoteContext, KnowledgeNoteEntryType } from '../../../../packages/core/src/types'
 
 export type RecordingHistoryItem = {
   id: string
