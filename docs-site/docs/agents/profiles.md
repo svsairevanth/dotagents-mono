@@ -258,6 +258,6 @@ Bundles are portable across machines and users.
 ## Next Steps
 
 - **[Skills](skills)** — Teach agents specialized knowledge
-- **[Memory](memory)** — Give agents persistent context
+- **[Knowledge & Notes](knowledge-notes)** — Give agents durable knowledge
 - **[Multi-Agent Delegation](delegation)** — Set up agent coordination
 - **[MCP Tools](/tools/mcp)** — Configure available tools

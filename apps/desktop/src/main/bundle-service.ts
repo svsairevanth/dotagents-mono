@@ -3,7 +3,7 @@
  *
  * Phase 1: JSON-based bundle format with automatic secret stripping.
  * A .dotagents file is a JSON document containing a manifest plus embedded
- * agent profiles, MCP server configs, skills, repeat tasks, and memories.
+ * agent profiles, MCP server configs, skills, repeat tasks, and knowledge notes.
  */
 
 import fs from "fs"
@@ -13,7 +13,7 @@ import type {
   AgentProfile,
   AgentProfileConnection,
   AgentSkill,
-  AgentMemory,
+  KnowledgeNote,
   LoopConfig,
   AgentProfileConnectionType,
   AgentProfileRole,
@@ -29,7 +29,7 @@ import {
 import { getAgentsLayerPaths, type AgentsLayerPaths } from "./agents-files/modular-config"
 import { loadAgentProfilesLayer, writeAgentsProfileFiles } from "./agents-files/agent-profiles"
 import { loadAgentsSkillsLayer, writeAgentsSkillFile, skillIdToDirPath } from "./agents-files/skills"
-import { loadAgentsMemoriesLayer, writeAgentsMemoryFile, memoryIdToFilePath } from "./agents-files/memories"
+import { loadAgentsKnowledgeNotesLayer, writeKnowledgeNoteFile } from "./agents-files/knowledge-notes"
 import { loadTasksLayer, writeTaskFile, taskIdToFilePath } from "./agents-files/tasks"
 import { safeReadJsonFileSync, safeWriteJsonFileSync } from "./agents-files/safe-file"
 import { logApp } from "./debug"
@@ -61,7 +61,7 @@ export interface BundleManifest {
     mcpServers: number
     skills: number
     repeatTasks: number
-    memories: number
+    knowledgeNotes: number
   }
 }
 
@@ -112,14 +112,16 @@ export interface BundleRepeatTask {
   // profileId omitted — the profile may not exist in the target environment
 }
 
-export interface BundleMemory {
+export interface BundleKnowledgeNote {
   id: string
   title: string
-  content: string
-  importance: "low" | "medium" | "high" | "critical"
+  context: KnowledgeNote["context"]
+  body: string
+  summary?: string
   tags: string[]
-  keyFindings?: string[]
-  userNotes?: string
+  references?: string[]
+  createdAt?: number
+  updatedAt: number
 }
 
 export interface DotAgentsBundle {
@@ -128,7 +130,7 @@ export interface DotAgentsBundle {
   mcpServers: BundleMCPServer[]
   skills: BundleSkill[]
   repeatTasks: BundleRepeatTask[]
-  memories: BundleMemory[]
+  knowledgeNotes: BundleKnowledgeNote[]
 }
 
 export interface ExportBundleResult {
@@ -149,7 +151,7 @@ export interface BundleComponentSelection {
   mcpServers?: boolean
   skills?: boolean
   repeatTasks?: boolean
-  memories?: boolean
+  knowledgeNotes?: boolean
 }
 
 export interface BundleItemSelectionOptions {
@@ -157,7 +159,7 @@ export interface BundleItemSelectionOptions {
   mcpServerNames?: string[]
   skillIds?: string[]
   repeatTaskIds?: string[]
-  memoryIds?: string[]
+  knowledgeNoteIds?: string[]
 }
 
 export interface ExportableBundleAgentProfile {
@@ -189,10 +191,11 @@ export interface ExportableBundleRepeatTask {
   enabled: boolean
 }
 
-export interface ExportableBundleMemory {
+export interface ExportableBundleKnowledgeNote {
   id: string
   title: string
-  importance: AgentMemory["importance"]
+  context: KnowledgeNote["context"]
+  summary?: string
 }
 
 export interface ExportableBundleItems {
@@ -200,7 +203,7 @@ export interface ExportableBundleItems {
   mcpServers: ExportableBundleMCPServer[]
   skills: ExportableBundleSkill[]
   repeatTasks: ExportableBundleRepeatTask[]
-  memories: ExportableBundleMemory[]
+  knowledgeNotes: ExportableBundleKnowledgeNote[]
 }
 
 export interface ExportBundleOptions extends BundleItemSelectionOptions {
@@ -231,7 +234,7 @@ export interface ImportOptions {
     mcpServers?: boolean
     skills?: boolean
     repeatTasks?: boolean
-    memories?: boolean
+    knowledgeNotes?: boolean
   }
 }
 
@@ -249,7 +252,7 @@ export interface ImportBundleResult {
   mcpServers: ImportItemResult[]
   skills: ImportItemResult[]
   repeatTasks: ImportItemResult[]
-  memories: ImportItemResult[]
+  knowledgeNotes: ImportItemResult[]
   errors: string[]
 }
 
@@ -272,7 +275,7 @@ export interface BundlePreviewResult {
     mcpServers: PreviewConflict[]
     skills: PreviewConflict[]
     repeatTasks: PreviewConflict[]
-    memories: PreviewConflict[]
+    knowledgeNotes: PreviewConflict[]
   }
   error?: string
 }
@@ -629,7 +632,7 @@ const DEFAULT_EXPORT_COMPONENTS: Required<BundleComponentSelection> = {
   mcpServers: true,
   skills: true,
   repeatTasks: true,
-  memories: true,
+  knowledgeNotes: true,
 }
 
 const DEFAULT_PUBLISH_COMPONENTS: Required<BundleComponentSelection> = {
@@ -637,7 +640,7 @@ const DEFAULT_PUBLISH_COMPONENTS: Required<BundleComponentSelection> = {
   mcpServers: true,
   skills: true,
   repeatTasks: false,
-  memories: false,
+  knowledgeNotes: false,
 }
 
 function loadSkillsForBundle(layer: AgentsLayerPaths, options?: BundleItemSelectionOptions): BundleSkill[] {
@@ -672,20 +675,22 @@ function loadRepeatTasksForBundle(layer: AgentsLayerPaths, options?: BundleItemS
     }))
 }
 
-function loadMemoriesForBundle(layer: AgentsLayerPaths, options?: BundleItemSelectionOptions): BundleMemory[] {
-  const memoriesResult = loadAgentsMemoriesLayer(layer)
-  const selectedMemoryIds = toSelectionSet(options?.memoryIds)
+function loadKnowledgeNotesForBundle(layer: AgentsLayerPaths, options?: BundleItemSelectionOptions): BundleKnowledgeNote[] {
+  const knowledgeNotesResult = loadAgentsKnowledgeNotesLayer(layer)
+  const selectedKnowledgeNoteIds = toSelectionSet(options?.knowledgeNoteIds)
 
-  return memoriesResult.memories
-    .filter((memory) => !selectedMemoryIds || selectedMemoryIds.has(memory.id))
-    .map((memory): BundleMemory => ({
-      id: memory.id,
-      title: memory.title,
-      content: memory.content,
-      importance: memory.importance,
-      tags: memory.tags,
-      keyFindings: memory.keyFindings,
-      userNotes: memory.userNotes,
+  return knowledgeNotesResult.notes
+    .filter((note) => !selectedKnowledgeNoteIds || selectedKnowledgeNoteIds.has(note.id))
+    .map((note): BundleKnowledgeNote => ({
+      id: note.id,
+      title: note.title,
+      context: note.context,
+      body: note.body,
+      summary: note.summary,
+      tags: note.tags,
+      references: note.references,
+      createdAt: note.createdAt,
+      updatedAt: note.updatedAt,
     }))
 }
 
@@ -708,10 +713,11 @@ function listExportableBundleItemsForLayer(layer: AgentsLayerPaths): ExportableB
       intervalMinutes: task.intervalMinutes,
       enabled: task.enabled,
     })),
-    memories: loadAgentsMemoriesLayer(layer).memories.map((memory) => ({
-      id: memory.id,
-      title: memory.title,
-      importance: memory.importance,
+    knowledgeNotes: loadAgentsKnowledgeNotesLayer(layer).notes.map((note) => ({
+      id: note.id,
+      title: note.title,
+      context: note.context,
+      summary: note.summary,
     })),
   }
 }
@@ -724,7 +730,7 @@ function sortExportableBundleItems(items: ExportableBundleItems): ExportableBund
     mcpServers: [...items.mcpServers].sort((a, b) => a.name.localeCompare(b.name)),
     skills: [...items.skills].sort((a, b) => a.name.localeCompare(b.name)),
     repeatTasks: [...items.repeatTasks].sort((a, b) => a.name.localeCompare(b.name)),
-    memories: [...items.memories].sort((a, b) => a.title.localeCompare(b.title)),
+    knowledgeNotes: [...items.knowledgeNotes].sort((a, b) => a.title.localeCompare(b.title)),
   }
 }
 
@@ -765,9 +771,9 @@ export function getBundleExportableItemsFromLayers(agentsDirs: string[]): Export
       layerItems.flatMap((items) => items.repeatTasks),
       (task) => task.id
     ),
-    memories: mergeByKey(
-      layerItems.flatMap((items) => items.memories),
-      (memory) => memory.id
+    knowledgeNotes: mergeByKey(
+      layerItems.flatMap((items) => items.knowledgeNotes),
+      (knowledgeNote) => knowledgeNote.id
     ),
   })
 }
@@ -779,7 +785,7 @@ function buildBundle(
     mcpServers: BundleMCPServer[]
     skills: BundleSkill[]
     repeatTasks: BundleRepeatTask[]
-    memories: BundleMemory[]
+    knowledgeNotes: BundleKnowledgeNote[]
   }
 ): DotAgentsBundle {
   const publicMetadata = sanitizeBundlePublicMetadata(options?.publicMetadata)
@@ -797,14 +803,14 @@ function buildBundle(
         mcpServers: data.mcpServers.length,
         skills: data.skills.length,
         repeatTasks: data.repeatTasks.length,
-        memories: data.memories.length,
+        knowledgeNotes: data.knowledgeNotes.length,
       },
     },
     agentProfiles: data.agentProfiles,
     mcpServers: data.mcpServers,
     skills: data.skills,
     repeatTasks: data.repeatTasks,
-    memories: data.memories,
+    knowledgeNotes: data.knowledgeNotes,
   }
 }
 
@@ -832,14 +838,14 @@ export async function exportBundle(
   const mcpServers = components.mcpServers ? loadMCPServersForBundle(layer, options) : []
   const skills = components.skills ? loadSkillsForBundle(layer, options) : []
   const repeatTasks = components.repeatTasks ? loadRepeatTasksForBundle(layer, options) : []
-  const memories = components.memories ? loadMemoriesForBundle(layer, options) : []
+  const knowledgeNotes = components.knowledgeNotes ? loadKnowledgeNotesForBundle(layer, options) : []
 
   const bundle = buildBundle(options, {
     agentProfiles: profiles,
     mcpServers,
     skills,
     repeatTasks,
-    memories,
+    knowledgeNotes,
   })
 
   logApp("[bundle-service] Exported bundle", {
@@ -847,7 +853,7 @@ export async function exportBundle(
     mcpServers: mcpServers.length,
     skills: skills.length,
     repeatTasks: repeatTasks.length,
-    memories: memories.length,
+    knowledgeNotes: knowledgeNotes.length,
   })
 
   return bundle
@@ -890,9 +896,9 @@ export async function exportBundleFromLayers(
     layerBundles.flatMap((bundle) => bundle.repeatTasks),
     (task) => task.id
   )
-  const mergedMemories = mergeByKey(
-    layerBundles.flatMap((bundle) => bundle.memories),
-    (memory) => memory.id
+  const mergedKnowledgeNotes = mergeByKey(
+    layerBundles.flatMap((bundle) => bundle.knowledgeNotes),
+    (knowledgeNote) => knowledgeNote.id
   )
 
   const mergedBundle = buildBundle(options, {
@@ -900,7 +906,7 @@ export async function exportBundleFromLayers(
     mcpServers: mergedMcpServers,
     skills: mergedSkills,
     repeatTasks: mergedRepeatTasks,
-    memories: mergedMemories,
+    knowledgeNotes: mergedKnowledgeNotes,
   })
 
   logApp("[bundle-service] Exported merged bundle", {
@@ -909,7 +915,7 @@ export async function exportBundleFromLayers(
     mcpServers: mergedMcpServers.length,
     skills: mergedSkills.length,
     repeatTasks: mergedRepeatTasks.length,
-    memories: mergedMemories.length,
+    knowledgeNotes: mergedKnowledgeNotes.length,
   })
 
   return mergedBundle
@@ -1022,17 +1028,17 @@ export function findHubBundleHandoffFilePath(candidates: readonly string[]): str
   return null
 }
 
-type LegacyBundleManifestComponents = Omit<BundleManifest["components"], "repeatTasks" | "memories"> & {
+type BundleManifestInputComponents = Omit<BundleManifest["components"], "repeatTasks" | "knowledgeNotes"> & {
   repeatTasks?: number
-  memories?: number
+  knowledgeNotes?: number
 }
 
-type LegacyDotAgentsBundle = Omit<DotAgentsBundle, "manifest" | "repeatTasks" | "memories"> & {
+type ParsedDotAgentsBundle = Omit<DotAgentsBundle, "manifest" | "repeatTasks" | "knowledgeNotes"> & {
   manifest: Omit<BundleManifest, "components"> & {
-    components: LegacyBundleManifestComponents
+    components: BundleManifestInputComponents
   }
   repeatTasks?: BundleRepeatTask[]
-  memories?: BundleMemory[]
+  knowledgeNotes?: BundleKnowledgeNote[]
 }
 
 function isNonEmptyString(value: unknown): value is string {
@@ -1127,28 +1133,30 @@ function isBundleRepeatTask(value: unknown): value is BundleRepeatTask {
   return value.runOnStartup === undefined || typeof value.runOnStartup === "boolean"
 }
 
-function isBundleMemory(value: unknown): value is BundleMemory {
+function isBundleKnowledgeNote(value: unknown): value is BundleKnowledgeNote {
   if (!isRecordObject(value)) return false
   if (!isNonEmptyString(value.id)) return false
   if (!isNonEmptyString(value.title)) return false
-  if (typeof value.content !== "string") return false
-  if (!["low", "medium", "high", "critical"].includes(String(value.importance))) return false
+  if (!["auto", "search-only"].includes(String(value.context))) return false
+  if (typeof value.body !== "string") return false
   if (!isStringArray(value.tags)) return false
-  if (value.keyFindings !== undefined && !isStringArray(value.keyFindings)) return false
-  return value.userNotes === undefined || typeof value.userNotes === "string"
+  if (value.summary !== undefined && typeof value.summary !== "string") return false
+  if (value.references !== undefined && !isStringArray(value.references)) return false
+  if (value.createdAt !== undefined && !isNonNegativeFiniteNumber(value.createdAt)) return false
+  return isNonNegativeFiniteNumber(value.updatedAt)
 }
 
-function hasValidManifestComponents(value: unknown): value is LegacyBundleManifestComponents {
+function hasValidManifestComponents(value: unknown): value is BundleManifestInputComponents {
   if (!isRecordObject(value)) return false
   if (!isNonNegativeFiniteNumber(value.agentProfiles)) return false
   if (!isNonNegativeFiniteNumber(value.mcpServers)) return false
   if (!isNonNegativeFiniteNumber(value.skills)) return false
   if (value.repeatTasks !== undefined && !isNonNegativeFiniteNumber(value.repeatTasks)) return false
-  if (value.memories !== undefined && !isNonNegativeFiniteNumber(value.memories)) return false
+  if (value.knowledgeNotes !== undefined && !isNonNegativeFiniteNumber(value.knowledgeNotes)) return false
   return true
 }
 
-function validateBundle(bundle: unknown): bundle is LegacyDotAgentsBundle {
+function validateBundle(bundle: unknown): bundle is ParsedDotAgentsBundle {
   if (!bundle || typeof bundle !== "object") return false
   const b = bundle as Record<string, unknown>
   if (!b.manifest || typeof b.manifest !== "object") return false
@@ -1166,15 +1174,15 @@ function validateBundle(bundle: unknown): bundle is LegacyDotAgentsBundle {
   if ("repeatTasks" in b && b.repeatTasks !== undefined) {
     if (!Array.isArray(b.repeatTasks) || !b.repeatTasks.every(isBundleRepeatTask)) return false
   }
-  if ("memories" in b && b.memories !== undefined) {
-    if (!Array.isArray(b.memories) || !b.memories.every(isBundleMemory)) return false
+  if ("knowledgeNotes" in b && b.knowledgeNotes !== undefined) {
+    if (!Array.isArray(b.knowledgeNotes) || !b.knowledgeNotes.every(isBundleKnowledgeNote)) return false
   }
   return true
 }
 
-function normalizeBundle(bundle: LegacyDotAgentsBundle): DotAgentsBundle {
+function normalizeBundle(bundle: ParsedDotAgentsBundle): DotAgentsBundle {
   const repeatTasks = Array.isArray(bundle.repeatTasks) ? bundle.repeatTasks : []
-  const memories = Array.isArray(bundle.memories) ? bundle.memories : []
+  const knowledgeNotes = Array.isArray(bundle.knowledgeNotes) ? bundle.knowledgeNotes : []
   const rawComponents = isRecordObject(bundle.manifest.components)
     ? (bundle.manifest.components as Record<string, unknown>)
     : {}
@@ -1190,11 +1198,11 @@ function normalizeBundle(bundle: LegacyDotAgentsBundle): DotAgentsBundle {
         mcpServers: countOrFallback(rawComponents.mcpServers, bundle.mcpServers.length),
         skills: countOrFallback(rawComponents.skills, bundle.skills.length),
         repeatTasks: countOrFallback(rawComponents.repeatTasks, repeatTasks.length),
-        memories: countOrFallback(rawComponents.memories, memories.length),
+        knowledgeNotes: countOrFallback(rawComponents.knowledgeNotes, knowledgeNotes.length),
       },
     },
     repeatTasks,
-    memories,
+    knowledgeNotes,
   }
 }
 
@@ -1242,7 +1250,7 @@ export function previewBundleWithConflicts(
   const existingProfiles = loadAgentProfilesLayer(layer)
   const existingSkills = loadAgentsSkillsLayer(layer)
   const existingTasks = loadTasksLayer(layer)
-  const existingMemories = loadAgentsMemoriesLayer(layer)
+  const existingKnowledgeNotes = loadAgentsKnowledgeNotesLayer(layer)
 
   // Load existing MCP servers
   const mcpConfig = safeReadJsonFileSync<Record<string, unknown>>(layer.mcpJsonPath, {
@@ -1273,11 +1281,11 @@ export function previewBundleWithConflicts(
         const existing = existingTasks.tasks.find(et => et.id === t.id)
         return { id: t.id, name: t.name, existingName: existing?.name }
       }),
-    memories: bundle.memories
-      .filter(m => existingMemories.originById.has(m.id))
-      .map(m => {
-        const existing = existingMemories.memories.find(em => em.id === m.id)
-        return { id: m.id, name: m.title, existingName: existing?.title }
+    knowledgeNotes: bundle.knowledgeNotes
+      .filter(note => existingKnowledgeNotes.originById.has(note.id))
+      .map(note => {
+        const existing = existingKnowledgeNotes.notes.find(existingNote => existingNote.id === note.id)
+        return { id: note.id, name: note.title, existingName: existing?.title }
       }),
   }
 
@@ -1344,7 +1352,7 @@ export async function importBundle(
     mcpServers: [],
     skills: [],
     repeatTasks: [],
-    memories: [],
+    knowledgeNotes: [],
     errors: [],
   }
 
@@ -1362,7 +1370,7 @@ export async function importBundle(
     mcpServers: true,
     skills: true,
     repeatTasks: true,
-    memories: true,
+    knowledgeNotes: true,
   }
 
   // Ensure directories exist
@@ -1640,68 +1648,65 @@ export async function importBundle(
     }
   }
 
-  // Import memories
-  if (components.memories !== false) {
-    const existingMemories = loadAgentsMemoriesLayer(layer)
-    const existingIds = new Set(existingMemories.memories.map(m => m.id))
+  // Import knowledge notes
+  if (components.knowledgeNotes !== false) {
+    const existingKnowledgeNotes = loadAgentsKnowledgeNotesLayer(layer)
+    const existingIds = new Set(existingKnowledgeNotes.notes.map(note => note.id))
 
-    for (const bundleMemory of bundle.memories) {
+    for (const bundleKnowledgeNote of bundle.knowledgeNotes) {
       try {
-        const exists = existingIds.has(bundleMemory.id)
+        const exists = existingIds.has(bundleKnowledgeNote.id)
 
         if (exists && conflictStrategy === "skip") {
-          result.memories.push({
-            id: bundleMemory.id,
-            name: bundleMemory.title,
+          result.knowledgeNotes.push({
+            id: bundleKnowledgeNote.id,
+            name: bundleKnowledgeNote.title,
             action: "skipped",
           })
           continue
         }
 
-        let finalId = bundleMemory.id
+        let finalId = bundleKnowledgeNote.id
         let action: ImportItemResult["action"] = "imported"
 
         if (exists && conflictStrategy === "rename") {
-          finalId = generateUniqueId(bundleMemory.id, existingIds)
+          finalId = generateUniqueId(bundleKnowledgeNote.id, existingIds)
           action = "renamed"
         } else if (exists && conflictStrategy === "overwrite") {
           action = "overwritten"
         }
 
         const now = Date.now()
-        const fullMemory: AgentMemory = {
+        const fullNote: KnowledgeNote = {
           id: finalId,
-          title: bundleMemory.title,
-          content: bundleMemory.content,
-          importance: bundleMemory.importance,
-          tags: bundleMemory.tags || [],
-          keyFindings: bundleMemory.keyFindings,
-          userNotes: bundleMemory.userNotes,
-          createdAt: now,
+          title: bundleKnowledgeNote.title,
+          context: bundleKnowledgeNote.context,
+          body: bundleKnowledgeNote.body,
+          summary: bundleKnowledgeNote.summary,
+          tags: bundleKnowledgeNote.tags || [],
+          references: bundleKnowledgeNote.references,
+          createdAt: bundleKnowledgeNote.createdAt ?? now,
           updatedAt: now,
         }
 
-        // Create memories directory and write file
-        const memoriesDir = path.join(layer.agentsDir, "memories")
-        fs.mkdirSync(memoriesDir, { recursive: true })
-        writeAgentsMemoryFile(layer, fullMemory)
+        writeKnowledgeNoteFile(layer, fullNote, { slug: finalId })
         existingIds.add(finalId)
 
-        result.memories.push({
-          id: bundleMemory.id,
-          name: bundleMemory.title,
+        result.knowledgeNotes.push({
+          id: bundleKnowledgeNote.id,
+          name: bundleKnowledgeNote.title,
           action,
           newId: action === "renamed" ? finalId : undefined,
         })
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error)
-        result.memories.push({
-          id: bundleMemory.id,
-          name: bundleMemory.title,
+        result.knowledgeNotes.push({
+          id: bundleKnowledgeNote.id,
+          name: bundleKnowledgeNote.title,
           action: "skipped",
           error: msg,
         })
-        result.errors.push(`Memory "${bundleMemory.title}": ${msg}`)
+        result.errors.push(`Knowledge note "${bundleKnowledgeNote.title}": ${msg}`)
       }
     }
   }
@@ -1714,7 +1719,7 @@ export async function importBundle(
     mcpServers: result.mcpServers.length,
     skills: result.skills.length,
     repeatTasks: result.repeatTasks.length,
-    memories: result.memories.length,
+    knowledgeNotes: result.knowledgeNotes.length,
     errors: result.errors.length,
   })
 

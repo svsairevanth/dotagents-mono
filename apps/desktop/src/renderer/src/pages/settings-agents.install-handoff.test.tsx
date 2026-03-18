@@ -13,6 +13,7 @@ function createHookRuntime() {
     if (states[idx] === undefined) states[idx] = typeof initial === "function" ? (initial as () => T)() : initial
     return [states[idx] as T, (update: T | ((prev: T) => T)) => { states[idx] = typeof update === "function" ? (update as (prev: T) => T)(states[idx]) : update }] as const
   }
+  const forwardRef = <P,>(renderFn: (props: P, ref: unknown) => any) => (props: P) => renderFn(props, null)
   const useRef = <T,>(initial: T) => (refs[refIndex] ??= { current: initial }) as { current: T }
   const useEffect = (callback: EffectRecord["callback"], deps?: any[]) => { effects[effectIndex] = { ...(effects[effectIndex] ?? { hasRun: false }), callback, nextDeps: deps }; effectIndex += 1 }
   const render = <P,>(Component: (props: P) => any, props: P) => { stateIndex = 0; refIndex = 0; effectIndex = 0; return Component(props) }
@@ -21,7 +22,7 @@ function createHookRuntime() {
   return {
     render,
     commitEffects,
-    reactMock: { __esModule: true, default: {} as any, useState, useRef: <T,>(initial: T) => { const ref = useRef(initial); refIndex += 1; return ref }, useEffect },
+    reactMock: { __esModule: true, default: {} as any, useState, useRef: <T,>(initial: T) => { const ref = useRef(initial); refIndex += 1; return ref }, useEffect, forwardRef },
     jsxRuntimeMock: { __esModule: true, jsx: invoke, jsxs: invoke, jsxDEV: invoke, Fragment: Symbol.for("react.fragment") },
   }
 }
@@ -58,6 +59,8 @@ async function loadSettingsAgents(runtime: ReturnType<typeof createHookRuntime>,
   vi.doMock("@renderer/components/bundle-export-dialog", () => ({ BundleExportDialog: (props: any) => { exportDialogProps.current = props; return null } }))
   vi.doMock("../components/bundle-publish-dialog", () => ({ BundlePublishDialog: (props: any) => { publishDialogProps.current = props; return null } }))
   vi.doMock("@renderer/components/bundle-publish-dialog", () => ({ BundlePublishDialog: (props: any) => { publishDialogProps.current = props; return null } }))
+  vi.doMock("../components/sandbox-slot-switcher", () => ({ SandboxSlotSwitcher: Null }))
+  vi.doMock("@renderer/components/sandbox-slot-switcher", () => ({ SandboxSlotSwitcher: Null }))
   vi.doMock("../components/model-selector", () => ({ ModelSelector: Null }))
   vi.doMock("../components/ui/button", () => ({ Button: (props: any) => { const label = collectText(props.children).trim(); if (label) buttonProps.set(label, props); return null } }))
   vi.doMock("../components/ui/input", () => ({ Input: Null }))
@@ -82,7 +85,7 @@ async function loadBundleImportDialogHelper() {
   vi.doUnmock("react/jsx-runtime")
   vi.doUnmock("react/jsx-dev-runtime")
   const Null = () => null
-  const previewBundleWithConflicts = vi.fn(async ({ filePath }: { filePath: string }) => ({ filePath, bundle: null, manifest: { version: 1, name: "Hub Bundle", createdAt: "", exportedFrom: "", components: { agentProfiles: 1, mcpServers: 0, skills: 0, repeatTasks: 0, memories: 0 } }, conflicts: { agentProfiles: [], mcpServers: [], skills: [], repeatTasks: [], memories: [] } }))
+  const previewBundleWithConflicts = vi.fn(async ({ filePath }: { filePath: string }) => ({ filePath, bundle: null, manifest: { version: 1, name: "Hub Bundle", createdAt: "", exportedFrom: "", components: { agentProfiles: 1, mcpServers: 0, skills: 0, repeatTasks: 0, knowledgeNotes: 0 } }, conflicts: { agentProfiles: [], mcpServers: [], skills: [], repeatTasks: [], knowledgeNotes: [] } }))
   const bundleTipcMock = { tipcClient: { previewBundleWithConflicts, previewBundleFromDialog: vi.fn(), importBundle: vi.fn() } }
   vi.doMock("../lib/tipc-client", () => bundleTipcMock)
   vi.doMock("@renderer/lib/tipc-client", () => bundleTipcMock)

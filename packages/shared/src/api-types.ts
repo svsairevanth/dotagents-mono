@@ -290,20 +290,23 @@ export interface SkillsResponse {
   currentProfileId?: string;
 }
 
-// Memories Types
-export interface Memory {
+// Knowledge Note Types
+export type KnowledgeNoteContext = 'auto' | 'search-only';
+
+export interface KnowledgeNote {
   id: string;
   title: string;
-  content: string;
+  context: KnowledgeNoteContext;
+  body: string;
+  summary?: string;
   tags: string[];
-  importance: 'low' | 'medium' | 'high' | 'critical';
-  profileId?: string;
-  createdAt: number;
+  references?: string[];
+  createdAt?: number;
   updatedAt: number;
 }
 
-export interface MemoriesResponse {
-  memories: Memory[];
+export interface KnowledgeNotesResponse {
+  notes: KnowledgeNote[];
 }
 
 // Agent Profiles Types (renamed to Api* to avoid conflict with desktop's AgentProfile)

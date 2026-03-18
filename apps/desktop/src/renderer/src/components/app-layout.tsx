@@ -170,8 +170,8 @@ export const Component = () => {
       icon: Plug2,
     },
     {
-      text: "Memories",
-      href: "/memories",
+      text: "Knowledge",
+      href: "/knowledge",
       icon: "i-mingcute-book-2-line",
     },
 
@@ -269,7 +269,7 @@ export const Component = () => {
       !location.pathname.startsWith("/onboarding") &&
       !location.pathname.startsWith("/setup") &&
       !location.pathname.startsWith("/panel") &&
-      !location.pathname.startsWith("/memories"))
+      !location.pathname.startsWith("/knowledge"))
 
   return (
     <>

@@ -18,14 +18,13 @@ import { agentSessionTracker } from "./agent-session-tracker"
 import { agentSessionStateManager, toolApprovalManager } from "./state"
 import { emergencyStopAll } from "./emergency-stop"
 import { executeACPRouterTool, isACPRouterTool } from "./acp/acp-router-tools"
-import { memoryService } from "./memory-service"
+import { knowledgeNotesService } from "./knowledge-notes-service"
 import { messageQueueService } from "./message-queue-service"
 import { appendSessionUserResponse } from "./session-user-response-store"
 import { promises as fs } from "fs"
 import { exec } from "child_process"
 import { promisify } from "util"
 import path from "path"
-import type { AgentMemory } from "../shared/types"
 
 const execAsync = promisify(exec)
 
@@ -135,6 +134,138 @@ type ToolHandler = (
   args: Record<string, unknown>,
   context: BuiltinToolContext
 ) => Promise<MCPToolResult>
+
+const toStringArray = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean)
+    : []
+
+const saveNoteTool = async (args: Record<string, unknown>): Promise<MCPToolResult> => {
+  const rawBody = typeof args.body === "string"
+    ? args.body
+    : typeof args.content === "string"
+      ? args.content
+      : ""
+
+  if (rawBody.trim() === "") {
+    return {
+      content: [{ type: "text", text: JSON.stringify({ success: false, error: "body required" }) }],
+      isError: true,
+    }
+  }
+
+  const note = knowledgeNotesService.createNote({
+    id: typeof args.id === "string" && args.id.trim() ? args.id.trim() : undefined,
+    title: typeof args.title === "string" && args.title.trim() ? args.title.trim() : undefined,
+    body: rawBody.trim(),
+    summary: typeof args.summary === "string" && args.summary.trim() ? args.summary.trim() : undefined,
+    context: args.context === "auto" || args.context === "search-only" ? args.context : "search-only",
+    tags: toStringArray(args.tags),
+    references: toStringArray(args.references),
+  })
+
+  try {
+    const success = await knowledgeNotesService.saveNote(note)
+    return {
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          success,
+          note: success
+            ? {
+              id: note.id,
+              title: note.title,
+              summary: note.summary,
+              context: note.context,
+              tags: note.tags,
+            }
+            : undefined,
+          error: success ? undefined : "Failed to save note",
+        }),
+      }],
+      isError: !success,
+    }
+  } catch (error) {
+    return {
+      content: [{ type: "text", text: JSON.stringify({ success: false, error: String(error) }) }],
+      isError: true,
+    }
+  }
+}
+
+const listNotesTool = async (args: Record<string, unknown>): Promise<MCPToolResult> => {
+  try {
+    const query = typeof args.query === "string" && args.query.trim() ? args.query.trim() : undefined
+    const context = args.context === "auto" || args.context === "search-only" ? args.context : undefined
+    const notes = query
+      ? await knowledgeNotesService.searchNotes(query)
+      : await knowledgeNotesService.getAllNotes()
+
+    const filtered = context ? notes.filter((note) => note.context === context) : notes
+    const list = filtered.map((note) => ({
+      id: note.id,
+      title: note.title,
+      summary: note.summary,
+      context: note.context,
+      tags: note.tags,
+      updatedAt: note.updatedAt,
+    }))
+
+    return {
+      content: [{ type: "text", text: JSON.stringify({ success: true, count: list.length, notes: list }) }],
+      isError: false,
+    }
+  } catch (error) {
+    return {
+      content: [{ type: "text", text: JSON.stringify({ success: false, error: String(error) }) }],
+      isError: true,
+    }
+  }
+}
+
+const deleteNotesTool = async (args: Record<string, unknown>): Promise<MCPToolResult> => {
+  const noteIds = Array.from(new Set([
+    ...toStringArray(args.noteIds),
+    ...toStringArray(args.memoryIds),
+  ]))
+  const deleteAll = args.deleteAll === true
+
+  if (noteIds.length === 0 && !deleteAll) {
+    return {
+      content: [{ type: "text", text: JSON.stringify({ success: false, error: "Provide noteIds array or set deleteAll: true" }) }],
+      isError: true,
+    }
+  }
+  if (noteIds.length > 0 && deleteAll) {
+    return {
+      content: [{ type: "text", text: JSON.stringify({ success: false, error: "Cannot use both noteIds and deleteAll" }) }],
+      isError: true,
+    }
+  }
+
+  try {
+    if (deleteAll) {
+      const result = await knowledgeNotesService.deleteAllNotes()
+      if (result.error) {
+        return { content: [{ type: "text", text: JSON.stringify({ success: false, error: result.error }) }], isError: true }
+      }
+      return { content: [{ type: "text", text: JSON.stringify({ success: true, deletedCount: result.deletedCount }) }], isError: false }
+    }
+
+    if (noteIds.length === 1) {
+      const success = await knowledgeNotesService.deleteNote(noteIds[0])
+      return { content: [{ type: "text", text: JSON.stringify({ success, deleted: noteIds[0] }) }], isError: !success }
+    }
+
+    const result = await knowledgeNotesService.deleteMultipleNotes(noteIds)
+    if (result.error) {
+      return { content: [{ type: "text", text: JSON.stringify({ success: false, error: result.error }) }], isError: true }
+    }
+    return { content: [{ type: "text", text: JSON.stringify({ success: true, deletedCount: result.deletedCount, requestedCount: noteIds.length }) }], isError: false }
+  } catch (error) {
+    return { content: [{ type: "text", text: JSON.stringify({ success: false, error: String(error) }) }], isError: true }
+  }
+}
 
 const toolHandlers: Record<string, ToolHandler> = {
   list_mcp_servers: async (): Promise<MCPToolResult> => {
@@ -909,117 +1040,11 @@ const toolHandlers: Record<string, ToolHandler> = {
     }
   },
 
-  save_memory: async (args: Record<string, unknown>): Promise<MCPToolResult> => {
-    if (typeof args.content !== "string" || args.content.trim() === "") {
-      return {
-        content: [{ type: "text", text: JSON.stringify({ success: false, error: "content required" }) }],
-        isError: true,
-      }
-    }
+  save_note: async (args: Record<string, unknown>): Promise<MCPToolResult> => saveNoteTool(args),
 
-    const content = args.content.trim().replace(/[\r\n]+/g, ' ').slice(0, 80) // Max 80 chars, single line
-    const importance = (["low", "medium", "high", "critical"].includes(args.importance as string)
-      ? args.importance
-      : "medium") as "low" | "medium" | "high" | "critical"
+  list_notes: async (args: Record<string, unknown>): Promise<MCPToolResult> => listNotesTool(args),
 
-    const now = Date.now()
-    const memory: AgentMemory = {
-      id: `memory_${now}_${Math.random().toString(36).substr(2, 9)}`,
-      createdAt: now,
-      updatedAt: now,
-      title: content.slice(0, 50),
-      content,
-      tags: [],
-      importance,
-    }
-
-    try {
-      const success = await memoryService.saveMemory(memory)
-      if (success) {
-        return {
-          content: [{ type: "text", text: JSON.stringify({ success: true, id: memory.id, content: memory.content }) }],
-          isError: false,
-        }
-      } else {
-        return {
-          content: [{ type: "text", text: JSON.stringify({ success: false, error: "Failed to save" }) }],
-          isError: true,
-        }
-      }
-    } catch (error) {
-      return {
-        content: [{ type: "text", text: JSON.stringify({ success: false, error: String(error) }) }],
-        isError: true,
-      }
-    }
-  },
-
-  list_memories: async (): Promise<MCPToolResult> => {
-    try {
-      const memories = await memoryService.getAllMemories()
-
-      const list = memories.map(m => ({ id: m.id, content: m.content, importance: m.importance }))
-      return {
-        content: [{ type: "text", text: JSON.stringify({ success: true, count: list.length, memories: list }) }],
-        isError: false,
-      }
-    } catch (error) {
-      return {
-        content: [{ type: "text", text: JSON.stringify({ success: false, error: String(error) }) }],
-        isError: true,
-      }
-    }
-  },
-
-  delete_memories: async (args: Record<string, unknown>): Promise<MCPToolResult> => {
-    const hasIds = Array.isArray(args.memoryIds) && args.memoryIds.length > 0
-    const deleteAll = args.deleteAll === true
-
-    if (!hasIds && !deleteAll) {
-      return {
-        content: [{ type: "text", text: JSON.stringify({ success: false, error: "Provide memoryIds array or set deleteAll: true" }) }],
-        isError: true,
-      }
-    }
-    if (hasIds && deleteAll) {
-      return {
-        content: [{ type: "text", text: JSON.stringify({ success: false, error: "Cannot use both memoryIds and deleteAll" }) }],
-        isError: true,
-      }
-    }
-
-    try {
-      if (deleteAll) {
-        const result = await memoryService.deleteAllMemories()
-        if (result.error) {
-          return { content: [{ type: "text", text: JSON.stringify({ success: false, error: result.error }) }], isError: true }
-        }
-        return { content: [{ type: "text", text: JSON.stringify({ success: true, deletedCount: result.deletedCount }) }], isError: false }
-      }
-
-      // Delete by IDs
-      const memoryIds: string[] = []
-      for (const id of args.memoryIds as unknown[]) {
-        if (typeof id === "string" && id.trim() !== "") memoryIds.push(id.trim())
-      }
-      if (memoryIds.length === 0) {
-        return { content: [{ type: "text", text: JSON.stringify({ success: false, error: "memoryIds must contain valid string IDs" }) }], isError: true }
-      }
-
-      if (memoryIds.length === 1) {
-        const success = await memoryService.deleteMemory(memoryIds[0])
-        return { content: [{ type: "text", text: JSON.stringify({ success, deleted: memoryIds[0] }) }], isError: !success }
-      }
-
-      const result = await memoryService.deleteMultipleMemories(memoryIds)
-      if (result.error) {
-        return { content: [{ type: "text", text: JSON.stringify({ success: false, error: result.error }) }], isError: true }
-      }
-      return { content: [{ type: "text", text: JSON.stringify({ success: true, deletedCount: result.deletedCount, requestedCount: memoryIds.length }) }], isError: false }
-    } catch (error) {
-      return { content: [{ type: "text", text: JSON.stringify({ success: false, error: String(error) }) }], isError: true }
-    }
-  },
+  delete_notes: async (args: Record<string, unknown>): Promise<MCPToolResult> => deleteNotesTool(args),
 
   list_server_tools: async (args: Record<string, unknown>): Promise<MCPToolResult> => {
     // Validate serverName parameter

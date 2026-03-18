@@ -209,6 +209,6 @@ Anyone who clones the repo gets the skills automatically.
 
 ## Next Steps
 
-- **[Memory](memory)** — Persistent agent context
+- **[Knowledge & Notes](knowledge-notes)** — Durable agent knowledge
 - **[Agent Profiles](profiles)** — Assign skills to agents
 - **[The .agents Protocol](/concepts/dot-agents-protocol)** — Cross-tool compatibility

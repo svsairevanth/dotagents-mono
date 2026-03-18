@@ -213,47 +213,79 @@ export const builtinToolDefinitions: BuiltinToolDefinition[] = [
   },
 
   {
-    name: "save_memory",
-    description: "Save a single-line memory note. Memories persist across sessions. Keep content ultra-compact (max 80 chars), skip grammar.",
+    name: "save_note",
+    description: "Create or update a knowledge note stored under .agents/knowledge. Prefer direct file editing for substantial notes; use this tool for compact structured note saves.",
     inputSchema: {
       type: "object",
       properties: {
-        content: {
+        id: {
           type: "string",
-          description: "Single-line memory (max 80 chars). Examples: 'user prefers dark mode', 'uses pnpm not npm', 'api key in .env'",
+          description: "Optional stable note ID/slug. Provide this to update an existing note; omit to create a new one.",
         },
-        importance: {
+        title: {
           type: "string",
-          enum: ["low", "medium", "high", "critical"],
-          description: "low=routine, medium=useful, high=discovery, critical=error (default: medium)",
+          description: "Optional note title. If omitted, the title is derived from the note body.",
+        },
+        body: {
+          type: "string",
+          description: "Markdown body for the note.",
+        },
+        summary: {
+          type: "string",
+          description: "Optional compact summary used for quick listing or runtime retrieval.",
+        },
+        context: {
+          type: "string",
+          enum: ["auto", "search-only"],
+          description: "Retrieval context. Use auto only for notes that should be proactively considered without an explicit search.",
+        },
+        tags: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional note tags.",
+        },
+        references: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional references such as conversation IDs, URLs, or external identifiers.",
         },
       },
-      required: ["content"],
+      required: ["body"],
     },
   },
   {
-    name: "list_memories",
-    description: "List all saved memories for the current profile. Use this to check what's already remembered before saving duplicates, or to find memories to delete.",
+    name: "list_notes",
+    description: "List saved knowledge notes. Use this to inspect what is already captured before creating duplicates or deleting notes.",
     inputSchema: {
       type: "object",
-      properties: {},
+      properties: {
+        query: {
+          type: "string",
+          description: "Optional search query to filter notes by title, body, summary, tags, or references.",
+        },
+        context: {
+          type: "string",
+          enum: ["auto", "search-only"],
+          description: "Optional context filter.",
+        },
+      },
       required: [],
     },
   },
   {
-    name: "delete_memories",
-    description: "Delete memories. Pass an array of memory IDs to delete specific ones, or set deleteAll to true to remove all memories. Call list_memories first to get IDs.",
+    name: "delete_notes",
+    description: "Delete knowledge notes. Pass noteIds to delete specific notes, or set deleteAll to true to remove all notes. Call list_notes first to get IDs.",
     inputSchema: {
       type: "object",
       properties: {
-        memoryIds: {
+        noteIds: {
           type: "array",
           items: { type: "string" },
-          description: "Array of memory IDs to delete (from list_memories)",
+          description: "Array of note IDs to delete (from list_notes).",
         },
         deleteAll: {
           type: "boolean",
-          description: "Set to true to delete ALL memories. Cannot be used with memoryIds.",
+          description: "Set to true to delete ALL notes. Cannot be used with noteIds.",
         },
       },
       required: [],

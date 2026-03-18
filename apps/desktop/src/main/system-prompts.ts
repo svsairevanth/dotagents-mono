@@ -2,34 +2,43 @@ import { acpSmartRouter } from './acp/acp-smart-router'
 import { acpService } from './acp-service'
 import { getInternalAgentInfo } from './acp/internal-agent'
 import { agentProfileService } from './agent-profile-service'
-import type { AgentMemory } from "../shared/types"
+import type { KnowledgeNote } from "@dotagents/core"
 
 import { DEFAULT_SYSTEM_PROMPT } from './system-prompts-default'
 
 export { DEFAULT_SYSTEM_PROMPT }
 
 /**
- * Format memories for injection into the system prompt
- * Prioritizes high importance memories and limits count for context budget
+ * Format working knowledge notes for system prompt injection.
+ * Prefers frontmatter summaries and falls back to a compact title/body excerpt.
  */
-function formatMemoriesForPrompt(memories: AgentMemory[], maxMemories: number = 15): string {
-  if (!memories || memories.length === 0) return ""
+function normalizePromptNoteText(text: string): string {
+  return text
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/[`*_>#]/g, '')
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
 
-  // Sort by importance (critical > high > medium > low) then by recency
-  const importanceOrder = { critical: 0, high: 1, medium: 2, low: 3 }
-  const sorted = [...memories].sort((a, b) => {
-    const impDiff = importanceOrder[a.importance] - importanceOrder[b.importance]
-    if (impDiff !== 0) return impDiff
-    return b.createdAt - a.createdAt // More recent first
-  })
+function truncatePromptNoteText(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text
+  return `${text.slice(0, Math.max(0, maxChars - 3)).trimEnd()}...`
+}
 
-  // Take top N memories
-  const selected = sorted.slice(0, maxMemories)
-  if (selected.length === 0) return ""
+function formatWorkingNotesForPrompt(notes: KnowledgeNote[], maxNotes: number = 6): string {
+  if (!notes || notes.length === 0) return ""
 
-  // Format as single-line entries for maximum compactness
-  // Normalize any legacy multi-line content to single line
-  return selected.map(mem => `- ${mem.content.replace(/[\r\n]+/g, ' ')}`).join("\n")
+  return notes
+    .filter((note) => note.context === "auto")
+    .slice(0, maxNotes)
+    .map((note) => {
+      const summary = truncatePromptNoteText(normalizePromptNoteText(note.summary ?? ''), 180)
+      const body = truncatePromptNoteText(normalizePromptNoteText(note.body), 140)
+      const fallback = body ? `${note.title}: ${body}` : note.title
+      return `- [${note.id}] ${summary || fallback}`
+    })
+    .join("\n")
 }
 
 export function getEffectiveSystemPrompt(customSystemPrompt?: string): string {
@@ -74,8 +83,12 @@ AGENT FILE & COMMAND EXECUTION:
 - Run scripts: execute_command with "./script.sh" or "python script.py" etc.
 - Output over 10K chars is automatically truncated (first 5K + last 5K preserved)
 
-MEMORIES (optional):
-- Use save_memory to store durable preferences/patterns you learn about the user.`
+KNOWLEDGE NOTES (durable context):
+- Durable knowledge lives in ~/.agents/knowledge/ and ./.agents/knowledge/
+- Prefer direct file editing there over special-purpose note tools
+- Store notes at .agents/knowledge/<slug>/<slug>.md with human-readable slugs
+- Related assets may live in the same note folder
+- Default most notes to context: search-only; reserve context: auto for a tiny curated subset.`
 
 /**
  * Group tools by server and generate a brief description for each server
@@ -217,7 +230,7 @@ export function constructSystemPrompt(
   customSystemPrompt?: string,
   skillsInstructions?: string,
   agentProperties?: Record<string, string>,
-  memories?: AgentMemory[],
+  workingNotes?: KnowledgeNote[],
   excludeAgentId?: string,
 ): string {
   let prompt = getEffectiveSystemPrompt(customSystemPrompt)
@@ -248,12 +261,11 @@ export function constructSystemPrompt(
     prompt += `\n\n${skillsInstructions.trim()}`
   }
 
-  // Add memories if provided (for agent mode context)
-  // Memories are saved insights from previous sessions that help the agent
-  // understand user preferences, past decisions, and important context
-  const formattedMemories = formatMemoriesForPrompt(memories || [])
-  if (formattedMemories) {
-    prompt += `\n\nMEMORIES FROM PREVIOUS SESSIONS:\nThese are important insights and learnings saved from previous interactions. Use them to inform your decisions and provide context-aware assistance.\n\n${formattedMemories}`
+  // Add working notes if provided.
+  // Only a tiny subset of context:auto knowledge notes should be injected at runtime.
+  const formattedWorkingNotes = formatWorkingNotesForPrompt(workingNotes || [])
+  if (formattedWorkingNotes) {
+    prompt += `\n\nWORKING NOTES:\nThese were injected from ~/.agents/knowledge/ and/or ./.agents/knowledge/ because their frontmatter sets context: auto. Prefer note summaries when present, keep this subset tiny, and leave most notes as context: search-only.\n\n${formattedWorkingNotes}`
   }
 
   // Format full tool info for relevant tools only (when provided)
@@ -342,7 +354,8 @@ export function constructMinimalSystemPrompt(
   let prompt =
     "You are an autonomous AI assistant that uses tools to complete tasks. Work iteratively until goals are fully achieved. " +
     "Use tools proactively - prefer tools over asking users for information you can gather yourself. " +
-    "When calling tools, use exact tool names and parameter keys. Be concise. Batch independent tool calls when possible."
+    "When calling tools, use exact tool names and parameter keys. Be concise. Batch independent tool calls when possible. " +
+    "Durable knowledge lives in ~/.agents/knowledge/ and ./.agents/knowledge/ as notes at .agents/knowledge/<slug>/<slug>.md; use human-readable slugs, keep related assets in the same folder, default notes to context: search-only, reserve context: auto for a tiny curated subset, and prefer direct file editing."
 
   if (isAgentMode) {
     prompt += " Agent mode: continue calling tools until the task is completely resolved. If a tool fails, try alternative approaches before giving up."

@@ -528,7 +528,7 @@ export function SettingsAgents() {
     queryClient.invalidateQueries({ queryKey: ["toolsSidebar"] })
     queryClient.invalidateQueries({ queryKey: ["loops"] })
     queryClient.invalidateQueries({ queryKey: ["loop-statuses"] })
-    queryClient.invalidateQueries({ queryKey: ["memories"] })
+    queryClient.invalidateQueries({ queryKey: ["knowledgeNotes"] })
     queryClient.invalidateQueries({ queryKey: ["config"] })
   }
 

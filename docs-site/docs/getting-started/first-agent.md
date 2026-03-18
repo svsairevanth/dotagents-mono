@@ -5,7 +5,7 @@ sidebar_label: "Your First Agent"
 
 # Your First Agent
 
-DotAgents lets you create specialized AI agents — each with its own personality, skills, tools, and memory. This guide walks you through creating your first custom agent.
+DotAgents lets you create specialized AI agents — each with its own personality, skills, tools, and durable knowledge. This guide walks you through creating your first custom agent.
 
 ---
 
@@ -119,7 +119,7 @@ Agents can run in different modes:
 
 ## Example: Research Agent
 
-Here's a more complete example — a research agent with skills and memory:
+Here's a more complete example — a research agent with skills and durable knowledge:
 
 ```markdown
 ---
@@ -172,5 +172,5 @@ Bundles include the agent profile, skills, and configuration — everything need
 
 - **[Agent Profiles](/agents/profiles)** — Deep dive into profile configuration
 - **[Skills](/agents/skills)** — Teach your agent new capabilities
-- **[Memory](/agents/memory)** — Give your agent persistent context
+- **[Knowledge & Notes](/agents/knowledge-notes)** — Give your agent durable knowledge
 - **[Multi-Agent Delegation](/agents/delegation)** — Set up agent-to-agent coordination

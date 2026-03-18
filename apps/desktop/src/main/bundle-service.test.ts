@@ -22,9 +22,9 @@ import type { HubPublishPayload } from "@dotagents/shared"
 import { getAgentsLayerPaths } from "./agents-files/modular-config"
 import { loadAgentProfilesLayer, writeAgentsProfileFiles } from "./agents-files/agent-profiles"
 import { loadAgentsSkillsLayer, writeAgentsSkillFile } from "./agents-files/skills"
-import { writeAgentsMemoryFile } from "./agents-files/memories"
+import { writeKnowledgeNoteFile } from "./agents-files/knowledge-notes"
 import { writeTaskFile } from "./agents-files/tasks"
-import type { AgentProfile, AgentSkill, AgentMemory, LoopConfig } from "@shared/types"
+import type { AgentProfile, AgentSkill, KnowledgeNote, LoopConfig } from "@shared/types"
 
 // ============================================================================
 // Test Utilities
@@ -69,13 +69,14 @@ function createTestSkill(id: string, name: string): AgentSkill {
   }
 }
 
-function createTestMemory(id: string, title: string): AgentMemory {
+function createTestKnowledgeNote(id: string, title: string): KnowledgeNote {
   const now = Date.now()
   return {
     id,
     title,
-    content: `Memory content for ${title}`,
-    importance: "medium",
+    context: "search-only",
+    body: `Knowledge note content for ${title}`,
+    summary: `Summary for ${title}`,
     tags: ["test"],
     createdAt: now,
     updatedAt: now,
@@ -136,7 +137,7 @@ describe("bundle-service", () => {
       expect(bundle.mcpServers).toEqual([])
       expect(bundle.skills).toEqual([])
       expect(bundle.repeatTasks).toEqual([])
-      expect(bundle.memories).toEqual([])
+      expect(bundle.knowledgeNotes).toEqual([])
     })
 
     it("exports sanitized public metadata for sharing without changing the bundle format", async () => {
@@ -239,18 +240,16 @@ describe("bundle-service", () => {
       expect(bundle.skills[0].instructions).toContain("Test instructions")
     })
 
-    it("exports memories", async () => {
+    it("exports knowledge notes", async () => {
       const layer = getAgentsLayerPaths(agentsDir)
-      const memory = createTestMemory("test-memory", "Test Memory")
-      const memoriesDir = path.join(agentsDir, "memories")
-      fs.mkdirSync(memoriesDir, { recursive: true })
-      writeAgentsMemoryFile(layer, memory)
+      const note = createTestKnowledgeNote("test-note", "Test Note")
+      writeKnowledgeNoteFile(layer, note)
 
       const bundle = await exportBundle(agentsDir)
       
-      expect(bundle.memories.length).toBe(1)
-      expect(bundle.memories[0].id).toBe("test-memory")
-      expect(bundle.memories[0].title).toBe("Test Memory")
+      expect(bundle.knowledgeNotes.length).toBe(1)
+      expect(bundle.knowledgeNotes[0].id).toBe("test-note")
+      expect(bundle.knowledgeNotes[0].title).toBe("Test Note")
     })
 
     it("exports repeat tasks without profileId", async () => {
@@ -338,8 +337,8 @@ describe("bundle-service", () => {
       writeAgentsSkillFile(layer, createTestSkill("skill-skipped", "Skipped Skill"))
       writeTaskFile(layer, createTestTask("task-selected", "Selected Task"))
       writeTaskFile(layer, createTestTask("task-skipped", "Skipped Task"))
-      writeAgentsMemoryFile(layer, createTestMemory("memory-selected", "Selected Memory"))
-      writeAgentsMemoryFile(layer, createTestMemory("memory-skipped", "Skipped Memory"))
+      writeKnowledgeNoteFile(layer, createTestKnowledgeNote("note-selected", "Selected Note"))
+      writeKnowledgeNoteFile(layer, createTestKnowledgeNote("note-skipped", "Skipped Note"))
 
       writeTestMcpJson(agentsDir, {
         mcpConfig: {
@@ -362,14 +361,14 @@ describe("bundle-service", () => {
         mcpServerNames: ["exa"],
         skillIds: ["skill-selected"],
         repeatTaskIds: ["task-selected"],
-        memoryIds: ["memory-selected"],
+        knowledgeNoteIds: ["note-selected"],
       })
 
       expect(bundle.agentProfiles.map((item) => item.id)).toEqual(["agent-selected"])
       expect(bundle.mcpServers.map((item) => item.name)).toEqual(["exa"])
       expect(bundle.skills.map((item) => item.id)).toEqual(["skill-selected"])
       expect(bundle.repeatTasks.map((item) => item.id)).toEqual(["task-selected"])
-      expect(bundle.memories.map((item) => item.id)).toEqual(["memory-selected"])
+      expect(bundle.knowledgeNotes.map((item) => item.id)).toEqual(["note-selected"])
     })
   })
 
@@ -382,7 +381,7 @@ describe("bundle-service", () => {
       writeAgentsProfileFiles(layer, profile)
       writeAgentsSkillFile(layer, createTestSkill("skill-deps", "Dependency Skill"))
       writeTaskFile(layer, createTestTask("task-deps", "Dependency Task"))
-      writeAgentsMemoryFile(layer, createTestMemory("memory-deps", "Dependency Memory"))
+      writeKnowledgeNoteFile(layer, createTestKnowledgeNote("note-deps", "Dependency Note"))
       writeTestMcpJson(agentsDir, {
         mcpConfig: {
           mcpServers: {
@@ -405,7 +404,7 @@ describe("bundle-service", () => {
       expect(exportableItems.mcpServers.map((item) => item.name)).toEqual(["github"])
       expect(exportableItems.skills.map((item) => item.id)).toEqual(["skill-deps"])
       expect(exportableItems.repeatTasks.map((item) => item.id)).toEqual(["task-deps"])
-      expect(exportableItems.memories.map((item) => item.id)).toEqual(["memory-deps"])
+      expect(exportableItems.knowledgeNotes.map((item) => item.id)).toEqual(["note-deps"])
     })
   })
 
@@ -422,14 +421,14 @@ describe("bundle-service", () => {
             mcpServers: 0,
             skills: 0,
             repeatTasks: 0,
-            memories: 0,
+            knowledgeNotes: 0,
           },
         },
         agentProfiles: [{ id: "test", name: "Test", enabled: true, connection: { type: "internal" } }],
         mcpServers: [],
         skills: [],
         repeatTasks: [],
-        memories: [],
+        knowledgeNotes: [],
       }
 
       const bundlePath = path.join(tempDir, "test.dotagents")
@@ -499,7 +498,7 @@ describe("bundle-service", () => {
       expect(previewBundle(invalidCreatedAtPath)).toBeNull()
     })
 
-    it("handles bundles without repeatTasks/memories (backwards compat)", async () => {
+    it("handles bundles without repeatTasks/knowledgeNotes", async () => {
       const oldBundle = {
         manifest: {
           version: 1,
@@ -511,7 +510,7 @@ describe("bundle-service", () => {
         agentProfiles: [],
         mcpServers: [],
         skills: [],
-        // Missing repeatTasks and memories
+        // Missing repeatTasks and knowledgeNotes
       }
 
       const bundlePath = path.join(tempDir, "old.dotagents")
@@ -520,9 +519,9 @@ describe("bundle-service", () => {
       const result = previewBundle(bundlePath)
       expect(result).not.toBeNull()
       expect(result?.repeatTasks).toEqual([])
-      expect(result?.memories).toEqual([])
+      expect(result?.knowledgeNotes).toEqual([])
       expect(result?.manifest.components.repeatTasks).toBe(0)
-      expect(result?.manifest.components.memories).toBe(0)
+      expect(result?.manifest.components.knowledgeNotes).toBe(0)
     })
 
     it("handles legacy bundles with metadata-only skills", async () => {
@@ -579,13 +578,13 @@ describe("bundle-service", () => {
               notes: ["Uses existing import flow"],
             },
           },
-          components: { agentProfiles: 0, mcpServers: 0, skills: 0, repeatTasks: 0, memories: 0 },
+          components: { agentProfiles: 0, mcpServers: 0, skills: 0, repeatTasks: 0, knowledgeNotes: 0 },
         },
         agentProfiles: [],
         mcpServers: [],
         skills: [],
         repeatTasks: [],
-        memories: [],
+        knowledgeNotes: [],
       }
 
       const bundlePath = path.join(tempDir, "public-metadata.dotagents")
@@ -602,13 +601,13 @@ describe("bundle-service", () => {
           name: "Invalid Optional Collections",
           createdAt: new Date().toISOString(),
           exportedFrom: "test",
-          components: { agentProfiles: 0, mcpServers: 0, skills: 0, repeatTasks: 1, memories: 1 },
+          components: { agentProfiles: 0, mcpServers: 0, skills: 0, repeatTasks: 1, knowledgeNotes: 1 },
         },
         agentProfiles: [],
         mcpServers: [],
         skills: [],
         repeatTasks: [{ id: "task-1", name: "Task", prompt: "Run", enabled: true }],
-        memories: [{ id: "memory-1", title: "Memory", content: "Body", importance: "medium", tags: "oops" }],
+        knowledgeNotes: [{ id: "note-1", title: "Note", context: "search-only", body: "Body", updatedAt: Date.now(), tags: "oops" }],
       }
 
       const bundlePath = path.join(tempDir, "invalid-optional-collections.dotagents")
@@ -753,13 +752,13 @@ describe("bundle-service", () => {
           name: "Conflict Bundle",
           createdAt: new Date().toISOString(),
           exportedFrom: "test",
-          components: { agentProfiles: 1, mcpServers: 0, skills: 0, repeatTasks: 0, memories: 0 },
+          components: { agentProfiles: 1, mcpServers: 0, skills: 0, repeatTasks: 0, knowledgeNotes: 0 },
         },
         agentProfiles: [{ id: "conflict-id", name: "New Profile", enabled: true, connection: { type: "internal" } }],
         mcpServers: [],
         skills: [],
         repeatTasks: [],
-        memories: [],
+        knowledgeNotes: [],
       }
 
       const bundlePath = path.join(tempDir, "conflict.dotagents")
@@ -790,7 +789,7 @@ describe("bundle-service", () => {
           name: "MCP Conflict Bundle",
           createdAt: new Date().toISOString(),
           exportedFrom: "test",
-          components: { agentProfiles: 0, mcpServers: 2, skills: 0, repeatTasks: 0, memories: 0 },
+          components: { agentProfiles: 0, mcpServers: 2, skills: 0, repeatTasks: 0, knowledgeNotes: 0 },
         },
         agentProfiles: [],
         mcpServers: [
@@ -809,7 +808,7 @@ describe("bundle-service", () => {
         ],
         skills: [],
         repeatTasks: [],
-        memories: [],
+        knowledgeNotes: [],
       }
 
       const bundlePath = path.join(tempDir, "mcp-conflict.dotagents")
@@ -823,7 +822,7 @@ describe("bundle-service", () => {
         mcpServers: [{ id: "github", name: "github" }],
         skills: [],
         repeatTasks: [],
-        memories: [],
+        knowledgeNotes: [],
       })
     })
 
@@ -849,7 +848,7 @@ describe("bundle-service", () => {
           name: "Mixed MCP Conflict Bundle",
           createdAt: new Date().toISOString(),
           exportedFrom: "test",
-          components: { agentProfiles: 0, mcpServers: 1, skills: 0, repeatTasks: 0, memories: 0 },
+          components: { agentProfiles: 0, mcpServers: 1, skills: 0, repeatTasks: 0, knowledgeNotes: 0 },
         },
         agentProfiles: [],
         mcpServers: [
@@ -863,7 +862,7 @@ describe("bundle-service", () => {
         ],
         skills: [],
         repeatTasks: [],
-        memories: [],
+        knowledgeNotes: [],
       }
 
       const bundlePath = path.join(tempDir, "mixed-mcp-conflict.dotagents")
@@ -890,7 +889,7 @@ describe("bundle-service", () => {
           name: "Legacy MCP Conflict Bundle",
           createdAt: new Date().toISOString(),
           exportedFrom: "test",
-          components: { agentProfiles: 0, mcpServers: 1, skills: 0, repeatTasks: 0, memories: 0 },
+          components: { agentProfiles: 0, mcpServers: 1, skills: 0, repeatTasks: 0, knowledgeNotes: 0 },
         },
         agentProfiles: [],
         mcpServers: [
@@ -904,7 +903,7 @@ describe("bundle-service", () => {
         ],
         skills: [],
         repeatTasks: [],
-        memories: [],
+        knowledgeNotes: [],
       }
 
       const bundlePath = path.join(tempDir, "legacy-mcp-conflict.dotagents")
@@ -931,7 +930,7 @@ describe("bundle-service", () => {
           name: "Unknown Legacy MCP Conflict Bundle",
           createdAt: new Date().toISOString(),
           exportedFrom: "test",
-          components: { agentProfiles: 0, mcpServers: 1, skills: 0, repeatTasks: 0, memories: 0 },
+          components: { agentProfiles: 0, mcpServers: 1, skills: 0, repeatTasks: 0, knowledgeNotes: 0 },
         },
         agentProfiles: [],
         mcpServers: [
@@ -945,7 +944,7 @@ describe("bundle-service", () => {
         ],
         skills: [],
         repeatTasks: [],
-        memories: [],
+        knowledgeNotes: [],
       }
 
       const bundlePath = path.join(tempDir, "unknown-legacy-mcp-conflict.dotagents")
@@ -975,7 +974,7 @@ describe("bundle-service", () => {
           name: "Mixed Legacy MCP Conflict Bundle",
           createdAt: new Date().toISOString(),
           exportedFrom: "test",
-          components: { agentProfiles: 0, mcpServers: 1, skills: 0, repeatTasks: 0, memories: 0 },
+          components: { agentProfiles: 0, mcpServers: 1, skills: 0, repeatTasks: 0, knowledgeNotes: 0 },
         },
         agentProfiles: [],
         mcpServers: [
@@ -989,7 +988,7 @@ describe("bundle-service", () => {
         ],
         skills: [],
         repeatTasks: [],
-        memories: [],
+        knowledgeNotes: [],
       }
 
       const bundlePath = path.join(tempDir, "mixed-unknown-legacy-mcp-conflict.dotagents")
@@ -1016,7 +1015,7 @@ describe("bundle-service", () => {
           name: "mcp-prefixed Legacy MCP Conflict Bundle",
           createdAt: new Date().toISOString(),
           exportedFrom: "test",
-          components: { agentProfiles: 0, mcpServers: 1, skills: 0, repeatTasks: 0, memories: 0 },
+          components: { agentProfiles: 0, mcpServers: 1, skills: 0, repeatTasks: 0, knowledgeNotes: 0 },
         },
         agentProfiles: [],
         mcpServers: [
@@ -1030,7 +1029,7 @@ describe("bundle-service", () => {
         ],
         skills: [],
         repeatTasks: [],
-        memories: [],
+        knowledgeNotes: [],
       }
 
       const bundlePath = path.join(tempDir, "mcp-prefixed-legacy-mcp-conflict.dotagents")
@@ -1058,13 +1057,13 @@ describe("bundle-service", () => {
           name: "Import Test",
           createdAt: new Date().toISOString(),
           exportedFrom: "test",
-          components: { agentProfiles: 1, mcpServers: 0, skills: 1, repeatTasks: 1, memories: 1 },
+          components: { agentProfiles: 1, mcpServers: 0, skills: 1, repeatTasks: 1, knowledgeNotes: 1 },
         },
         agentProfiles: [{ id: "import-agent", name: "Import Agent", enabled: true, connection: { type: "internal" } }],
         mcpServers: [],
         skills: [{ id: "import-skill", name: "Import Skill", description: "Test", instructions: "# Test" }],
         repeatTasks: [{ id: "import-task", name: "Import Task", prompt: "Test", intervalMinutes: 30, enabled: true }],
-        memories: [{ id: "import-memory", title: "Import Memory", content: "Test", importance: "low", tags: [] }],
+        knowledgeNotes: [{ id: "import-note", title: "Import Note", context: "search-only", body: "Test", updatedAt: Date.now(), tags: [] }],
       }
     }
 
@@ -1075,7 +1074,7 @@ describe("bundle-service", () => {
           name: "MCP Import Test",
           createdAt: new Date().toISOString(),
           exportedFrom: "test",
-          components: { agentProfiles: 0, mcpServers: 1, skills: 0, repeatTasks: 0, memories: 0 },
+          components: { agentProfiles: 0, mcpServers: 1, skills: 0, repeatTasks: 0, knowledgeNotes: 0 },
         },
         agentProfiles: [],
         mcpServers: [
@@ -1089,7 +1088,7 @@ describe("bundle-service", () => {
         ],
         skills: [],
         repeatTasks: [],
-        memories: [],
+        knowledgeNotes: [],
       }
     }
 
@@ -1104,7 +1103,7 @@ describe("bundle-service", () => {
       expect(result.agentProfiles[0].action).toBe("imported")
       expect(result.skills[0].action).toBe("imported")
       expect(result.repeatTasks[0].action).toBe("imported")
-      expect(result.memories[0].action).toBe("imported")
+      expect(result.knowledgeNotes[0].action).toBe("imported")
     })
 
     it("imports legacy metadata-only bundle skills with empty instructions", async () => {
@@ -1157,7 +1156,7 @@ describe("bundle-service", () => {
       expect(result.agentProfiles[0].action).toBe("imported")
       expect(result.skills[0].action).toBe("imported")
       expect(result.repeatTasks[0].action).toBe("imported")
-      expect(result.memories[0].action).toBe("imported")
+      expect(result.knowledgeNotes[0].action).toBe("imported")
     })
 
     it("skips existing items with skip strategy", async () => {
@@ -1213,7 +1212,7 @@ describe("bundle-service", () => {
           name: "External Agent Import",
           createdAt: new Date().toISOString(),
           exportedFrom: "test",
-          components: { agentProfiles: 1, mcpServers: 0, skills: 0, repeatTasks: 0, memories: 0 },
+          components: { agentProfiles: 1, mcpServers: 0, skills: 0, repeatTasks: 0, knowledgeNotes: 0 },
         },
         agentProfiles: [
           {
@@ -1233,7 +1232,7 @@ describe("bundle-service", () => {
         mcpServers: [],
         skills: [],
         repeatTasks: [],
-        memories: [],
+        knowledgeNotes: [],
       }
 
       const bundlePath = path.join(tempDir, "import-external-agent.dotagents")
@@ -1268,13 +1267,13 @@ describe("bundle-service", () => {
 
       const result = await importBundle(bundlePath, targetDir, {
         conflictStrategy: "skip",
-        components: { agentProfiles: true, skills: false, repeatTasks: false, memories: false },
+        components: { agentProfiles: true, skills: false, repeatTasks: false, knowledgeNotes: false },
       })
 
       expect(result.agentProfiles.length).toBe(1)
       expect(result.skills.length).toBe(0)
       expect(result.repeatTasks.length).toBe(0)
-      expect(result.memories.length).toBe(0)
+      expect(result.knowledgeNotes.length).toBe(0)
     })
 
     it("skips conflicting MCP servers and preserves canonical mcpConfig shape", async () => {
@@ -1724,7 +1723,7 @@ describe("generatePublishPayload", () => {
     fs.mkdirSync(path.join(layer.agentsDir, "skills"), { recursive: true })
     writeAgentsProfileFiles(layer, createTestProfile("agent-pub-1", "Publish Agent"))
     writeAgentsSkillFile(layer, createTestSkill("skill-pub-1", "Pub Skill"))
-    writeAgentsMemoryFile(layer, createTestMemory("memory-pub-1", "Publish Memory"))
+    writeKnowledgeNoteFile(layer, createTestKnowledgeNote("note-pub-1", "Publish Note"))
     writeTaskFile(layer, createTestTask("task-pub-1", "Publish Task"))
   })
 
@@ -1756,7 +1755,7 @@ describe("generatePublishPayload", () => {
     expect(result.catalogItem.componentCounts.agentProfiles).toBe(1)
     expect(result.catalogItem.componentCounts.skills).toBe(1)
     expect(result.catalogItem.componentCounts.repeatTasks).toBe(0)
-    expect(result.catalogItem.componentCounts.memories).toBe(0)
+    expect(result.catalogItem.componentCounts.knowledgeNotes).toBe(0)
     expect(result.catalogItem.artifact.url).toBe(
       "https://hub.dotagentsprotocol.com/bundles/test-publish-bundle.dotagents",
     )
@@ -1773,10 +1772,10 @@ describe("generatePublishPayload", () => {
     expect(bundle.agentProfiles).toHaveLength(1)
     expect(bundle.skills).toHaveLength(1)
     expect(bundle.repeatTasks).toHaveLength(0)
-    expect(bundle.memories).toHaveLength(0)
+    expect(bundle.knowledgeNotes).toHaveLength(0)
   })
 
-  it("includes opt-in repeat tasks and memories when explicitly selected", async () => {
+  it("includes opt-in repeat tasks and knowledge notes when explicitly selected", async () => {
     const result = await generatePublishPayload([tempDir], {
       name: "Opt In Bundle",
       publicMetadata: {
@@ -1786,25 +1785,25 @@ describe("generatePublishPayload", () => {
       },
       components: {
         repeatTasks: true,
-        memories: true,
+        knowledgeNotes: true,
       },
     })
 
     expect(result.catalogItem.componentCounts.repeatTasks).toBe(1)
-    expect(result.catalogItem.componentCounts.memories).toBe(1)
+    expect(result.catalogItem.componentCounts.knowledgeNotes).toBe(1)
 
     const bundle = JSON.parse(result.bundleJson)
     expect(bundle.repeatTasks).toHaveLength(1)
     expect(bundle.repeatTasks[0].id).toBe("task-pub-1")
-    expect(bundle.memories).toHaveLength(1)
-    expect(bundle.memories[0].id).toBe("memory-pub-1")
+    expect(bundle.knowledgeNotes).toHaveLength(1)
+    expect(bundle.knowledgeNotes[0].id).toBe("note-pub-1")
   })
 
   it("applies item-level filters to the generated publish bundle", async () => {
     const layer = getAgentsLayerPaths(tempDir)
     writeAgentsProfileFiles(layer, createTestProfile("agent-pub-2", "Publish Agent Two"))
     writeAgentsSkillFile(layer, createTestSkill("skill-pub-2", "Pub Skill Two"))
-    writeAgentsMemoryFile(layer, createTestMemory("memory-pub-2", "Publish Memory Two"))
+    writeKnowledgeNoteFile(layer, createTestKnowledgeNote("note-pub-2", "Publish Note Two"))
     writeTaskFile(layer, createTestTask("task-pub-2", "Publish Task Two"))
     writeTestMcpJson(tempDir, {
       mcpConfig: {
@@ -1831,13 +1830,13 @@ describe("generatePublishPayload", () => {
       },
       components: {
         repeatTasks: true,
-        memories: true,
+        knowledgeNotes: true,
       },
       agentProfileIds: ["agent-pub-2"],
       mcpServerNames: ["exa"],
       skillIds: ["skill-pub-2"],
       repeatTaskIds: ["task-pub-2"],
-      memoryIds: ["memory-pub-2"],
+      knowledgeNoteIds: ["note-pub-2"],
     })
 
     expect(result.catalogItem.componentCounts).toMatchObject({
@@ -1845,7 +1844,7 @@ describe("generatePublishPayload", () => {
       mcpServers: 1,
       skills: 1,
       repeatTasks: 1,
-      memories: 1,
+      knowledgeNotes: 1,
     })
 
     const bundle = JSON.parse(result.bundleJson)
@@ -1853,7 +1852,7 @@ describe("generatePublishPayload", () => {
     expect(bundle.mcpServers.map((item: { name: string }) => item.name)).toEqual(["exa"])
     expect(bundle.skills.map((item: { id: string }) => item.id)).toEqual(["skill-pub-2"])
     expect(bundle.repeatTasks.map((item: { id: string }) => item.id)).toEqual(["task-pub-2"])
-    expect(bundle.memories.map((item: { id: string }) => item.id)).toEqual(["memory-pub-2"])
+    expect(bundle.knowledgeNotes.map((item: { id: string }) => item.id)).toEqual(["note-pub-2"])
   })
 
   it("accepts explicit catalog ids and artifact urls for Hub catalog alignment", async () => {

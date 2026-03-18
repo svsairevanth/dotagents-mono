@@ -85,6 +85,21 @@ describe("remote-server route registration", () => {
     expect(streamableMcpSection).toContain("transport.handleRequest(req.raw, reply.raw, req.body)")
   })
 
+  it("registers note-only knowledge routes", () => {
+    const source = getRemoteServerSource()
+
+    expect(source).toContain('fastify.get("/v1/knowledge/notes"')
+    expect(source).toContain('fastify.get("/v1/knowledge/notes/:id"')
+    expect(source).toContain('fastify.post("/v1/knowledge/notes"')
+    expect(source).toContain('fastify.patch("/v1/knowledge/notes/:id"')
+    expect(source).toContain('fastify.delete("/v1/knowledge/notes/:id"')
+
+    expect(source).not.toContain('fastify.get("/v1/memories"')
+    expect(source).not.toContain('fastify.post("/v1/memories"')
+    expect(source).not.toContain('fastify.patch("/v1/memories/:id"')
+    expect(source).not.toContain('fastify.delete("/v1/memories/:id"')
+  })
+
   it("does not report repeat task toggles as successful when loop persistence fails", () => {
     const source = getRemoteServerSource()
     const toggleLoopSection = getSection(source, 'fastify.post("/v1/loops/:id/toggle"', '// POST /v1/loops/:id/run - Run a repeat task immediately')

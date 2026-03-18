@@ -18,13 +18,14 @@ function extractBetween(startMarker, endMarker) {
   return settingsSource.slice(start, end);
 }
 
-test('keeps the mobile Memories subsection free of decorative delete emoji chrome', () => {
-  const memoriesSection = extractBetween(
-    '<CollapsibleSection id="memories" title="Memories">',
+test('keeps the mobile knowledge notes subsection free of decorative delete emoji chrome', () => {
+  const knowledgeNotesSection = extractBetween(
+    '<CollapsibleSection id="knowledgeNotes" title="Knowledge Notes">',
     '{/* 4m. Agents */}'
   );
 
-  assert.doesNotMatch(memoriesSection, /🗑️/);
-  assert.match(memoriesSection, /<Text style=\{styles\.memoryDeleteButtonText\}>Delete<\/Text>/);
-  assert.match(memoriesSection, /accessibilityLabel=\{`Delete memory \$\{memory\.title\}`\}/);
+  assert.doesNotMatch(knowledgeNotesSection, /🗑️/);
+  assert.match(knowledgeNotesSection, /<Text style=\{styles\.noteDeleteButtonText\}>Delete<\/Text>/);
+  assert.match(knowledgeNotesSection, /accessibilityLabel=\{`Delete note \$\{note\.title\}`\}/);
+  assert.match(knowledgeNotesSection, /Canonical note fields are title, context, summary, body, tags, and references\./);
 });

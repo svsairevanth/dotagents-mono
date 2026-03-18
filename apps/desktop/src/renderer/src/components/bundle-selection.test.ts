@@ -21,7 +21,7 @@ function createItems(): BundleExportableItems {
     mcpServers: [{ name: "github", transport: "stdio", enabled: true }],
     skills: [{ id: "skill-1", name: "Skill One", description: "Test" }],
     repeatTasks: [{ id: "task-1", name: "Task One", intervalMinutes: 60, enabled: true }],
-    memories: [{ id: "memory-1", title: "Memory One", importance: "medium" }],
+    knowledgeNotes: [{ id: "note-1", title: "Architecture", context: "search-only", summary: "Service boundaries" }],
   }
 }
 
@@ -34,7 +34,7 @@ describe("bundle-selection helpers", () => {
       mcpServerNames: ["github"],
       skillIds: ["skill-1"],
       repeatTaskIds: ["task-1"],
-      memoryIds: ["memory-1"],
+      knowledgeNoteIds: ["note-1"],
     })
   })
 
@@ -46,7 +46,7 @@ describe("bundle-selection helpers", () => {
       mcpServerNames: [],
       skillIds: [],
       repeatTaskIds: ["task-1"],
-      memoryIds: ["memory-1"],
+      knowledgeNoteIds: ["note-1"],
     })
 
     expect(warnings).toEqual([

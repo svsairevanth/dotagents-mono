@@ -33,7 +33,7 @@ DotAgents is a monorepo containing a desktop app, mobile app, shared libraries, 
 │              │  │ Engine  │ │ Service  │ │ Service││      │
 │              │  └─────────┘ └──────────┘ └────────┘│      │
 │              │  ┌─────────┐ ┌──────────┐ ┌────────┐│      │
-│              │  │ Skills  │ │ Memory   │ │ Config ││      │
+│              │  │ Skills  │ │ Notes    │ │ Config ││      │
 │              │  │ Service │ │ Service  │ │ Service││      │
 │              │  └─────────┘ └──────────┘ └────────┘│      │
 │              └──────────────────────────────────────┘      │
@@ -102,7 +102,7 @@ The main process handles all system-level operations:
 - **ACP Service** (`acp-service.ts`) — Spawns external agents, manages JSON-RPC communication
 - **Agent Profile Service** (`agent-profile-service.ts`) — CRUD for agent profiles
 - **Skills Service** (`skills-service.ts`) — Loads and manages agent skills from `.agents/skills/`
-- **Memory Service** (`memory-service.ts`) — Persistent agent context
+- **Knowledge Notes Service** (`knowledge-notes-service.ts`) — Persistent durable context via `.agents/knowledge/`
 - **Keyboard Service** (`keyboard.ts`) — System-wide hotkeys via Rust binary
 - **TTS Services** — Text-to-speech via OpenAI, Groq, Gemini, Kitten, Supertonic
 - **Remote Server** (`remote-server.ts`) — Fastify HTTP API for mobile clients

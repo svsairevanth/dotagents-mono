@@ -15,6 +15,8 @@ vi.mock("./config", () => ({
       modelPresets: [],
     }),
   },
+  globalAgentsFolder: "/tmp/.agents",
+  resolveWorkspaceAgentsFolder: () => null,
 }))
 
 vi.mock("./debug", () => ({
@@ -39,7 +41,7 @@ describe("parseSummaryResponse", () => {
     vi.resetModules()
   })
 
-  it("extracts and sanitizes memoryCandidates (single-line, max 5)", async () => {
+  it("extracts and sanitizes noteCandidates (single-line, max 5)", async () => {
     const { parseSummaryResponse } = await import("./summarization-service")
 
     const input = {
@@ -53,13 +55,13 @@ describe("parseSummaryResponse", () => {
       keyFindings: [],
       nextSteps: "",
       decisionsMade: [],
-      memoryCandidates: [
+      noteCandidates: [
         "preference:  user likes  pnpm\nand hates npm",
         123,
         "",
         "constraint:  don't run installs  without permission",
         "fact: repo uses tipc",
-        "insight:    memory candidates reduce bloat",
+        "insight:    durable note candidates reduce bloat",
       ],
       importance: "high",
     })
@@ -68,31 +70,31 @@ describe("parseSummaryResponse", () => {
 
     expect(summary.actionSummary).toBe("did stuff")
     expect(summary.importance).toBe("high")
-    expect(summary.memoryCandidates).toEqual([
+    expect(summary.noteCandidates).toEqual([
       "preference: user likes pnpm and hates npm",
       "constraint: don't run installs without permission",
       "fact: repo uses tipc",
-      "insight: memory candidates reduce bloat",
+      "insight: durable note candidates reduce bloat",
     ])
   })
 
-  it("truncates memoryCandidates to 240 chars", async () => {
+  it("truncates noteCandidates to 240 chars", async () => {
     const { parseSummaryResponse } = await import("./summarization-service")
 
     const long = `fact: ${"a".repeat(500)}`
     const response = JSON.stringify({
       actionSummary: "x",
-      memoryCandidates: [long],
+      noteCandidates: [long],
       importance: "medium",
     })
 
     const summary = parseSummaryResponse(response, { sessionId: "s", stepNumber: 1 } as any)
-    expect(summary.memoryCandidates).toHaveLength(1)
-    expect(summary.memoryCandidates?.[0]).toHaveLength(240)
-    expect(summary.memoryCandidates?.[0].startsWith("fact: ")).toBe(true)
+    expect(summary.noteCandidates).toHaveLength(1)
+    expect(summary.noteCandidates?.[0]).toHaveLength(240)
+    expect(summary.noteCandidates?.[0].startsWith("fact: ")).toBe(true)
   })
 
-  it("returns empty memoryCandidates on parse failure", async () => {
+  it("returns empty noteCandidates on parse failure", async () => {
     const { parseSummaryResponse } = await import("./summarization-service")
 
     const summary = parseSummaryResponse("not json", {
@@ -101,20 +103,20 @@ describe("parseSummaryResponse", () => {
       assistantResponse: "hello world",
     } as any)
 
-    expect(summary.memoryCandidates).toEqual([])
+    expect(summary.noteCandidates).toEqual([])
     expect(summary.actionSummary).toBe("hello world")
     expect(summary.importance).toBe("medium")
   })
 })
 
-describe("MemoryService.createMemoryFromSummary", () => {
+describe("KnowledgeNotesService.createNoteFromSummary", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.resetModules()
   })
 
   it("returns null when there are no durable fields", async () => {
-    const { memoryService } = await import("./memory-service")
+    const { knowledgeNotesService } = await import("./knowledge-notes-service")
 
     const summary: AgentStepSummary = {
       id: "summary_1",
@@ -125,11 +127,11 @@ describe("MemoryService.createMemoryFromSummary", () => {
       importance: "medium",
     }
 
-    expect(memoryService.createMemoryFromSummary(summary)).toBeNull()
+    expect(knowledgeNotesService.createNoteFromSummary(summary)).toBeNull()
   })
 
   it("filters out candidates without allowed type prefixes", async () => {
-    const { memoryService } = await import("./memory-service")
+    const { knowledgeNotesService } = await import("./knowledge-notes-service")
 
     const summary: AgentStepSummary = {
       id: "summary_prefix",
@@ -138,7 +140,7 @@ describe("MemoryService.createMemoryFromSummary", () => {
       timestamp: Date.now(),
       actionSummary: "ran tools",
       importance: "medium",
-      memoryCandidates: [
+      noteCandidates: [
         "preference: use pnpm",
         "telemetry: ran 5 tools",
         "random noise without colon",
@@ -149,13 +151,14 @@ describe("MemoryService.createMemoryFromSummary", () => {
       ],
     }
 
-    const memory = memoryService.createMemoryFromSummary(summary)
-    expect(memory).not.toBeNull()
-    expect(memory?.content).toBe("preference: use pnpm | fact: repo uses vitest")
+    const note = knowledgeNotesService.createNoteFromSummary(summary)
+    expect(note).not.toBeNull()
+    expect(note?.summary).toBe("preference: use pnpm | fact: repo uses vitest")
+    expect(note?.context).toBe("auto")
   })
 
   it("truncates fallback decisionsMade/keyFindings to 240 chars per item", async () => {
-    const { memoryService } = await import("./memory-service")
+    const { knowledgeNotesService } = await import("./knowledge-notes-service")
 
     const longDecision = "a".repeat(500)
     const summary: AgentStepSummary = {
@@ -168,13 +171,13 @@ describe("MemoryService.createMemoryFromSummary", () => {
       decisionsMade: [longDecision],
     }
 
-    const memory = memoryService.createMemoryFromSummary(summary)
-    expect(memory).not.toBeNull()
-    expect(memory?.content).toHaveLength(240)
+    const note = knowledgeNotesService.createNoteFromSummary(summary)
+    expect(note).not.toBeNull()
+    expect(note?.summary).toHaveLength(240)
   })
 
-  it("prefers memoryCandidates and derives tags", async () => {
-    const { memoryService } = await import("./memory-service")
+  it("prefers noteCandidates and derives tags", async () => {
+    const { knowledgeNotesService } = await import("./knowledge-notes-service")
 
     const summary: AgentStepSummary = {
       id: "summary_2",
@@ -186,7 +189,7 @@ describe("MemoryService.createMemoryFromSummary", () => {
       tags: ["existing"],
       decisionsMade: ["decision a"],
       keyFindings: ["finding a"],
-      memoryCandidates: [
+      noteCandidates: [
         "preference: use pnpm",
         "constraint:  don't run installs without permission",
         "fact: repo uses tipc",
@@ -194,13 +197,49 @@ describe("MemoryService.createMemoryFromSummary", () => {
       ],
     }
 
-    const memory = memoryService.createMemoryFromSummary(summary, undefined, undefined, ["manual"])
-    expect(memory).not.toBeNull()
+    const note = knowledgeNotesService.createNoteFromSummary(summary, undefined, undefined, ["manual"])
+    expect(note).not.toBeNull()
 
-    expect(memory?.content).toBe(
+    expect(note?.summary).toBe(
       "preference: use pnpm | constraint: don't run installs without permission | fact: repo uses tipc",
     )
-    expect(memory?.tags).toEqual(["existing", "manual", "preference", "constraint", "fact"])
-    expect(memory?.importance).toBe("high")
+    expect(note?.tags).toEqual(["existing", "manual", "preference", "constraint", "fact"])
+    expect(note?.context).toBe("auto")
+  })
+})
+
+describe("KnowledgeNotesService.createNoteFromSummary", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.resetModules()
+  })
+
+  it("creates an auto working note with readable note semantics", async () => {
+    const { knowledgeNotesService } = await import("./knowledge-notes-service")
+
+    const summary: AgentStepSummary = {
+      id: "summary_note_1",
+      sessionId: "sess",
+      stepNumber: 5,
+      timestamp: Date.now(),
+      actionSummary: "captured durable context",
+      importance: "high",
+      tags: ["existing"],
+      keyFindings: ["repo uses pnpm"],
+      noteCandidates: [
+        "preference: use pnpm",
+        "constraint: don't install dependencies without permission",
+      ],
+    }
+
+    const note = knowledgeNotesService.createNoteFromSummary(summary, undefined, "keep this handy", ["manual"], "Chat", "conv_1")
+
+    expect(note).not.toBeNull()
+    expect(note?.id.startsWith("memory_")).toBe(false)
+    expect(note?.context).toBe("auto")
+    expect(note?.summary).toContain("preference: use pnpm")
+    expect(note?.tags).toEqual(["existing", "manual", "preference", "constraint"])
+    expect(note?.body).toContain("## Notes")
+    expect(note?.references).toEqual(["conv_1"])
   })
 })

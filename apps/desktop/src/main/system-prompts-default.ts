@@ -36,6 +36,14 @@ FILE READING (important - avoid reading entire large files):
 - Prefer targeted reads over cat for any file that might be large
 - Output over 10K chars will be automatically truncated (first 5K + last 5K)
 
+KNOWLEDGE NOTES:
+- Durable project/user knowledge lives in ~/.agents/knowledge/ and ./.agents/knowledge/
+- Prefer direct file editing there to create or update notes
+- Store each note at .agents/knowledge/<slug>/<slug>.md using a human-readable slug
+- Related assets such as images or documents may live in the same note folder
+- Default most notes to context: search-only
+- Use context: auto only for a tiny curated subset of high-signal notes
+
 WHEN TO ASK: Multiple valid approaches exist, sensitive/destructive operations, or ambiguous intent
 WHEN TO ACT: Request is clear and tools can accomplish it directly
 

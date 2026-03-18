@@ -5,7 +5,7 @@ sidebar_label: "The .agents Protocol"
 
 # The .agents Protocol
 
-The `.agents/` directory is an open standard for agent configuration. Define your skills, memories, and commands once, and they work across DotAgents, Claude Code, Cursor, Codex, and every tool adopting the protocol.
+The `.agents/` directory is an open standard for agent configuration. Define your skills, knowledge notes, and commands once, and they work across DotAgents, Claude Code, Cursor, Codex, and every tool adopting the protocol.
 
 **Protocol first, product second.**
 
@@ -15,7 +15,7 @@ The `.agents/` directory is an open standard for agent configuration. Define you
 
 AI agents are proliferating across tools — coding assistants, voice interfaces, automation platforms. But each tool locks agent configuration into its own format. The `.agents` protocol solves this by providing a shared, file-based standard that any tool can read.
 
-Your skills, memories, and agent profiles become **portable assets** that travel with your projects.
+Your skills, knowledge notes, and agent profiles become **portable assets** that travel with your projects.
 
 ## Directory Structure
 
@@ -30,14 +30,16 @@ Your skills, memories, and agent profiles become **portable assets** that travel
 │   └── ui.json              # UI/layout settings
 ├── agents/
 │   └── <agent-id>/
-│       ├── agent.md          # Agent profile definition
-│       └── config.json       # Agent-specific configuration
+│       ├── agent.md         # Agent profile definition
+│       └── config.json      # Agent-specific configuration
 ├── skills/
 │   └── <skill-id>/
-│       └── skill.md          # Skill definition and instructions
-├── memories/
-│   ├── memory_1.md           # Persistent memory entry
-│   └── memory_2.md
+│       └── skill.md         # Skill definition and instructions
+├── knowledge/
+│   └── project-architecture/
+│       ├── project-architecture.md  # Canonical note file
+│       ├── diagram.png              # Note-local asset
+│       └── db-schema.pdf            # Note-local asset
 └── .backups/                 # Auto-rotated timestamped backups
 ```
 
@@ -49,8 +51,8 @@ The `.agents` protocol uses a **two-layer** configuration system:
 
 - Canonical source of truth for your personal agent configuration
 - Created automatically on first app launch
-- Updated when you change settings in the UI
 - Shared across all workspaces and projects
+- Stores global skills, agent profiles, and knowledge notes
 
 ### Workspace Layer (`./.agents/`)
 
@@ -66,9 +68,11 @@ Final Config = Global Config + Workspace Config
                               (workspace wins on conflicts)
 ```
 
-Skills and memories merge by ID — workspace versions override global versions with the same ID.
+Skills and notes merge by ID — workspace versions override global versions with the same ID.
 
 ## File Formats
+
+Markdown files in `.agents/` use simple `key: value` frontmatter. It is **not full YAML**.
 
 ### Agent Profiles (`agent.md`)
 
@@ -112,25 +116,37 @@ source: local
 This skill enables working with Word documents...
 ```
 
-### Memories (`memory.md`)
+### Notes (`.agents/knowledge/<slug>/<slug>.md`)
 
-Memories are persistent context entries:
+Notes are the canonical markdown knowledge artifacts in `.agents/knowledge/`. The small runtime-injected subset are **working notes**, selected with `context: auto`.
 
 ```markdown
 ---
-kind: memory
+kind: note
 id: project-architecture
-createdAt: 1234567890
-updatedAt: 1234567890
 title: Project Architecture
-content: This project uses a microservices architecture with...
-importance: high
+context: auto
+updatedAt: 1234567890
 tags: architecture, project, context
-keyFindings: ["Uses microservices", "PostgreSQL database", "Redis caching"]
+summary: Service-oriented Electron app with layered .agents config.
 ---
+
+## Details
 
 Additional notes and context...
 ```
+
+Most notes should use `context: search-only`. Reserve `context: auto` for a tiny, curated set of high-signal working notes.
+
+### Note-Local Assets
+
+Notes can include related files in the same folder:
+
+- Images like diagrams or screenshots
+- Documents like PDFs or design notes
+- Any other supporting assets needed with the note
+
+No fixed `assets/` subfolder is required.
 
 ### JSON Configuration Files
 
@@ -166,12 +182,12 @@ The `.agents/` directory is designed to work across AI tools:
 | Tool | Support |
 |------|---------|
 | **DotAgents** | Full support (native) |
-| **Claude Code** | Skills and memories |
+| **Claude Code** | Skills and knowledge notes |
 | **Cursor** | Skills (via `.cursor/` compatibility) |
 | **Codex** | Skills and agent configuration |
 | **OpenCode** | Skills support |
 
-Skills you define for DotAgents work in Claude Code, Cursor, and any tool that reads the `.agents/` directory.
+Skills and markdown-based `.agents` content are designed to stay portable across tools that adopt the protocol.
 
 ---
 
@@ -179,4 +195,4 @@ Skills you define for DotAgents work in Claude Code, Cursor, and any tool that r
 
 - **[Protocol Ecosystem](protocol-ecosystem)** — How MCP, ACP, and Skills interoperate
 - **[Skills](/agents/skills)** — Create and manage agent skills
-- **[Memory](/agents/memory)** — Persistent agent context
+- **[Knowledge & Notes](/agents/knowledge-notes)** — Durable agent knowledge

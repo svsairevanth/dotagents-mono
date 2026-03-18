@@ -19,7 +19,7 @@ import {
   createMinimumTouchTargetStyle,
   createSwitchAccessibilityLabel,
 } from '../lib/accessibility';
-import { ExtendedSettingsApiClient, Profile, MCPServer, Settings, ModelInfo, SettingsUpdate, Skill, Memory, AgentProfile, Loop } from '../lib/settingsApi';
+import { ExtendedSettingsApiClient, Profile, MCPServer, Settings, ModelInfo, SettingsUpdate, Skill, KnowledgeNote, AgentProfile, Loop } from '../lib/settingsApi';
 import { getAcpMainAgentOptions } from '../lib/mainAgentOptions';
 import { TTSSettings } from '../ui/TTSSettings';
 import Slider from '@react-native-community/slider';
@@ -202,13 +202,13 @@ export default function SettingsScreen({ navigation }: any) {
   // Track if the server is a DotAgents desktop server (supports our settings API)
   const [isDotAgentsServer, setIsDotAgentsServer] = useState(false);
 
-  // Skills, Memories, Agents, and Loops state
+  // Skills, Knowledge Notes, Agents, and Loops state
   const [skills, setSkills] = useState<Skill[]>([]);
-  const [memories, setMemories] = useState<Memory[]>([]);
+  const [knowledgeNotes, setKnowledgeNotes] = useState<KnowledgeNote[]>([]);
   const [agentProfiles, setAgentProfiles] = useState<AgentProfile[]>([]);
   const [loops, setLoops] = useState<Loop[]>([]);
   const [isLoadingSkills, setIsLoadingSkills] = useState(false);
-  const [isLoadingMemories, setIsLoadingMemories] = useState(false);
+  const [isLoadingKnowledgeNotes, setIsLoadingKnowledgeNotes] = useState(false);
   const [isLoadingAgentProfiles, setIsLoadingAgentProfiles] = useState(false);
   const [isLoadingLoops, setIsLoadingLoops] = useState(false);
   const availableAcpMainAgents = useMemo(
@@ -254,7 +254,7 @@ export default function SettingsScreen({ navigation }: any) {
     whatsapp: false,
     langfuse: false,
     skills: false,
-    memories: false,
+    knowledgeNotes: false,
     agents: false,
     agentLoops: false,
   });
@@ -439,17 +439,17 @@ export default function SettingsScreen({ navigation }: any) {
     }
   }, [settingsClient]);
 
-  // Fetch memories from desktop
-  const fetchMemories = useCallback(async () => {
+  // Fetch knowledge notes from desktop
+  const fetchKnowledgeNotes = useCallback(async () => {
     if (!settingsClient) return;
-    setIsLoadingMemories(true);
+    setIsLoadingKnowledgeNotes(true);
     try {
-      const res = await settingsClient.getMemories();
-      setMemories(res.memories);
+      const res = await settingsClient.getKnowledgeNotes();
+      setKnowledgeNotes(res.notes);
     } catch (error: any) {
-      console.error('[Settings] Failed to fetch memories:', error);
+      console.error('[Settings] Failed to fetch knowledge notes:', error);
     } finally {
-      setIsLoadingMemories(false);
+      setIsLoadingKnowledgeNotes(false);
     }
   }, [settingsClient]);
 
@@ -492,11 +492,11 @@ export default function SettingsScreen({ navigation }: any) {
   useEffect(() => {
     if (settingsClient && isDotAgentsServer) {
       fetchSkills();
-      fetchMemories();
+      fetchKnowledgeNotes();
       fetchAgentProfiles();
       fetchLoops();
     }
-  }, [settingsClient, isDotAgentsServer, fetchSkills, fetchMemories, fetchAgentProfiles, fetchLoops]);
+  }, [settingsClient, isDotAgentsServer, fetchSkills, fetchKnowledgeNotes, fetchAgentProfiles, fetchLoops]);
 
   // Refresh key remote data when returning from nested screens (e.g. agent editor)
   useEffect(() => {
@@ -505,23 +505,23 @@ export default function SettingsScreen({ navigation }: any) {
       fetchRemoteSettings();
       if (isDotAgentsServer) {
         fetchAgentProfiles();
-        fetchMemories();
+        fetchKnowledgeNotes();
         fetchLoops();
       }
     });
     return unsubscribe;
-  }, [navigation, settingsClient, isDotAgentsServer, fetchRemoteSettings, fetchAgentProfiles, fetchMemories, fetchLoops]);
+  }, [navigation, settingsClient, isDotAgentsServer, fetchRemoteSettings, fetchAgentProfiles, fetchKnowledgeNotes, fetchLoops]);
 
   // Handle pull-to-refresh
   const onRefresh = useCallback(async () => {
     setIsRefreshing(true);
     const fetches: Promise<void>[] = [fetchRemoteSettings()];
     if (isDotAgentsServer) {
-      fetches.push(fetchSkills(), fetchMemories(), fetchAgentProfiles(), fetchLoops());
+      fetches.push(fetchSkills(), fetchKnowledgeNotes(), fetchAgentProfiles(), fetchLoops());
     }
     await Promise.all(fetches);
     setIsRefreshing(false);
-  }, [isDotAgentsServer, fetchRemoteSettings, fetchSkills, fetchMemories, fetchAgentProfiles, fetchLoops]);
+  }, [isDotAgentsServer, fetchRemoteSettings, fetchSkills, fetchKnowledgeNotes, fetchAgentProfiles, fetchLoops]);
 
   // Handle profile switch
   const handleProfileSwitch = async (profileId: string) => {
@@ -724,25 +724,25 @@ export default function SettingsScreen({ navigation }: any) {
     );
   }, [confirmDestructiveAction, connectionManager, sessionStore]);
 
-  // Handle memory delete
-  const handleMemoryDelete = async (memoryId: string) => {
+  // Handle knowledge note delete
+  const handleKnowledgeNoteDelete = async (noteId: string) => {
     if (!settingsClient) return;
-    confirmDestructiveAction('Delete Memory', 'Are you sure you want to delete this memory?', async () => {
+    confirmDestructiveAction('Delete Note', 'Are you sure you want to delete this note?', async () => {
       try {
-        await settingsClient.deleteMemory(memoryId);
-        setMemories(prev => prev.filter(m => m.id !== memoryId));
+        await settingsClient.deleteKnowledgeNote(noteId);
+        setKnowledgeNotes(prev => prev.filter(note => note.id !== noteId));
       } catch (error: any) {
-        console.error('[Settings] Failed to delete memory:', error);
-        Alert.alert('Error', 'Failed to delete memory');
+        console.error('[Settings] Failed to delete knowledge note:', error);
+        Alert.alert('Error', 'Failed to delete note');
       }
     });
   };
 
-  // Navigate to memory edit screen
-  const handleMemoryEdit = useCallback((memory?: Memory) => {
-    navigation.navigate('MemoryEdit', {
-      memoryId: memory?.id,
-      memory,
+  // Navigate to knowledge note edit screen
+  const handleKnowledgeNoteEdit = useCallback((note?: KnowledgeNote) => {
+    navigation.navigate('KnowledgeNoteEdit', {
+      noteId: note?.id,
+      note,
     });
   }, [navigation]);
 
@@ -2428,60 +2428,55 @@ export default function SettingsScreen({ navigation }: any) {
               </CollapsibleSection>
             )}
 
-            {/* 4l. Memories */}
+            {/* 4l. Knowledge Notes */}
             {isDotAgentsServer && (
-              <CollapsibleSection id="memories" title="Memories">
-                {isLoadingMemories ? (
+              <CollapsibleSection id="knowledgeNotes" title="Knowledge Notes">
+                {isLoadingKnowledgeNotes ? (
                   <ActivityIndicator size="small" color={theme.colors.primary} />
-                ) : memories.length === 0 ? (
-                  <Text style={styles.helperText}>No memories saved</Text>
+                ) : knowledgeNotes.length === 0 ? (
+                  <Text style={styles.helperText}>No notes saved</Text>
                 ) : (
-                  memories.map((memory) => (
-                    <View key={memory.id} style={[styles.serverRow, { alignItems: 'flex-start' }]}>
+                  knowledgeNotes.map((note) => (
+                    <View key={note.id} style={[styles.serverRow, { alignItems: 'flex-start' }]}>
                       <TouchableOpacity
                         style={styles.agentInfoPressable}
-                        onPress={() => handleMemoryEdit(memory)}
+                        onPress={() => handleKnowledgeNoteEdit(note)}
                         activeOpacity={0.7}
                       >
                         <View style={[styles.serverInfo, { flex: 1 }]}> 
-                          <Text style={styles.serverName}>{memory.title}</Text>
-                          <Text style={styles.serverMeta} numberOfLines={2}>{memory.content}</Text>
+                          <Text style={styles.serverName}>{note.title}</Text>
+                          <Text style={styles.serverMeta} numberOfLines={2}>{note.summary || note.body}</Text>
                           <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 4 }}>
-                            {memory.tags.map((tag, idx) => (
+                            {note.tags.map((tag, idx) => (
                               <View key={idx} style={[styles.providerOption, { paddingHorizontal: 6, paddingVertical: 2, marginRight: 4, marginTop: 2 }]}>
                                 <Text style={[styles.providerOptionText, { fontSize: 10 }]}>{tag}</Text>
                               </View>
                             ))}
-                            <View style={[
-                              styles.providerOption,
-                              { paddingHorizontal: 6, paddingVertical: 2, marginRight: 4, marginTop: 2 },
-                              memory.importance === 'critical' && { backgroundColor: theme.colors.destructive },
-                              memory.importance === 'high' && { backgroundColor: theme.colors.primary },
-                            ]}>
-                              <Text style={[styles.providerOptionText, { fontSize: 10 }]}>{memory.importance}</Text>
+                            <View style={[styles.providerOption, { paddingHorizontal: 6, paddingVertical: 2, marginRight: 4, marginTop: 2 }]}>
+                              <Text style={[styles.providerOptionText, { fontSize: 10 }]}>{note.context}</Text>
                             </View>
                           </View>
                         </View>
                       </TouchableOpacity>
                       <TouchableOpacity
-                        style={styles.memoryDeleteButton}
-                        onPress={() => handleMemoryDelete(memory.id)}
-                        accessibilityLabel={`Delete memory ${memory.title}`}
+                        style={styles.noteDeleteButton}
+                        onPress={() => handleKnowledgeNoteDelete(note.id)}
+                        accessibilityLabel={`Delete note ${note.title}`}
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       >
-                        <Text style={styles.memoryDeleteButtonText}>Delete</Text>
+                        <Text style={styles.noteDeleteButtonText}>Delete</Text>
                       </TouchableOpacity>
                     </View>
                   ))
                 )}
                 <TouchableOpacity
                   style={styles.createAgentButton}
-                  onPress={() => handleMemoryEdit()}
+                  onPress={() => handleKnowledgeNoteEdit()}
                 >
-                  <Text style={styles.createAgentButtonText}>+ Create Memory</Text>
+                  <Text style={styles.createAgentButtonText}>+ Create Note</Text>
                 </TouchableOpacity>
                 <Text style={styles.helperText}>
-                  Tap a memory to edit or create a new one
+                  Tap a note to edit it or create a new one. Canonical note fields are title, context, summary, body, tags, and references.
                 </Text>
               </CollapsibleSection>
             )}
@@ -3499,7 +3494,7 @@ function createStyles(theme: ReturnType<typeof useTheme>['theme']) {
       fontSize: 12,
       fontWeight: '500',
     },
-    memoryDeleteButton: {
+    noteDeleteButton: {
       ...createMinimumTouchTargetStyle({
         minSize: 44,
         horizontalPadding: spacing.sm,
@@ -3508,7 +3503,7 @@ function createStyles(theme: ReturnType<typeof useTheme>['theme']) {
       }),
       alignSelf: 'flex-start',
     },
-    memoryDeleteButtonText: {
+    noteDeleteButtonText: {
       color: theme.colors.destructive,
       fontSize: 12,
       fontWeight: '500',

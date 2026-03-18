@@ -59,25 +59,25 @@ function SummaryCard({
 }) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
-  const [isSaved, setIsSaved] = useState(summary.savedToMemory ?? false)
+  const [isSavedToKnowledgeNote, setIsSavedToKnowledgeNote] = useState(summary.savedToKnowledgeNote ?? false)
   
-  const handleSaveToMemory = async () => {
-    if (isSaving || isSaved) return
+  const handleSaveAsKnowledgeNote = async () => {
+    if (isSaving || isSavedToKnowledgeNote) return
     
     setIsSaving(true)
     try {
-      const result = await tipcClient.saveMemoryFromSummary({
+      const result = await tipcClient.saveKnowledgeNoteFromSummary({
         summary,
         conversationTitle,
         conversationId,
       })
       
-      if (result.success && result.memory) {
-        setIsSaved(true)
+      if (result.success && result.note) {
+        setIsSavedToKnowledgeNote(true)
         onSaved?.(summary)
       }
     } catch (error) {
-      console.error("Failed to save memory:", error)
+      console.error("Failed to save knowledge note:", error)
     } finally {
       setIsSaving(false)
     }
@@ -137,29 +137,29 @@ function SummaryCard({
 
         {/* Save button */}
         <Button
-          variant={isSaved ? "ghost" : "outline"}
+          variant={isSavedToKnowledgeNote ? "ghost" : "outline"}
           size="sm"
           className={cn(
             "ml-auto shrink-0 gap-1.5 self-start",
-            isSaved && "text-green-600 dark:text-green-400"
+            isSavedToKnowledgeNote && "text-green-600 dark:text-green-400"
           )}
           onClick={(e) => {
             e.stopPropagation()
-            handleSaveToMemory()
+            handleSaveAsKnowledgeNote()
           }}
-          disabled={isSaving || isSaved}
+          disabled={isSaving || isSavedToKnowledgeNote}
         >
           {isSaving ? (
             <Loader2 className="h-4 w-4 animate-spin" />
-          ) : isSaved ? (
+          ) : isSavedToKnowledgeNote ? (
             <>
               <CheckCircle className="h-4 w-4" />
-              Saved
+              Saved note
             </>
           ) : (
             <>
               <Save className="h-4 w-4" />
-              Save
+              Save note
             </>
           )}
         </Button>

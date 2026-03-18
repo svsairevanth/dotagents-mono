@@ -29,7 +29,7 @@ All data is stored **exclusively** on your local machine:
 | MCP Configs | Local JSON files |
 | Voice Recordings | Local audio files |
 | Agent Profiles | `.agents/` directory |
-| Memories | `.agents/memories/` directory |
+| Knowledge Notes | `.agents/knowledge/` directory |
 
 ## Third-Party Services
 

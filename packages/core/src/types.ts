@@ -18,21 +18,20 @@ export type { ModelPreset } from '@dotagents/shared'
 export type Config = Record<string, any>
 
 // ============================================================================
-// Agent Memory
+// Knowledge Note
 // ============================================================================
-export interface AgentMemory {
+export type KnowledgeNoteContext = "auto" | "search-only"
+
+export interface KnowledgeNote {
   id: string
-  createdAt: number
-  updatedAt: number
-  sessionId?: string
-  conversationId?: string
-  conversationTitle?: string
   title: string
-  content: string
+  context: KnowledgeNoteContext
+  updatedAt: number
   tags: string[]
-  importance: "low" | "medium" | "high" | "critical"
-  keyFindings?: string[]
-  userNotes?: string
+  body: string
+  summary?: string
+  createdAt?: number
+  references?: string[]
 }
 
 // ============================================================================

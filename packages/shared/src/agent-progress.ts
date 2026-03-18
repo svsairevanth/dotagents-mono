@@ -115,15 +115,15 @@ export interface AgentStepSummary {
   actionSummary: string
 
   /**
-   * Durable memory candidates extracted from this step.
+   * Durable note candidates extracted from this step.
    * These should be reusable in future sessions (preferences, constraints,
    * decisions, facts, insights), NOT step-by-step telemetry.
    */
-  memoryCandidates?: string[]
+  noteCandidates?: string[]
 
   // --- Desktop-specific metadata ---
   importance?: 'low' | 'medium' | 'high' | 'critical'
-  savedToMemory?: boolean
+  savedToKnowledgeNote?: boolean
   userNotes?: string
   tags?: string[]
 

@@ -25,8 +25,6 @@ export type {
   PushStatusResponse,
   Skill,
   SkillsResponse,
-  Memory,
-  MemoriesResponse,
   AgentProfileCreateRequest,
   AgentProfileUpdateRequest,
   Loop,
@@ -60,8 +58,6 @@ import type {
   PushStatusResponse,
   Skill,
   SkillsResponse,
-  Memory,
-  MemoriesResponse,
   ApiAgentProfile,
   ApiAgentProfileFull,
   ApiAgentProfilesResponse,
@@ -74,21 +70,45 @@ import type {
 // ModelPreset — re-exported from shared package (single source of truth)
 export type { ModelPreset } from '@dotagents/shared';
 
-export type MemoryImportance = 'low' | 'medium' | 'high' | 'critical';
+export type KnowledgeNoteContext = 'auto' | 'search-only';
 
-export interface MemoryCreateRequest {
+export interface KnowledgeNote {
+  id: string;
   title: string;
-  content: string;
-  importance: MemoryImportance;
+  body: string;
+  context: KnowledgeNoteContext;
+  summary?: string;
   tags: string[];
+  references?: string[];
+  createdAt?: number;
+  updatedAt: number;
 }
 
-export interface MemoryUpdateRequest {
+export interface KnowledgeNotesResponse {
+  notes: KnowledgeNote[];
+}
+
+export interface KnowledgeNoteResponse {
+  note: KnowledgeNote;
+}
+
+export interface KnowledgeNoteCreateRequest {
+  id?: string;
   title?: string;
-  content?: string;
-  importance?: MemoryImportance;
+  body: string;
+  summary?: string;
+  context?: KnowledgeNoteContext;
   tags?: string[];
-  notes?: string;
+  references?: string[];
+}
+
+export interface KnowledgeNoteUpdateRequest {
+  title?: string;
+  body?: string;
+  summary?: string;
+  context?: KnowledgeNoteContext;
+  tags?: string[];
+  references?: string[];
 }
 
 export interface LoopCreateRequest {
@@ -258,30 +278,33 @@ export class ExtendedSettingsApiClient extends SettingsApiClient {
   }
 
   // ============================================
-  // Memories Management
+  // Knowledge Notes Management
   // ============================================
 
-  async getMemories(profileId?: string): Promise<MemoriesResponse> {
-    const query = profileId ? `?profileId=${encodeURIComponent(profileId)}` : '';
-    return this.request<MemoriesResponse>(`/memories${query}`);
+  async getKnowledgeNotes(): Promise<KnowledgeNotesResponse> {
+    return this.request<KnowledgeNotesResponse>('/knowledge/notes');
   }
 
-  async createMemory(data: MemoryCreateRequest): Promise<{ memory: Memory }> {
-    return this.request<{ memory: Memory }>('/memories', {
+  async getKnowledgeNote(id: string): Promise<KnowledgeNoteResponse> {
+    return this.request<KnowledgeNoteResponse>(`/knowledge/notes/${encodeURIComponent(id)}`);
+  }
+
+  async createKnowledgeNote(data: KnowledgeNoteCreateRequest): Promise<KnowledgeNoteResponse> {
+    return this.request<KnowledgeNoteResponse>('/knowledge/notes', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateMemory(id: string, data: MemoryUpdateRequest): Promise<{ success: boolean; memory: Memory }> {
-    return this.request<{ success: boolean; memory: Memory }>(`/memories/${encodeURIComponent(id)}`, {
+  async updateKnowledgeNote(id: string, data: KnowledgeNoteUpdateRequest): Promise<{ success: boolean; note: KnowledgeNote }> {
+    return this.request<{ success: boolean; note: KnowledgeNote }>(`/knowledge/notes/${encodeURIComponent(id)}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
     });
   }
 
-  async deleteMemory(id: string): Promise<{ success: boolean; id: string }> {
-    return this.request(`/memories/${encodeURIComponent(id)}`, {
+  async deleteKnowledgeNote(id: string): Promise<{ success: boolean; id: string }> {
+    return this.request(`/knowledge/notes/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     });
   }

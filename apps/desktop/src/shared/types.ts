@@ -3,6 +3,7 @@ import type { ToolCall, ToolResult, AgentConversationState } from '@dotagents/sh
 
 export type { ToolCall, ToolResult, BaseChatMessage, ConversationHistoryMessage, ChatApiResponse, AgentConversationState } from '@dotagents/shared'
 export type { AgentProgressUpdate, AgentProgressStep, ACPSubAgentMessage, ACPDelegationProgress, ACPDelegationState, ACPConfigOption, ACPConfigOptionValue, AgentStepSummary, OnProgressCallback } from '@dotagents/shared'
+export type { KnowledgeNote, KnowledgeNoteContext } from '@dotagents/core'
 
 export type RecordingHistoryItem = {
   id: string
@@ -135,30 +136,6 @@ export interface DualModelConfig {
 }
 
 // AgentStepSummary — re-exported from @dotagents/shared (see above)
-
-// Memory entry (saved from summaries)
-export interface AgentMemory {
-  id: string
-  createdAt: number
-  updatedAt: number
-
-  // Source info
-  sessionId?: string
-  conversationId?: string
-  conversationTitle?: string
-
-  // Content - single line, ultra compact
-  title: string
-  content: string             // Single line memory
-
-  // Organization
-  tags: string[]
-  importance: "low" | "medium" | "high" | "critical"
-
-  // Legacy/optional fields
-  keyFindings?: string[]      // Deprecated, kept for backward compatibility
-  userNotes?: string
-}
 
 // Message Queue Types — re-exported from shared package
 export type { QueuedMessage, MessageQueue } from '@dotagents/shared'

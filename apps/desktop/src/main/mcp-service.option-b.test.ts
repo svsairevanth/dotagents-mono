@@ -9,8 +9,8 @@ const mockExecuteBuiltinTool = vi.fn(async (name: string) => ({ content: [{ type
 
 const builtinTools = [
   { name: "dotagents-builtin:mark_work_complete", description: "essential", inputSchema: {} },
-  { name: "dotagents-builtin:save_memory", description: "save", inputSchema: {} },
-  { name: "dotagents-builtin:list_memories", description: "list", inputSchema: {} },
+  { name: "dotagents-builtin:save_note", description: "save", inputSchema: {} },
+  { name: "dotagents-builtin:list_notes", description: "list", inputSchema: {} },
 ]
 
 vi.mock("electron", () => ({ app: { getPath: vi.fn(() => "/tmp"), getAppPath: vi.fn(() => "/tmp/app") }, dialog: { showMessageBox: vi.fn(async () => ({ response: 0 })) } }))
@@ -51,7 +51,7 @@ describe("MCPService Option B (builtin allowlist)", () => {
   })
 
   it("ignores built-in entries in persisted mcpDisabledTools", async () => {
-    currentConfig.mcpDisabledTools = ["dotagents-builtin:save_memory", "server:external_tool"]
+    currentConfig.mcpDisabledTools = ["dotagents-builtin:save_note", "server:external_tool"]
     const { mcpService } = await import("./mcp-service")
     expect(mcpService.getDisabledTools()).toEqual(["server:external_tool"])
   })
@@ -60,7 +60,7 @@ describe("MCPService Option B (builtin allowlist)", () => {
     const { mcpService } = await import("./mcp-service")
     mockConfigSave.mockClear()
 
-    mcpService.applyProfileMcpConfig(undefined, ["dotagents-builtin:list_memories", "server:external_tool"], false, undefined, undefined)
+    mcpService.applyProfileMcpConfig(undefined, ["dotagents-builtin:list_notes", "server:external_tool"], false, undefined, undefined)
 
     expect(mcpService.getDisabledTools()).toEqual(["server:external_tool"])
     expect(mockConfigSave).toHaveBeenCalledWith(
@@ -71,17 +71,17 @@ describe("MCPService Option B (builtin allowlist)", () => {
   it("getAvailableTools filters builtin tools by enabledBuiltinTools allowlist (essential always included)", async () => {
     const { mcpService } = await import("./mcp-service")
 
-    mcpService.applyProfileMcpConfig(undefined, undefined, false, undefined, ["dotagents-builtin:save_memory"])
+    mcpService.applyProfileMcpConfig(undefined, undefined, false, undefined, ["dotagents-builtin:save_note"])
 
     expect(mcpService.getAvailableTools().map((t) => t.name)).toEqual([
       "dotagents-builtin:mark_work_complete",
-      "dotagents-builtin:save_memory",
+      "dotagents-builtin:save_note",
     ])
 
     const detailed = mcpService.getDetailedToolList()
     expect(detailed.find((t) => t.name === "dotagents-builtin:mark_work_complete")?.enabled).toBe(true)
-    expect(detailed.find((t) => t.name === "dotagents-builtin:save_memory")?.enabled).toBe(true)
-    expect(detailed.find((t) => t.name === "dotagents-builtin:list_memories")?.enabled).toBe(false)
+    expect(detailed.find((t) => t.name === "dotagents-builtin:save_note")?.enabled).toBe(true)
+    expect(detailed.find((t) => t.name === "dotagents-builtin:list_notes")?.enabled).toBe(false)
   })
 
   it("setToolEnabled(builtin) updates allowlist and auto-saves to profile without touching mcpDisabledTools", async () => {
@@ -89,7 +89,7 @@ describe("MCPService Option B (builtin allowlist)", () => {
     mockConfigSave.mockClear()
     mockSaveCurrentMcpStateToProfile.mockClear()
 
-    expect(mcpService.setToolEnabled("dotagents-builtin:list_memories", false)).toBe(true)
+    expect(mcpService.setToolEnabled("dotagents-builtin:list_notes", false)).toBe(true)
     expect(mockConfigSave).not.toHaveBeenCalled()
 
     await flushPromises()
@@ -97,7 +97,7 @@ describe("MCPService Option B (builtin allowlist)", () => {
     const enabledBuiltinTools = mockSaveCurrentMcpStateToProfile.mock.calls[0][4] as string[]
     expect(enabledBuiltinTools).toEqual([
       "dotagents-builtin:mark_work_complete",
-      "dotagents-builtin:save_memory",
+      "dotagents-builtin:save_note",
     ])
   })
 
@@ -105,10 +105,10 @@ describe("MCPService Option B (builtin allowlist)", () => {
     const { mcpService } = await import("./mcp-service")
     mockExecuteBuiltinTool.mockClear()
 
-    mcpService.applyProfileMcpConfig(undefined, undefined, false, undefined, ["dotagents-builtin:save_memory"])
+    mcpService.applyProfileMcpConfig(undefined, undefined, false, undefined, ["dotagents-builtin:save_note"])
 
     const denied = await mcpService.executeToolCall(
-      { name: "dotagents-builtin:list_memories", arguments: {} } as any,
+      { name: "dotagents-builtin:list_notes", arguments: {} } as any,
       undefined,
       true,
     )

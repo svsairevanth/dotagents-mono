@@ -9,7 +9,7 @@ export interface BundleComponentSelectionState {
   mcpServers: boolean
   skills: boolean
   repeatTasks: boolean
-  memories: boolean
+  knowledgeNotes: boolean
 }
 
 export interface BundleDetailedSelectionState {
@@ -17,7 +17,7 @@ export interface BundleDetailedSelectionState {
   mcpServerNames: string[]
   skillIds: string[]
   repeatTaskIds: string[]
-  memoryIds: string[]
+  knowledgeNoteIds: string[]
 }
 
 export interface BundleExportableAgentProfile {
@@ -49,10 +49,11 @@ export interface BundleExportableRepeatTask {
   enabled: boolean
 }
 
-export interface BundleExportableMemory {
+export interface BundleExportableKnowledgeNote {
   id: string
   title: string
-  importance: "low" | "medium" | "high" | "critical"
+  context: "auto" | "search-only"
+  summary?: string
 }
 
 export interface BundleExportableItems {
@@ -60,7 +61,7 @@ export interface BundleExportableItems {
   mcpServers: BundleExportableMCPServer[]
   skills: BundleExportableSkill[]
   repeatTasks: BundleExportableRepeatTask[]
-  memories: BundleExportableMemory[]
+  knowledgeNotes: BundleExportableKnowledgeNote[]
 }
 
 export const DEFAULT_EXPORT_COMPONENTS: BundleComponentSelectionState = {
@@ -68,7 +69,7 @@ export const DEFAULT_EXPORT_COMPONENTS: BundleComponentSelectionState = {
   mcpServers: true,
   skills: true,
   repeatTasks: true,
-  memories: true,
+  knowledgeNotes: true,
 }
 
 export const EMPTY_BUNDLE_SELECTION: BundleDetailedSelectionState = {
@@ -76,7 +77,7 @@ export const EMPTY_BUNDLE_SELECTION: BundleDetailedSelectionState = {
   mcpServerNames: [],
   skillIds: [],
   repeatTaskIds: [],
-  memoryIds: [],
+  knowledgeNoteIds: [],
 }
 
 export function createDetailedBundleSelection(items: BundleExportableItems): BundleDetailedSelectionState {
@@ -85,7 +86,7 @@ export function createDetailedBundleSelection(items: BundleExportableItems): Bun
     mcpServerNames: items.mcpServers.map((item) => item.name),
     skillIds: items.skills.map((item) => item.id),
     repeatTaskIds: items.repeatTasks.map((item) => item.id),
-    memoryIds: items.memories.map((item) => item.id),
+    knowledgeNoteIds: items.knowledgeNotes.map((item) => item.id),
   }
 }
 
@@ -325,14 +326,14 @@ export function BundleDetailedSelectionCard({
           })}
 
           {renderSection({
-            componentKey: "memories",
-            selectionKey: "memoryIds",
-            label: "Memories",
-            description: "Memory content and notes.",
-            items: items.memories,
+            componentKey: "knowledgeNotes",
+            selectionKey: "knowledgeNoteIds",
+            label: "Knowledge notes",
+            description: "Knowledge note content and notes.",
+            items: items.knowledgeNotes,
             getId: (item) => item.id,
             getPrimary: (item) => item.title,
-            getSecondary: (item) => item.importance,
+            getSecondary: (item) => item.summary || item.context,
           })}
 
           {warnings.length > 0 && (

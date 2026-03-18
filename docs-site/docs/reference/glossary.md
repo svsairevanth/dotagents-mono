@@ -21,10 +21,11 @@ Key terms and definitions used throughout DotAgents.
 | **Dictation Mode** | Voice mode that transcribes speech and inserts text into the active application. |
 | **Elicitation** | MCP 2025 protocol feature where a server requests additional input from the user during tool execution. |
 | **Emergency Stop** | `Ctrl+Shift+Escape` — immediately aborts all active agent sessions and tool executions. |
-| **Frontmatter** | YAML-like metadata at the top of markdown files, delimited by `---`. Used in skills, memories, and agent profiles. |
+| **Frontmatter** | Simple `key: value` metadata at the top of markdown files, delimited by `---`. Used in skills, notes, and agent profiles. It is not full YAML. |
 | **Global Layer** | The `~/.agents/` directory — personal agent config shared across all projects. |
 | **Guidelines** | Additional behavioral rules in an agent profile, supplementing the system prompt. |
 | **Hands-Free Mode** | Voice Activity Detection (VAD) mode on mobile — listens and sends automatically without button presses. |
+| **Knowledge** | The mixed-content workspace under `.agents/knowledge/` that stores notes and note-local assets. |
 | **Kill Switch** | Emergency stop mechanism. Same as Emergency Stop. |
 | **Langfuse** | Open-source LLM observability platform. Optional integration for tracing and debugging. |
 | **LLM** | Large Language Model — the AI model that powers agent reasoning (e.g., GPT-4o, Llama 3). |
@@ -32,7 +33,7 @@ Key terms and definitions used throughout DotAgents.
 | **MCP** | Model Context Protocol — Anthropic's open standard for connecting AI models to tools and resources. |
 | **MCP Client** | The side that calls tools. DotAgents is an MCP client. |
 | **MCP Server** | An external process or endpoint that exposes tools. Connects via stdio, WebSocket, or HTTP. |
-| **Memory** | Persistent context stored in `.agents/memories/` that persists across sessions. |
+| **Note** | A markdown knowledge item stored canonically at `.agents/knowledge/<slug>/<slug>.md`. |
 | **Panel Mode** | Compact floating window mode for the desktop app. |
 | **Parakeet** | Local ONNX-based speech recognition model. No API key required. |
 | **Remote Server** | Fastify HTTP server in the desktop app that mobile and external clients connect to. |
@@ -45,6 +46,7 @@ Key terms and definitions used throughout DotAgents.
 | **Tool Approval** | User confirmation required before a tool executes. Configurable per-agent and per-tool. |
 | **TTS** | Text-to-Speech — converting text to spoken audio. Providers: OpenAI, Groq, Gemini, Kitten, Supertonic. |
 | **VAD** | Voice Activity Detection — automatically detects when the user starts and stops speaking. |
+| **Working Note** | A note with `context: auto`, making it eligible for automatic runtime injection. |
 | **Workspace Layer** | The `./.agents/` directory in a project — overrides global config for that project. |
 
 ---

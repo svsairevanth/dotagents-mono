@@ -21,7 +21,7 @@
 
 ---
 
-DotAgents gives you a team of AI specialists — each with memory, skills, and tools — controlled by your voice. Built on the `.agents` open standard, so your skills work across Claude Code, Cursor, Codex, and every tool adopting the protocol.
+DotAgents gives you a team of AI specialists — each with knowledge, skills, and tools — controlled by your voice. Built on the `.agents` open standard, so your skills work across Claude Code, Cursor, Codex, and every tool adopting the protocol.
 
 ## Preview
 
@@ -40,7 +40,7 @@ DotAgents is three things:
 
 **1. An App** — A voice-first AI agent interface. Hold to speak, release to act. Your agents listen, think, and execute tools on your behalf.
 
-**2. The `.agents` Protocol** — An open standard for agent skills, memories, and commands. Define your skills once in `.agents/`, and they work across Claude Code, Cursor, OpenCode, and any tool that adopts the protocol.
+**2. The `.agents` Protocol** — An open standard for agent skills, knowledge notes, and commands. Define your skills once in `.agents/`, and they work across Claude Code, Cursor, OpenCode, and any tool that adopts the protocol.
 
 **3. Agent Skills** — Reusable capabilities your agents can learn. Skills are portable, shareable, and composable — not locked into any single tool or vendor.
 
@@ -49,7 +49,7 @@ DotAgents is three things:
 | Concept | Description |
 |---------|-------------|
 | **Skills** | Portable agent capabilities defined in `.agents/skills/`. Works across tools. |
-| **Memory** | Persistent agent context stored in `.agents/memory/`. Agents remember across sessions. |
+| **Knowledge notes** | Persistent agent context stored in `.agents/knowledge/`. Agents retain note-based context across sessions. |
 | **Agent Profiles** | Specialized AI personas with distinct skills and tools. Delegate tasks to the right agent. |
 | **Voice Interface** | Hold-to-record, 30+ languages, auto-insert results into any app. Voice is the primary interface. |
 | **MCP Tools** | Model Context Protocol integration for tool execution, OAuth 2.1 auth, and real-time progress. |
@@ -62,7 +62,7 @@ The `.agents/` directory is an open standard for agent configuration that works 
 ```
 .agents/
 ├── skills/          # Reusable agent capabilities
-├── memory/          # Persistent context across sessions
+├── knowledge/       # Persistent note context across sessions
 ├── commands/        # Custom agent commands
 └── config.yaml      # Agent profiles and settings
 ```
@@ -103,7 +103,7 @@ Skills you define for DotAgents work in Claude Code, Cursor, Codex, and any tool
 |----------|--------------|
 | **Voice** | Hold-to-record, 30+ languages, Fn toggle mode, auto-insert to any app |
 | **TTS** | 50+ AI voices via OpenAI, Groq, and Gemini with auto-play |
-| **Multi-Agent** | Agent profiles, skill-based delegation, persistent memory, ACP coordination |
+| **Multi-Agent** | Agent profiles, skill-based delegation, persistent knowledge, ACP coordination |
 | **MCP Tools** | Tool execution, OAuth 2.1 auth, real-time progress, conversation context |
 | **Observability** | [Langfuse](https://langfuse.com/) integration for LLM tracing, token usage, and debugging |
 | **Platform** | macOS/Windows/Linux, rate limit handling, multi-provider AI |
@@ -165,7 +165,7 @@ dotagents-mono/
 ├── packages/
 │   └── shared/      # Shared utilities, types, and constants
 ├── website/         # Static marketing site for dotagents.app
-└── .agents/         # The open standard — skills, memory, commands
+└── .agents/         # The open standard — skills, knowledge notes, commands
 ```
 
 ## Contributing

@@ -28,7 +28,7 @@ dotagents-mono/
 │   │   │   │   ├── builtin-tools.ts          # Built-in tool handlers (1600+ lines)
 │   │   │   │   ├── config.ts                 # Config persistence (700+ lines)
 │   │   │   │   ├── conversation-service.ts   # Conversation storage
-│   │   │   │   ├── memory-service.ts         # Memory management
+│   │   │   │   ├── knowledge-notes-service.ts # Knowledge note management
 │   │   │   │   ├── oauth-client.ts           # OAuth 2.1 client
 │   │   │   │   ├── langfuse-service.ts       # Langfuse integration
 │   │   │   │   ├── bundle-service.ts         # Agent bundle export/import
@@ -36,7 +36,7 @@ dotagents-mono/
 │   │   │   │   │   ├── modular-config.ts     # Layered config loading
 │   │   │   │   │   ├── agent-profiles.ts     # Profile file parsing
 │   │   │   │   │   ├── skills.ts             # Skill file parsing
-│   │   │   │   │   ├── memories.ts           # Memory file parsing
+│   │   │   │   │   ├── knowledge-notes.ts    # Knowledge note file parsing
 │   │   │   │   │   ├── frontmatter.ts        # Frontmatter parser
 │   │   │   │   │   └── safe-file.ts          # Atomic file I/O
 │   │   │   │   ├── acp/                      # ACP protocol implementation
@@ -88,7 +88,7 @@ dotagents-mono/
 The heart of DotAgents. Manages the agent loop:
 
 1. Receives user input (text or transcribed voice)
-2. Builds message array with system prompt, skills, memories, conversation history
+2. Builds message array with system prompt, skills, working notes, conversation history
 3. Calls AI provider via Vercel AI SDK
 4. Processes response — text or tool calls
 5. If tool calls: executes via MCP service, feeds results back
@@ -200,7 +200,7 @@ apps/desktop/src/shared/types.ts
   ├── OAuthConfig, OAuthTokens
   ├── AgentProfile, AgentProfileConnection, AgentProfileToolConfig
   ├── AgentSkill, AgentSkillsData
-  ├── AgentMemory
+  ├── KnowledgeNote
   └── Config (main app config)
 
 apps/desktop/src/main/agents-files/
@@ -229,7 +229,7 @@ apps/desktop/src/main/acp/types.ts
 | `settings-agents.tsx` | `/settings/agents` | Agent profiles |
 | `settings-loops.tsx` | `/settings/loops` | Recurring tasks |
 | `settings-whatsapp.tsx` | `/settings/whatsapp` | WhatsApp config |
-| `memories.tsx` | `/memories` | Memory management |
+| `knowledge.tsx` | `/knowledge` | Knowledge note management |
 | `onboarding.tsx` | `/onboarding` | First-time setup |
 
 ### State Management

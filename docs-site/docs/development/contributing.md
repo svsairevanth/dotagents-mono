@@ -81,7 +81,7 @@ Tests use **Vitest**. Write tests for:
 - Service logic
 - Utility functions
 - Component behavior
-- Protocol parsing (frontmatter, skill files, memory files)
+- Protocol parsing (frontmatter, skill files, knowledge note files)
 
 ## Areas for Contribution
 

@@ -516,7 +516,7 @@ export function Component() {
 
         <ControlGroup title="Advanced Agent Models" collapsible>
           <Control
-            label={<ControlLabel label="Enable summarization model" tooltip="Use a separate model for UI and memory summaries." />}
+            label={<ControlLabel label="Enable summarization model" tooltip="Use a separate model for UI and knowledge-note summaries." />}
             className="px-3"
           >
             <Switch checked={dualModelEnabled} onCheckedChange={(checked) => saveConfig({ dualModelEnabled: checked })} />

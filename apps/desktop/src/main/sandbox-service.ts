@@ -76,7 +76,7 @@ const SNAPSHOT_ITEMS = [
   "agents",
   "tasks",
   "skills",
-  "memories",
+  "knowledge",
 ]
 
 // Directories that should not be included in snapshots

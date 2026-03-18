@@ -19,7 +19,7 @@ Built with Expo SDK 54 and React Native, the mobile app provides a portable inte
 - Text chat with streaming responses
 - Text-to-speech for assistant replies
 - Agent profile management
-- Memory editing
+- Knowledge note editing
 - Loop (recurring task) scheduling
 - Session history with search
 - QR code connection setup
@@ -86,14 +86,14 @@ Create and configure agent profiles directly on mobile:
 - Configure guidelines and properties
 - Select available tools
 
-### Memory Edit Screen
+### Knowledge Note Edit Screen
 
-Manage agent memories from your phone:
+Manage durable knowledge notes from your phone:
 
-- View existing memories
-- Create new memory entries
-- Edit memory content, importance, and tags
-- Delete outdated memories
+- View existing knowledge notes
+- Create new notes
+- Edit note context, summary, body, tags, and references
+- Delete outdated notes
 
 ### Loop Edit Screen
 

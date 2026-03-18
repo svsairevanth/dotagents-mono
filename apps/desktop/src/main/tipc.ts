@@ -554,7 +554,7 @@ export async function runAgentLoopSession(
   return processWithAgentMode(text, conversationId, existingSessionId, true)
 }
 import { diagnosticsService } from "./diagnostics"
-import { memoryService } from "./memory-service"
+import { knowledgeNotesService } from "./knowledge-notes-service"
 import { summarizationService } from "./summarization-service"
 import { updateTrayIcon } from "./tray"
 import { isAccessibilityGranted } from "./utils"
@@ -622,9 +622,9 @@ async function refreshRuntimeAfterBundleImport(): Promise<void> {
   }
 
   try {
-    await memoryService.reload()
+    await knowledgeNotesService.reload()
   } catch (error) {
-    logApp("[tipc] Failed to reload memories after bundle load", { error })
+    logApp("[tipc] Failed to reload knowledge notes after bundle load", { error })
   }
 
   try {
@@ -687,7 +687,7 @@ type BundleConflictMap = {
   mcpServers: BundleConflictItem[]
   skills: BundleConflictItem[]
   repeatTasks: BundleConflictItem[]
-  memories: BundleConflictItem[]
+  knowledgeNotes: BundleConflictItem[]
 }
 
 type BundleConflictPreview = {
@@ -700,7 +700,7 @@ const BUNDLE_CONFLICT_KEYS: Array<keyof BundleConflictMap> = [
   "mcpServers",
   "skills",
   "repeatTasks",
-  "memories",
+  "knowledgeNotes",
 ]
 
 function mergeConflictItems(
@@ -732,7 +732,7 @@ function mergeConflictMaps(
     mcpServers: [],
     skills: [],
     repeatTasks: [],
-    memories: [],
+    knowledgeNotes: [],
   }
 
   for (const key of BUNDLE_CONFLICT_KEYS) {
@@ -2294,8 +2294,8 @@ export const router = {
   getAgentsFolders: t.procedure.action(async () => {
     const { globalAgentsFolder, resolveWorkspaceAgentsFolder } = await import("./config")
     const { getAgentsLayerPaths } = await import("./agents-files/modular-config")
+    const { getAgentsKnowledgeDir } = await import("./agents-files/knowledge-notes")
     const { getAgentsSkillsDir } = await import("./agents-files/skills")
-    const { getAgentsMemoriesDir } = await import("./agents-files/memories")
 
     const globalLayer = getAgentsLayerPaths(globalAgentsFolder)
     const workspaceAgentsFolder = resolveWorkspaceAgentsFolder()
@@ -2309,13 +2309,15 @@ export const router = {
       global: {
         agentsDir: globalLayer.agentsDir,
         skillsDir: getAgentsSkillsDir(globalLayer),
-        memoriesDir: getAgentsMemoriesDir(globalLayer),
+        knowledgeDir: getAgentsKnowledgeDir(globalLayer),
+        memoriesDir: getAgentsKnowledgeDir(globalLayer),
       },
       workspace: workspaceLayer
         ? {
             agentsDir: workspaceLayer.agentsDir,
             skillsDir: getAgentsSkillsDir(workspaceLayer),
-            memoriesDir: getAgentsMemoriesDir(workspaceLayer),
+            knowledgeDir: getAgentsKnowledgeDir(workspaceLayer),
+            memoriesDir: getAgentsKnowledgeDir(workspaceLayer),
           }
         : null,
       workspaceSource,
@@ -2387,22 +2389,22 @@ export const router = {
     return revealFileInFolder(targetLayer.agentsMdPath)
   }),
 
-  openMemoriesFolder: t.procedure.action(async () => {
+  openKnowledgeFolder: t.procedure.action(async () => {
     const { globalAgentsFolder } = await import("./config")
-    const memoriesDir = path.join(globalAgentsFolder, "memories")
-    fs.mkdirSync(memoriesDir, { recursive: true })
-    const error = await shell.openPath(memoriesDir)
+    const knowledgeDir = path.join(globalAgentsFolder, "knowledge")
+    fs.mkdirSync(knowledgeDir, { recursive: true })
+    const error = await shell.openPath(knowledgeDir)
     return { success: !error, error: error || undefined }
   }),
 
-  openWorkspaceMemoriesFolder: t.procedure.action(async () => {
+  openWorkspaceKnowledgeFolder: t.procedure.action(async () => {
     const { resolveWorkspaceAgentsFolder } = await import("./config")
     const workspaceAgentsFolder = resolveWorkspaceAgentsFolder()
     if (!workspaceAgentsFolder) return { success: false, error: "No workspace .agents folder detected" }
 
-    const memoriesDir = path.join(workspaceAgentsFolder, "memories")
-    fs.mkdirSync(memoriesDir, { recursive: true })
-    const error = await shell.openPath(memoriesDir)
+    const knowledgeDir = path.join(workspaceAgentsFolder, "knowledge")
+    fs.mkdirSync(knowledgeDir, { recursive: true })
+    const error = await shell.openPath(knowledgeDir)
     return { success: !error, error: error || undefined }
   }),
 
@@ -4613,13 +4615,13 @@ export const router = {
       mcpServerNames?: string[]
       skillIds?: string[]
       repeatTaskIds?: string[]
-      memoryIds?: string[]
+      knowledgeNoteIds?: string[]
       components?: {
         agentProfiles?: boolean
         mcpServers?: boolean
         skills?: boolean
         repeatTasks?: boolean
-        memories?: boolean
+        knowledgeNotes?: boolean
       }
     } | undefined>()
     .action(async ({ input }) => {
@@ -4634,7 +4636,7 @@ export const router = {
         mcpServerNames: input?.mcpServerNames,
         skillIds: input?.skillIds,
         repeatTaskIds: input?.repeatTaskIds,
-        memoryIds: input?.memoryIds,
+        knowledgeNoteIds: input?.knowledgeNoteIds,
         components: input?.components,
       }
 
@@ -4670,13 +4672,13 @@ export const router = {
         mcpServers?: boolean
         skills?: boolean
         repeatTasks?: boolean
-        memories?: boolean
+        knowledgeNotes?: boolean
       }
       agentProfileIds?: string[]
       mcpServerNames?: string[]
       skillIds?: string[]
       repeatTaskIds?: string[]
-      memoryIds?: string[]
+      knowledgeNoteIds?: string[]
     }>()
     .action(async ({ input }) => {
       const { globalAgentsFolder, resolveWorkspaceAgentsFolder } = await import("./config")
@@ -4696,7 +4698,7 @@ export const router = {
         components: input.components,
         skillIds: input.skillIds,
         repeatTaskIds: input.repeatTaskIds,
-        memoryIds: input.memoryIds,
+        knowledgeNoteIds: input.knowledgeNoteIds,
       })
     }),
 
@@ -4774,7 +4776,7 @@ export const router = {
         mcpServers?: boolean
         skills?: boolean
         repeatTasks?: boolean
-        memories?: boolean
+        knowledgeNotes?: boolean
       }
     }>()
     .action(async ({ input }) => {
@@ -4798,7 +4800,7 @@ export const router = {
         mcpServers?: boolean
         skills?: boolean
         repeatTasks?: boolean
-        memories?: boolean
+        knowledgeNotes?: boolean
       }
     }>()
     .action(async ({ input }) => {
@@ -4882,7 +4884,7 @@ export const router = {
         mcpServers?: boolean
         skills?: boolean
         repeatTasks?: boolean
-        memories?: boolean
+        knowledgeNotes?: boolean
       }
     }>()
     .action(async ({ input }) => {
@@ -4933,24 +4935,18 @@ export const router = {
       return importResult
     }),
 
-  // Memory service handlers
-  getAllMemories: t.procedure
-    .action(async () => {
-      return memoryService.getAllMemories()
-    }),
-
-  // Alias kept for renderer compatibility
-  getMemoriesForCurrentProfile: t.procedure.action(async () => {
-    return memoryService.getAllMemories()
+  // Knowledge notes service handlers
+  getAllKnowledgeNotes: t.procedure.action(async () => {
+    return knowledgeNotesService.getAllNotes()
   }),
 
-  getMemory: t.procedure
+  getKnowledgeNote: t.procedure
     .input<{ id: string }>()
     .action(async ({ input }) => {
-      return memoryService.getMemory(input.id)
+      return knowledgeNotesService.getNote(input.id)
     }),
 
-  saveMemoryFromSummary: t.procedure
+  saveKnowledgeNoteFromSummary: t.procedure
     .input<{
       summary: import("../shared/types").AgentStepSummary
       title?: string
@@ -4960,7 +4956,7 @@ export const router = {
       conversationId?: string
     }>()
     .action(async ({ input }) => {
-      const memory = memoryService.createMemoryFromSummary(
+      const note = knowledgeNotesService.createNoteFromSummary(
         input.summary,
         input.title,
         input.userNotes,
@@ -4968,51 +4964,59 @@ export const router = {
         input.conversationTitle,
         input.conversationId,
       )
-      if (!memory) {
-        return { success: true, memory: null, reason: "no_durable_content" as const }
+      if (!note) {
+        return { success: true, note: null, reason: "no_durable_content" as const }
       }
-      const success = await memoryService.saveMemory(memory)
-      return { success, memory: success ? memory : null }
+      const success = await knowledgeNotesService.saveNote(note)
+      return { success, note: success ? note : null }
     }),
 
-  updateMemory: t.procedure
+  saveKnowledgeNote: t.procedure
     .input<{
-      id: string
-      updates: Partial<Omit<import("../shared/types").AgentMemory, "id" | "createdAt">>
+      note: import("../shared/types").KnowledgeNote
     }>()
     .action(async ({ input }) => {
-      return memoryService.updateMemory(input.id, input.updates)
+      return knowledgeNotesService.saveNote(input.note)
     }),
 
-  deleteMemory: t.procedure
+  updateKnowledgeNote: t.procedure
+    .input<{
+      id: string
+      updates: Partial<Omit<import("../shared/types").KnowledgeNote, "id" | "createdAt">>
+    }>()
+    .action(async ({ input }) => {
+      return knowledgeNotesService.updateNote(input.id, input.updates)
+    }),
+
+  deleteKnowledgeNote: t.procedure
     .input<{ id: string }>()
     .action(async ({ input }) => {
-      return memoryService.deleteMemory(input.id)
+      return knowledgeNotesService.deleteNote(input.id)
     }),
 
-  deleteMultipleMemories: t.procedure
+  deleteMultipleKnowledgeNotes: t.procedure
     .input<{ ids: string[] }>()
     .action(async ({ input }) => {
-      const result = await memoryService.deleteMultipleMemories(input.ids)
+      const result = await knowledgeNotesService.deleteMultipleNotes(input.ids)
       if (result.error) {
         throw new Error(result.error)
       }
       return result.deletedCount
     }),
 
-  deleteAllMemories: t.procedure
+  deleteAllKnowledgeNotes: t.procedure
     .action(async () => {
-      const result = await memoryService.deleteAllMemories()
+      const result = await knowledgeNotesService.deleteAllNotes()
       if (result.error) {
         throw new Error(result.error)
       }
       return result.deletedCount
     }),
 
-  searchMemories: t.procedure
+  searchKnowledgeNotes: t.procedure
     .input<{ query: string }>()
     .action(async ({ input }) => {
-      return memoryService.searchMemories(input.query)
+      return knowledgeNotesService.searchNotes(input.query)
     }),
 
   // Summarization service handlers
