@@ -5,11 +5,11 @@ import {
   showPanelWindowAndShowTextInput,
   stopRecordingAndHidePanelWindow,
   stopTextInputAndHidePanelWindow,
-  closeAgentModeAndHidePanelWindow,
   emergencyStopAgentMode,
   showMainWindow,
   WINDOWS,
 } from "./window"
+import { snoozeAgentSessionsAndHidePanelWindow } from "./floating-panel-session-state"
 import { systemPreferences } from "electron"
 import { configStore } from "./config"
 import { state, agentProcessManager } from "./state"
@@ -537,9 +537,9 @@ export function listenToKeyboardEvents() {
           if (state.isRecording) {
             stopRecordingAndHidePanelWindow()
           } else {
-            // Panel is visible but not recording - likely showing agent results
-            // Close agent mode and hide panel
-            closeAgentModeAndHidePanelWindow()
+            // Panel is visible but not recording - treat ESC like minimize so
+            // the current floating sessions stay snoozed until explicitly restored.
+            snoozeAgentSessionsAndHidePanelWindow()
           }
         }
 

@@ -849,7 +849,7 @@ export function createPanelWindow(): BrowserWindow | undefined {
   return win
 }
 
-export function showPanelWindow() {
+export function showPanelWindow(options: { markOpenedWithMain?: boolean } = {}) {
   // In headless mode, skip all window operations
   if (isHeadlessMode) return
 
@@ -857,9 +857,14 @@ export function showPanelWindow() {
   if (win) {
     logApp(`[showPanelWindow] Called. Current visibility: ${win.isVisible()}`)
 
-    // Track that panel is being opened alongside main window (if main is visible)
-    // This prevents panel from being hidden when main window regains focus during interactions
-    setPanelOpenedWithMain()
+    if (options.markOpenedWithMain === false) {
+      clearPanelOpenedWithMain()
+    } else {
+      // Track that panel is being opened alongside main window (if main is visible)
+      // This prevents the panel from being hidden when main window regains focus during interactions.
+      // Auto-show paths should opt out so the panel stays out of the way while the user works in the main app.
+      setPanelOpenedWithMain()
+    }
 
     const mode = getCurrentPanelMode()
     // Apply mode sizing/positioning just before showing
@@ -1036,6 +1041,25 @@ export const closeAgentModeAndHidePanelWindow = () => {
     // Clear agent progress after hiding to avoid triggering mode change while visible
     getRendererHandlers<RendererHandlers>(win.webContents).clearAgentProgress.send()
     // Suppress auto-show briefly to avoid immediate reopen from any trailing progress
+    suppressPanelAutoShow(1000)
+    setPanelMode("normal")
+  }
+}
+
+export const minimizeAgentModeAndHidePanelWindow = () => {
+  const win = WINDOWS.get("panel")
+  if (win) {
+    state.isAgentModeActive = false
+    state.shouldStopAgent = false
+    state.agentIterationCount = 0
+
+    clearPanelHiddenByMainFocus()
+
+    if (win.isVisible()) {
+      clearPanelOpenedWithMain()
+      win.hide()
+    }
+
     suppressPanelAutoShow(1000)
     setPanelMode("normal")
   }

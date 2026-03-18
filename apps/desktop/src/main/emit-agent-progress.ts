@@ -46,7 +46,7 @@ function sendToWindows(update: AgentProgressUpdate): void {
     const isSnoozed = agentSessionTracker.isSessionSnoozed(update.sessionId)
     if (floatingPanelAutoShowEnabled && !isPanelAutoShowSuppressed() && !isSnoozed && !(hidePanelWhenMainFocused && isMainFocused)) {
       resizePanelForAgentMode()
-      showPanelWindow()
+      showPanelWindow({ markOpenedWithMain: false })
     }
   }
 

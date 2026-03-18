@@ -28,6 +28,10 @@ import {
   resizePanelForWaveformPreview,
 } from "./window"
 import {
+  setTrackedAgentSessionSnoozed,
+  snoozeAgentSessionsAndHidePanelWindow,
+} from "./floating-panel-session-state"
+import {
   app,
   clipboard,
   Menu,
@@ -912,6 +916,13 @@ export const router = {
     hideFloatingPanelWindow()
   }),
 
+  snoozeAgentSessionsAndHidePanelWindow: t.procedure
+    .input<{ sessionIds?: string[] }>()
+    .action(async ({ input }) => {
+      snoozeAgentSessionsAndHidePanelWindow(input.sessionIds)
+      return { success: true }
+    }),
+
   resetFloatingPanel: t.procedure.action(async () => {
     resetFloatingPanelPositionAndSize(true)
     return { success: true }
@@ -1208,9 +1219,8 @@ export const router = {
   snoozeAgentSession: t.procedure
     .input<{ sessionId: string }>()
     .action(async ({ input }) => {
-    
       // Snooze the session (runs in background without stealing focus)
-      agentSessionTracker.snoozeSession(input.sessionId)
+      setTrackedAgentSessionSnoozed(input.sessionId, true)
 
       return { success: true }
     }),
@@ -1218,9 +1228,8 @@ export const router = {
   unsnoozeAgentSession: t.procedure
     .input<{ sessionId: string }>()
     .action(async ({ input }) => {
-    
       // Unsnooze the session (allow it to show progress UI again)
-      agentSessionTracker.unsnoozeSession(input.sessionId)
+      setTrackedAgentSessionSnoozed(input.sessionId, false)
 
       return { success: true }
     }),

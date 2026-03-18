@@ -364,7 +364,23 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
       const newMap = new Map(state.agentProgressById)
       newMap.set(sessionId, { ...existingProgress, isSnoozed })
-      return { agentProgressById: newMap }
+
+      let newFocusedSessionId = state.focusedSessionId
+      if (isSnoozed && state.focusedSessionId === sessionId) {
+        const candidates = Array.from(newMap.entries())
+          .filter(([_, p]) => !p.isSnoozed)
+          .sort((a, b) => {
+            const ta = getProgressActivityTimestamp(a[1])
+            const tb = getProgressActivityTimestamp(b[1])
+            return tb - ta
+          })
+        newFocusedSessionId = candidates[0]?.[0] || null
+      }
+
+      return {
+        agentProgressById: newMap,
+        focusedSessionId: newFocusedSessionId,
+      }
     })
   },
 

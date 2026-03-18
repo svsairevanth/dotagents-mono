@@ -73,7 +73,9 @@ export function MultiAgentProgressView({
   }
 
   const handleHidePanel = async () => {
-    await tipcClient.hidePanelWindow({})
+    await tipcClient.snoozeAgentSessionsAndHidePanelWindow({
+      sessionIds: activeSessions.map(([sessionId]) => sessionId),
+    })
   }
 
 

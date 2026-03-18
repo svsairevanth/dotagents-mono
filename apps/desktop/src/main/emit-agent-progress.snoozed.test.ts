@@ -69,4 +69,13 @@ describe("emitAgentProgress snoozed propagation", () => {
     expect(mocks.showPanelWindow).not.toHaveBeenCalled()
     expect(mocks.resizePanelForAgentMode).not.toHaveBeenCalled()
   })
+
+  it("auto-shows without pinning the panel beside the main window", async () => {
+    mocks.isSessionSnoozed.mockReturnValue(false)
+
+    await emitAgentProgress({ sessionId: "session-auto-show", currentIteration: 0, maxIterations: 1, steps: [], isComplete: false })
+
+    expect(mocks.resizePanelForAgentMode).toHaveBeenCalledTimes(1)
+    expect(mocks.showPanelWindow).toHaveBeenCalledWith({ markOpenedWithMain: false })
+  })
 })

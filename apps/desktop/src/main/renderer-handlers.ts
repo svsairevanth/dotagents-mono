@@ -29,6 +29,7 @@ export type RendererHandlers = {
   agentSessionsUpdated: (data: { activeSessions: AgentSession[], recentSessions: AgentSession[] }) => void
 
   focusAgentSession: (sessionId: string) => void
+  setAgentSessionSnoozed: (data: { sessionId: string; isSnoozed: boolean }) => void
 
   // Message Queue handlers
   onMessageQueueUpdate: (data: { conversationId: string; queue: QueuedMessage[]; isPaused: boolean }) => void

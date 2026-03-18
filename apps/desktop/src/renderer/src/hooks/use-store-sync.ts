@@ -21,6 +21,7 @@ export function useStoreSync() {
   const clearSessionProgress = useAgentStore((s) => s.clearSessionProgress)
   const clearInactiveSessions = useAgentStore((s) => s.clearInactiveSessions)
   const setFocusedSessionId = useAgentStore((s) => s.setFocusedSessionId)
+  const setSessionSnoozed = useAgentStore((s) => s.setSessionSnoozed)
   const setScrollToSessionId = useAgentStore((s) => s.setScrollToSessionId)
   const updateMessageQueue = useAgentStore((s) => s.updateMessageQueue)
   const pinnedSessionIds = useAgentStore((s) => s.pinnedSessionIds)
@@ -104,6 +105,15 @@ export function useStoreSync() {
     )
     return unlisten
   }, [setFocusedSessionId, setScrollToSessionId])
+
+  useEffect(() => {
+    const unlisten = rendererHandlers.setAgentSessionSnoozed.listen(
+      ({ sessionId, isSnoozed }: { sessionId: string; isSnoozed: boolean }) => {
+        setSessionSnoozed(sessionId, isSnoozed)
+      }
+    )
+    return unlisten
+  }, [setSessionSnoozed])
 
   // Listen for message queue updates
   useEffect(() => {

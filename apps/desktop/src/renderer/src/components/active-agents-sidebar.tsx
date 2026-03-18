@@ -306,8 +306,11 @@ export function ActiveAgentsSidebar({
 
       // UI updates after successful API call - don't rollback if these fail
       try {
-        // Keep panel context synced to the restored session, but do not force-open it.
+        // Keep panel context synced to the restored session and explicitly reopen the
+        // floating panel. After a manual minimize, this button is the intentional restore path.
         await tipcClient.focusAgentSession({ sessionId })
+        await tipcClient.setPanelMode({ mode: "agent" })
+        await tipcClient.showPanelWindow({})
         logUI("[ActiveAgentsSidebar] Session unsnoozed and focused")
       } catch (error) {
         // Log UI errors but don't rollback - the backend state is already updated

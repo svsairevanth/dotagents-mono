@@ -85,5 +85,34 @@ describe('agent-store delegation merge', () => {
 
     expect(Array.from(useAgentStore.getState().pinnedSessionIds)).toEqual(['session-2', 'session-3'])
   })
+
+  it('clears focus when snoozing the focused session with no visible alternative', () => {
+    useAgentStore.setState({
+      agentProgressById: new Map([
+        ['session-1', createBaseUpdate()],
+      ]),
+      focusedSessionId: 'session-1',
+    })
+
+    useAgentStore.getState().setSessionSnoozed('session-1', true)
+
+    expect(useAgentStore.getState().agentProgressById.get('session-1')?.isSnoozed).toBe(true)
+    expect(useAgentStore.getState().focusedSessionId).toBeNull()
+  })
+
+  it('moves focus to the next visible session when snoozing the focused session', () => {
+    useAgentStore.setState({
+      agentProgressById: new Map([
+        ['session-1', createBaseUpdate()],
+        ['session-2', { ...createBaseUpdate(), sessionId: 'session-2', conversationId: 'conversation-2' }],
+      ]),
+      focusedSessionId: 'session-1',
+    })
+
+    useAgentStore.getState().setSessionSnoozed('session-1', true)
+
+    expect(useAgentStore.getState().focusedSessionId).toBe('session-2')
+    expect(useAgentStore.getState().agentProgressById.get('session-1')?.isSnoozed).toBe(true)
+  })
 })
 
