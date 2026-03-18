@@ -57,6 +57,33 @@ export type ConsolidateKnowledgeNotesResult = {
   errors: string[]
 }
 
+export type ConsolidateKnowledgeNotePreviewItem = {
+  id: string
+  title: string
+  layer: "global" | "workspace"
+  fromPath: string
+  toPath: string
+  group?: string
+  series?: string
+  entryType?: KnowledgeNoteEntryType
+}
+
+export type ConsolidateKnowledgeNotesPreviewResult = {
+  items: ConsolidateKnowledgeNotePreviewItem[]
+  totalCount: number
+}
+
+type ConsolidationCandidate = {
+  note: KnowledgeNote
+  nextNote: KnowledgeNote
+  existingIndex: number
+  origin?: KnowledgeOrigin
+  targetLayerName: "global" | "workspace"
+  targetLayer: AgentsLayerPaths
+  fromPath: string
+  toPath: string
+}
+
 function stripLegacyEmbeddedMetadata(body: string): string {
   const trimmed = body.trim()
   const prefixIndex = trimmed.lastIndexOf(LEGACY_NOTE_META_PREFIX)
@@ -88,6 +115,10 @@ function buildNoteStorageLocation(note: Pick<KnowledgeNote, "id" | "group" | "se
   const segments = [note.group, note.series, note.id]
     .flatMap((value) => (normalizePathLikeValue(value) ?? "").split("/").filter(Boolean))
   return segments.join("/")
+}
+
+function toDisplayRelativePath(layer: AgentsLayerPaths, dirPath: string): string {
+  return path.relative(layer.agentsDir, dirPath) || "."
 }
 
 function normalizeKnowledgeNoteForStorage(note: KnowledgeNote): KnowledgeNote {
@@ -427,14 +458,10 @@ export class KnowledgeNotesService {
     }
   }
 
-  async consolidateRecurringNotes(): Promise<ConsolidateKnowledgeNotesResult> {
-    await this.initialize()
+  private getConsolidationCandidates(): ConsolidationCandidate[] {
+    const { globalLayer, workspaceLayer } = this.getLayers()
 
-    let reorganizedCount = 0
-    let skippedCount = 0
-    const errors: string[] = []
-
-    for (const note of [...this.notes]) {
+    return this.notes.flatMap((note) => {
       const inferred = inferKnowledgeNoteGrouping(note)
       const nextNote = normalizeKnowledgeNoteForStorage({
         ...note,
@@ -448,19 +475,62 @@ export class KnowledgeNotesService {
         && nextNote.series === note.series
         && nextNote.entryType === note.entryType
       ) {
-        skippedCount++
-        continue
+        return []
       }
 
       const existingIndex = this.notes.findIndex((item) => item.id === note.id)
-      const previousOrigin = this.originById.get(note.id)
-      const { globalLayer, workspaceLayer } = this.getLayers()
-      const targetLayerName = previousOrigin?.layer ?? "global"
+      const origin = this.originById.get(note.id)
+      const targetLayerName = origin?.layer ?? "global"
       const targetLayer = targetLayerName === "workspace" && workspaceLayer ? workspaceLayer : globalLayer
+      const fallbackCurrentDir = path.dirname(knowledgeNoteSlugToFilePath(targetLayer, note.id))
+      const nextDir = path.dirname(knowledgeNoteSlugToFilePath(targetLayer, buildNoteStorageLocation(nextNote)))
+
+      return [{
+        note,
+        nextNote,
+        existingIndex,
+        origin,
+        targetLayerName,
+        targetLayer,
+        fromPath: toDisplayRelativePath(targetLayer, origin?.dirPath ?? fallbackCurrentDir),
+        toPath: toDisplayRelativePath(targetLayer, nextDir),
+      }]
+    })
+  }
+
+  async previewConsolidateRecurringNotes(): Promise<ConsolidateKnowledgeNotesPreviewResult> {
+    await this.initialize()
+    const items = this.getConsolidationCandidates().map((candidate) => ({
+      id: candidate.note.id,
+      title: candidate.note.title,
+      layer: candidate.targetLayerName,
+      fromPath: candidate.fromPath,
+      toPath: candidate.toPath,
+      group: candidate.nextNote.group,
+      series: candidate.nextNote.series,
+      entryType: candidate.nextNote.entryType,
+    }))
+
+    return {
+      items,
+      totalCount: items.length,
+    }
+  }
+
+  async consolidateRecurringNotes(): Promise<ConsolidateKnowledgeNotesResult> {
+    await this.initialize()
+
+    let reorganizedCount = 0
+    const errors: string[] = []
+
+    const candidates = this.getConsolidationCandidates()
+
+    for (const candidate of candidates) {
+      const { note, nextNote, existingIndex, origin, targetLayerName, targetLayer } = candidate
 
       try {
-        const location = previousOrigin
-          ? this.relocateExistingNoteSync(previousOrigin, targetLayer, nextNote)
+        const location = origin
+          ? this.relocateExistingNoteSync(origin, targetLayer, nextNote)
           : writeKnowledgeNoteFile(targetLayer, nextNote, { maxBackups: 10 })
 
         if (existingIndex >= 0) this.notes[existingIndex] = nextNote
@@ -475,7 +545,6 @@ export class KnowledgeNotesService {
         })
         reorganizedCount++
       } catch (error) {
-        skippedCount++
         const message = error instanceof Error ? error.message : String(error)
         errors.push(`Failed to reorganize ${note.id}: ${message}`)
         if (isDebugLLM()) {
@@ -486,7 +555,7 @@ export class KnowledgeNotesService {
 
     return {
       reorganizedCount,
-      skippedCount,
+      skippedCount: this.notes.length - candidates.length + errors.length,
       errorCount: errors.length,
       errors,
     }

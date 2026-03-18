@@ -5014,6 +5014,11 @@ export const router = {
       return knowledgeNotesService.consolidateRecurringNotes()
     }),
 
+  previewConsolidateKnowledgeNotes: t.procedure
+    .action(async () => {
+      return knowledgeNotesService.previewConsolidateRecurringNotes()
+    }),
+
   searchKnowledgeNotes: t.procedure
     .input<{ query: string }>()
     .action(async ({ input }) => {

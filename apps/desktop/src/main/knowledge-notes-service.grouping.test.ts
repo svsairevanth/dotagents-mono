@@ -43,8 +43,18 @@ describe("KnowledgeNotesService grouping follow-up", () => {
     fs.writeFileSync(path.join(originalDir, "transcript.txt"), "hello")
 
     await knowledgeNotesService.reload()
+    const preview = await knowledgeNotesService.previewConsolidateRecurringNotes()
     const result = await knowledgeNotesService.consolidateRecurringNotes()
 
+    expect(preview.totalCount).toBe(1)
+    expect(preview.items[0]).toMatchObject({
+      id: "discord-recap-2026-03-18",
+      fromPath: "knowledge/discord-recap-2026-03-18",
+      toPath: "knowledge/discord/recaps/discord-recap-2026-03-18",
+      group: "discord",
+      series: "recaps",
+      entryType: "entry",
+    })
     expect(result.reorganizedCount).toBe(1)
     expect(result.errorCount).toBe(0)
 
