@@ -18,6 +18,7 @@ import {
   NativeSyntheticEvent,
   TextInputKeyPressEventData,
   useWindowDimensions,
+  Modal,
 } from 'react-native';
 
 const darkSpinner = require('../../assets/loading-spinner.gif');
@@ -153,15 +154,14 @@ const buildMessageWithPendingImages = (text: string, images: PendingImageAttachm
 type QuickStartShortcut = {
   id: string;
   title: string;
-  description: string;
   content: string;
-  source: 'command' | 'saved-prompt' | 'starter-pack';
+  source: 'command' | 'saved-prompt' | 'starter-pack' | 'action';
+  action?: 'add-prompt';
 };
 
 type QuickStartSection = {
   id: string;
   title: string;
-  subtitle: string;
   items: QuickStartShortcut[];
 };
 
@@ -169,42 +169,36 @@ const STARTER_PACK_SHORTCUTS: QuickStartShortcut[] = [
   {
     id: 'starter-plan-task',
     title: 'Plan this task',
-    description: 'Break work down into clear implementation steps.',
     content: 'Help me plan this task. Give me a concise step-by-step implementation plan, edge cases to watch, and the smallest safe first step.',
     source: 'starter-pack',
   },
   {
     id: 'starter-debug-issue',
     title: 'Debug an issue',
-    description: 'Triage a bug and suggest the most likely root causes.',
     content: 'Help me debug this issue. Ask for the minimum missing context, identify the likely causes, and suggest the fastest way to verify the fix.',
     source: 'starter-pack',
   },
   {
     id: 'starter-summarize',
     title: 'Summarize and next steps',
-    description: 'Turn raw notes into a concise summary plus actions.',
     content: 'Summarize this clearly, then give me the next 3 concrete actions to take.',
     source: 'starter-pack',
   },
   {
     id: 'starter-polish-writing',
     title: 'Polish this draft',
-    description: 'Rewrite rough text into a stronger final version.',
     content: 'Rewrite this into a polished version that is clear, concise, and confident. Keep the meaning but improve the structure and wording.',
     source: 'starter-pack',
   },
   {
     id: 'starter-research-brief',
     title: 'Research brief',
-    description: 'Get a focused overview with tradeoffs and recommendations.',
     content: 'Create a quick research brief on this topic with key options, tradeoffs, and a practical recommendation.',
     source: 'starter-pack',
   },
   {
     id: 'starter-daily-review',
     title: 'Daily review',
-    description: 'Reflect on progress and choose the next best move.',
     content: 'Help me review what happened today, extract the key lessons, and decide the highest-leverage next step for tomorrow.',
     source: 'starter-pack',
   },
@@ -433,6 +427,10 @@ export default function ChatScreen({ route, navigation }: any) {
   }, [config.apiKey, config.baseUrl]);
   const [predefinedPrompts, setPredefinedPrompts] = useState<PredefinedPromptSummary[]>([]);
   const [isLoadingQuickStartPrompts, setIsLoadingQuickStartPrompts] = useState(false);
+  const [addPromptModalVisible, setAddPromptModalVisible] = useState(false);
+  const [newPromptName, setNewPromptName] = useState('');
+  const [newPromptContent, setNewPromptContent] = useState('');
+  const [isSavingPrompt, setIsSavingPrompt] = useState(false);
   const handsFreeMessageDebounceMs = config.handsFreeMessageDebounceMs ?? DEFAULT_HANDS_FREE_MESSAGE_DEBOUNCE_MS;
   const handsFreeWakePhrase = config.handsFreeWakePhrase || 'hey dot agents';
   const handsFreeSleepPhrase = config.handsFreeSleepPhrase || 'go to sleep';
@@ -671,7 +669,7 @@ export default function ChatScreen({ route, navigation }: any) {
     navigation?.setOptions?.({
       headerTitle: () => (
         <TouchableOpacity
-          style={{ alignItems: 'center', justifyContent: 'center' }}
+          style={{ alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 44 }}
           onPress={() => setAgentSelectorVisible(true)}
           accessibilityRole="button"
           accessibilityLabel={`Current agent: ${currentAgentLabel}. Tap to change.`}
@@ -723,11 +721,6 @@ export default function ChatScreen({ route, navigation }: any) {
       ),
       headerRight: () => (
         <View style={styles.headerActionsRow}>
-          <ConnectionStatusIndicator
-            state={connectionInfo.state}
-            retryCount={connectionInfo.retryCount}
-            compact
-          />
           {headerConversationLabel && headerConversationChipStyle && (
             <View
               style={[
@@ -755,33 +748,26 @@ export default function ChatScreen({ route, navigation }: any) {
               </Text>
             </View>
           )}
-          <TouchableOpacity
-            onPress={handleNewChat}
-            accessibilityRole="button"
-            accessibilityLabel="Start new chat"
-            accessibilityHint="Creates a new empty conversation"
-            style={styles.headerActionButton}
-          >
-            <Text style={{ fontSize: 18, color: theme.colors.foreground }}>✚</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={handleKillSwitch}
-            accessibilityRole="button"
-            accessibilityLabel="Emergency stop - kill all agent sessions"
-            accessibilityHint="Shows a confirmation before stopping all running sessions"
-            style={styles.headerActionButton}
-          >
-            <View style={{
-              width: 28,
-              height: 28,
-              borderRadius: 14,
-              backgroundColor: theme.colors.danger,
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}>
-              <Text style={{ fontSize: 14, color: '#FFFFFF' }}>⏹</Text>
-            </View>
-          </TouchableOpacity>
+          {headerConversationState === 'running' && (
+            <TouchableOpacity
+              onPress={handleKillSwitch}
+              accessibilityRole="button"
+              accessibilityLabel="Emergency stop - kill all agent sessions"
+              accessibilityHint="Shows a confirmation before stopping all running sessions"
+              style={styles.headerActionButton}
+            >
+              <View style={{
+                width: 28,
+                height: 28,
+                borderRadius: 14,
+                backgroundColor: theme.colors.danger,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                <Text style={{ fontSize: 14, color: '#FFFFFF' }}>⏹</Text>
+              </View>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             onPress={toggleHandsFree}
             accessibilityRole="switch"
@@ -807,19 +793,10 @@ export default function ChatScreen({ route, navigation }: any) {
               )}
             </View>
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => navigation.navigate('Settings')}
-            accessibilityRole="button"
-            accessibilityLabel="Settings"
-            accessibilityHint="Opens app settings"
-            style={styles.headerEdgeActionButton}
-          >
-            <Text style={{ fontSize: 18, color: theme.colors.foreground }}>⚙️</Text>
-          </TouchableOpacity>
         </View>
       ),
     });
-  }, [navigation, handsFree, handleKillSwitch, handleNewChat, handleToggleCurrentSessionPinned, isCurrentSessionPinned, responding, headerConversationLabel, headerConversationState, headerConversationChipStyle, theme, isDark, sessionStore, connectionInfo.state, connectionInfo.retryCount, currentProfile, styles]);
+  }, [navigation, handsFree, handleKillSwitch, handleNewChat, handleToggleCurrentSessionPinned, isCurrentSessionPinned, responding, headerConversationLabel, headerConversationState, headerConversationChipStyle, theme, isDark, sessionStore, currentProfile, styles]);
 
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -1291,6 +1268,34 @@ export default function ChatScreen({ route, navigation }: any) {
       cancelled = true;
     };
   }, [isFocused, settingsClient]);
+
+  const handleSaveNewPrompt = async () => {
+    if (!settingsClient || !newPromptName.trim() || !newPromptContent.trim()) return;
+    setIsSavingPrompt(true);
+    try {
+      const now = Date.now();
+      const newPrompt: PredefinedPromptSummary = {
+        id: `prompt-${now}-${Math.random().toString(36).substr(2, 9)}`,
+        name: newPromptName.trim(),
+        content: newPromptContent.trim(),
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      const updatedPrompts = [...predefinedPrompts, newPrompt];
+      await settingsClient.updateSettings({ predefinedPrompts: updatedPrompts });
+      setPredefinedPrompts(updatedPrompts);
+      setAddPromptModalVisible(false);
+      setNewPromptName('');
+      setNewPromptContent('');
+      Alert.alert('Success', 'Prompt saved to your settings.');
+    } catch (error: any) {
+      console.error('[ChatScreen] Error saving prompt:', error);
+      Alert.alert('Error', error.message || 'Failed to save prompt.');
+    } finally {
+      setIsSavingPrompt(false);
+    }
+  };
 
   // Reset auto-scroll when session changes
   useEffect(() => {
@@ -2549,7 +2554,6 @@ export default function ChatScreen({ route, navigation }: any) {
       .map((prompt) => ({
         id: prompt.id,
         title: prompt.name,
-        description: 'Slash-style saved prompt from your desktop workspace.',
         content: prompt.content,
         source: 'command' as const,
       })),
@@ -2557,16 +2561,26 @@ export default function ChatScreen({ route, navigation }: any) {
   );
 
   const savedPromptQuickStarts = useMemo(
-    () => predefinedPrompts
-      .filter((prompt) => !isSlashCommandPrompt(prompt))
-      .slice(0, 4)
-      .map((prompt) => ({
-        id: prompt.id,
-        title: prompt.name,
-        description: 'Reusable saved prompt synced from desktop.',
-        content: prompt.content,
-        source: 'saved-prompt' as const,
-      })),
+    () => {
+      const prompts: QuickStartShortcut[] = predefinedPrompts
+        .filter((prompt) => !isSlashCommandPrompt(prompt))
+        .slice(0, 3)
+        .map((prompt) => ({
+          id: prompt.id,
+          title: prompt.name,
+          content: prompt.content,
+          source: 'saved-prompt' as const,
+        }));
+
+      prompts.push({
+        id: 'action-add-prompt',
+        title: '+ Add Prompt',
+        content: '',
+        source: 'action',
+        action: 'add-prompt',
+      });
+      return prompts;
+    },
     [predefinedPrompts]
   );
 
@@ -2582,7 +2596,6 @@ export default function ChatScreen({ route, navigation }: any) {
       sections.push({
         id: 'commands',
         title: 'Custom Commands',
-        subtitle: 'Slash-named saved prompts from desktop show up here.',
         items: commandQuickStarts,
       });
     }
@@ -2591,7 +2604,6 @@ export default function ChatScreen({ route, navigation }: any) {
       sections.push({
         id: 'saved-prompts',
         title: 'Saved Prompts',
-        subtitle: 'Reusable prompts from your desktop setup.',
         items: savedPromptQuickStarts,
       });
     }
@@ -2599,39 +2611,11 @@ export default function ChatScreen({ route, navigation }: any) {
     sections.push({
       id: 'starter-packs',
       title: 'Starter Packs',
-      subtitle: commandQuickStarts.length === 0
-        ? 'Use these while you build out custom commands and saved prompts.'
-        : 'Built-in launchers for common workflows.',
       items: starterPackQuickStarts,
     });
 
     return sections;
   }, [commandQuickStarts, savedPromptQuickStarts, starterPackQuickStarts]);
-
-  const quickStartCategoryPills = useMemo(
-    () => [
-      {
-        id: 'commands-pill',
-        label: 'Custom Commands',
-        value: commandQuickStarts.length > 0 ? `${commandQuickStarts.length} ready` : 'Add slash prompts on desktop',
-      },
-      {
-        id: 'prompts-pill',
-        label: 'Saved Prompts',
-        value: savedPromptQuickStarts.length > 0 ? `${savedPromptQuickStarts.length} synced` : 'Shows desktop prompts here',
-      },
-      {
-        id: 'starter-pill',
-        label: 'Starter Packs',
-        value: `${starterPackQuickStarts.length} tap-to-insert`,
-      },
-    ],
-    [commandQuickStarts.length, savedPromptQuickStarts.length, starterPackQuickStarts.length]
-  );
-
-  const quickStartFooterText = isLoadingQuickStartPrompts
-    ? 'Refreshing saved prompts from desktop…'
-    : 'Tap any item to insert it into the composer. QR pairing stays in connection settings and disconnected flows.';
 
   const composerHasContent = input.trim().length > 0 || pendingImages.length > 0;
 
@@ -2834,51 +2818,38 @@ export default function ChatScreen({ route, navigation }: any) {
           )}
           {!sessionStore.isLoadingMessages && messages.length === 0 && (
             <View style={styles.chatHomeCard}>
-              <Text style={styles.chatHomeEyebrow}>Quick start</Text>
-              <Text style={styles.chatHomeTitle}>Custom commands, saved prompts, and starter packs</Text>
-              <Text style={styles.chatHomeSubtitle}>
-                Launch something useful right away, then edit it before sending if you want.
-              </Text>
-
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.chatHomeCategoryRow}
-              >
-                {quickStartCategoryPills.map((pill) => (
-                  <View key={pill.id} style={styles.chatHomeCategoryPill}>
-                    <Text style={styles.chatHomeCategoryLabel}>{pill.label}</Text>
-                    <Text style={styles.chatHomeCategoryValue}>{pill.value}</Text>
-                  </View>
-                ))}
-              </ScrollView>
-
               {quickStartSections.map((section) => (
                 <View key={section.id} style={styles.chatHomeSection}>
                   <Text style={styles.chatHomeSectionTitle}>{section.title}</Text>
-                  <Text style={styles.chatHomeSectionSubtitle}>{section.subtitle}</Text>
                   <View style={styles.chatHomeShortcutGrid}>
                     {section.items.map((item) => (
                       <Pressable
                         key={item.id}
                         style={({ pressed }) => [
                           styles.chatHomeShortcutCard,
+                          item.action === 'add-prompt' && styles.chatHomeShortcutCardAdd,
                           pressed && styles.chatHomeShortcutCardPressed,
                         ]}
-                        onPress={() => handleInsertQuickStartPrompt(item.content)}
+                        onPress={() => {
+                          if (item.action === 'add-prompt') {
+                            setAddPromptModalVisible(true);
+                          } else {
+                            handleInsertQuickStartPrompt(item.content);
+                          }
+                        }}
                         accessibilityRole="button"
-                        accessibilityLabel={createButtonAccessibilityLabel(`${section.title}: ${item.title}`)}
-                        accessibilityHint="Inserts this launcher text into the composer."
+                        accessibilityLabel={createButtonAccessibilityLabel(item.action === 'add-prompt' ? 'Add new prompt' : `${section.title}: ${item.title}`)}
+                        accessibilityHint={item.action === 'add-prompt' ? 'Create a new saved prompt.' : 'Inserts this launcher text into the composer.'}
                       >
-                        <Text style={styles.chatHomeShortcutTitle} numberOfLines={1}>{item.title}</Text>
-                        <Text style={styles.chatHomeShortcutDescription} numberOfLines={2}>{item.description}</Text>
+                        <Text style={[
+                          styles.chatHomeShortcutTitle,
+                          item.action === 'add-prompt' && styles.chatHomeShortcutTitleAdd,
+                        ]} numberOfLines={2}>{item.title}</Text>
                       </Pressable>
                     ))}
                   </View>
                 </View>
               ))}
-
-              <Text style={styles.chatHomeFootnote}>{quickStartFooterText}</Text>
             </View>
           )}
           {messages.map((m, i) => {
@@ -3431,13 +3402,51 @@ export default function ChatScreen({ route, navigation }: any) {
 	            </ScrollView>
 	          )}
           {handsFree && (
-            <View style={styles.handsFreeStatusRow}>
-              <HandsFreeStatusChip
-                phase={handsFreeController.state.phase}
-                label={handsFreeController.statusLabel}
-                subtitle={handsFreeStatusSubtitle}
-              />
-            </View>
+            <>
+              <View style={styles.handsFreeStatusRow}>
+                <HandsFreeStatusChip
+                  phase={handsFreeController.state.phase}
+                  label={handsFreeController.statusLabel}
+                  subtitle={handsFreeStatusSubtitle}
+                />
+              </View>
+              <View style={styles.handsFreeControlsRow}>
+                {handsFreeController.state.phase === 'sleeping' ? (
+                  <TouchableOpacity
+                    style={styles.handsFreeControlButton}
+                    onPress={handsFreeController.wakeByUser}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.handsFreeControlButtonText}>Wake</Text>
+                  </TouchableOpacity>
+                ) : handsFreeController.state.phase === 'paused' ? (
+                  <TouchableOpacity
+                    style={styles.handsFreeControlButton}
+                    onPress={handsFreeController.resumeByUser}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.handsFreeControlButtonText}>Resume</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <>
+                    <TouchableOpacity
+                      style={styles.handsFreeControlButton}
+                      onPress={handsFreeController.pauseByUser}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.handsFreeControlButtonText}>Pause</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.handsFreeControlButton}
+                      onPress={handsFreeController.sleepByUser}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.handsFreeControlButtonText}>Sleep</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
+            </>
           )}
 	          {/* Top row: TTS toggle, text input, send button */}
 	          <View style={styles.inputRow}>
@@ -3577,14 +3586,75 @@ export default function ChatScreen({ route, navigation }: any) {
         visible={agentSelectorVisible}
         onClose={() => setAgentSelectorVisible(false)}
       />
+
+      <Modal
+        visible={addPromptModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setAddPromptModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Add New Prompt</Text>
+
+              <Text style={styles.modalLabel}>Name</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={newPromptName}
+                onChangeText={setNewPromptName}
+                placeholder="e.g., Code Review Request"
+                placeholderTextColor={theme.colors.mutedForeground}
+              />
+
+              <Text style={styles.modalLabel}>Prompt Content</Text>
+              <TextInput
+                style={[styles.modalInput, styles.modalInputMultiline]}
+                value={newPromptContent}
+                onChangeText={setNewPromptContent}
+                placeholder="Enter your prompt text..."
+                placeholderTextColor={theme.colors.mutedForeground}
+                multiline
+                textAlignVertical="top"
+              />
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={styles.modalCancelButton}
+                  onPress={() => setAddPromptModalVisible(false)}
+                  disabled={isSavingPrompt}
+                >
+                  <Text style={styles.modalCancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.modalSaveButton,
+                    (!newPromptName.trim() || !newPromptContent.trim() || isSavingPrompt) && styles.modalSaveButtonDisabled
+                  ]}
+                  onPress={handleSaveNewPrompt}
+                  disabled={!newPromptName.trim() || !newPromptContent.trim() || isSavingPrompt}
+                >
+                  {isSavingPrompt ? (
+                    <ActivityIndicator size="small" color={theme.colors.primaryForeground} />
+                  ) : (
+                    <Text style={styles.modalSaveButtonText}>Add Prompt</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
 
 function createStyles(theme: Theme, screenHeight: number) {
-  const micButtonHeight = Math.round(screenHeight * 0.2);
   const headerActionButton = createMinimumTouchTargetStyle();
-  const headerEdgeActionButton = createMinimumTouchTargetStyle({ horizontalPadding: 12 });
+  const headerEdgeActionButton = createMinimumTouchTargetStyle({ horizontalPadding: 16 });
   return StyleSheet.create({
     headerActionsRow: {
       flexDirection: 'row',
@@ -3658,6 +3728,8 @@ function createStyles(theme: Theme, screenHeight: number) {
     },
     messageHeaderClickable: {
       // Visual hint that header is clickable
+      minHeight: 44,
+      justifyContent: 'center',
     },
     messageHeaderPressed: {
       backgroundColor: theme.colors.muted,
@@ -3746,65 +3818,46 @@ function createStyles(theme: Theme, screenHeight: number) {
       paddingHorizontal: spacing.sm,
       paddingTop: spacing.xs,
     },
-    chatHomeCard: {
-      marginHorizontal: spacing.sm,
-      marginTop: spacing.md,
-      padding: spacing.lg,
-      borderRadius: radius.xl,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      backgroundColor: theme.colors.card,
-      gap: spacing.md,
+    handsFreeControlsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+      paddingHorizontal: spacing.sm,
+      paddingTop: spacing.xs,
     },
-    chatHomeEyebrow: {
-      ...theme.typography.caption,
-      color: theme.colors.primary,
-      fontWeight: '700',
-      letterSpacing: 0.4,
-      textTransform: 'uppercase',
-    },
-    chatHomeTitle: {
-      ...theme.typography.h2,
-    },
-    chatHomeSubtitle: {
-      ...theme.typography.body,
-      color: theme.colors.mutedForeground,
-    },
-    chatHomeCategoryRow: {
-      gap: spacing.sm,
-      paddingRight: spacing.xs,
-    },
-    chatHomeCategoryPill: {
-      minWidth: 140,
-      paddingHorizontal: spacing.md,
-      paddingVertical: spacing.sm,
-      borderRadius: radius.lg,
+    handsFreeControlButton: {
+      flex: 1,
       borderWidth: 1,
       borderColor: theme.colors.border,
       backgroundColor: theme.colors.background,
-      gap: 4,
+      minHeight: 36,
+      paddingHorizontal: spacing.sm,
+      borderRadius: radius.md,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
-    chatHomeCategoryLabel: {
-      ...theme.typography.caption,
-      color: theme.colors.mutedForeground,
-      fontWeight: '600',
-    },
-    chatHomeCategoryValue: {
-      ...theme.typography.body,
+    handsFreeControlButtonText: {
       color: theme.colors.foreground,
       fontWeight: '600',
+      fontSize: 12,
+    },
+    chatHomeCard: {
+      marginHorizontal: spacing.sm,
+      marginTop: spacing.md,
+      padding: spacing.md,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.card,
+      gap: spacing.sm,
     },
     chatHomeSection: {
       gap: spacing.sm,
     },
     chatHomeSectionTitle: {
-      ...theme.typography.body,
-      color: theme.colors.foreground,
-      fontWeight: '600',
-    },
-    chatHomeSectionSubtitle: {
       ...theme.typography.caption,
       color: theme.colors.mutedForeground,
+      fontWeight: '600',
     },
     chatHomeShortcutGrid: {
       flexDirection: 'row',
@@ -3812,17 +3865,23 @@ function createStyles(theme: Theme, screenHeight: number) {
       gap: spacing.sm,
     },
     chatHomeShortcutCard: {
-      minHeight: 88,
+      minHeight: 56,
       minWidth: '47%',
       flexGrow: 1,
       flexBasis: '47%',
-      paddingHorizontal: spacing.md,
+      paddingHorizontal: spacing.sm,
       paddingVertical: spacing.sm,
-      borderRadius: radius.lg,
+      borderRadius: radius.md,
       borderWidth: 1,
       borderColor: theme.colors.border,
       backgroundColor: theme.colors.background,
-      gap: spacing.xs,
+      justifyContent: 'center',
+    },
+    chatHomeShortcutCardAdd: {
+      borderStyle: 'dashed',
+      borderColor: theme.colors.primary,
+      backgroundColor: 'transparent',
+      alignItems: 'center',
     },
     chatHomeShortcutCardPressed: {
       opacity: 0.88,
@@ -3833,13 +3892,8 @@ function createStyles(theme: Theme, screenHeight: number) {
       color: theme.colors.foreground,
       fontWeight: '600',
     },
-    chatHomeShortcutDescription: {
-      ...theme.typography.caption,
-      color: theme.colors.mutedForeground,
-    },
-    chatHomeFootnote: {
-      ...theme.typography.caption,
-      color: theme.colors.mutedForeground,
+    chatHomeShortcutTitleAdd: {
+      color: theme.colors.primary,
     },
     input: {
       ...theme.input,
@@ -3854,29 +3908,30 @@ function createStyles(theme: Theme, screenHeight: number) {
     },
     micWrapper: {
       paddingHorizontal: spacing.sm,
-      paddingBottom: spacing.xs,
+      paddingBottom: spacing.sm,
     },
     mic: {
       width: '100%' as any,
-      height: micButtonHeight,
-      borderRadius: radius.xl,
+      height: 56,
+      flexDirection: 'row',
+      borderRadius: radius.lg,
       borderWidth: 1.5,
       borderColor: theme.colors.border,
       backgroundColor: theme.colors.card,
       alignItems: 'center',
       justifyContent: 'center',
+      gap: spacing.sm,
     },
     micOn: {
       backgroundColor: theme.colors.primary,
       borderColor: theme.colors.primary,
     },
     micText: {
-      fontSize: 32,
+      fontSize: 20,
     },
     micLabel: {
-      fontSize: 13,
+      fontSize: 15,
       color: theme.colors.mutedForeground,
-      marginTop: 4,
       fontWeight: '600',
     },
     micLabelOn: {
@@ -4177,6 +4232,7 @@ function createStyles(theme: Theme, screenHeight: number) {
       justifyContent: 'space-between',
       paddingVertical: spacing.xs,
       marginBottom: spacing.xs,
+      minHeight: 44,
     },
     toolCallHeaderPressed: {
       opacity: 0.7,
@@ -4343,5 +4399,69 @@ function createStyles(theme: Theme, screenHeight: number) {
     speakButtonTextActive: {
       color: theme.colors.primary,
     } as const,
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      justifyContent: 'center',
+      padding: spacing.lg,
+    },
+    modalContent: {
+      backgroundColor: theme.colors.background,
+      borderRadius: radius.xl,
+      padding: spacing.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    modalTitle: {
+      ...theme.typography.h2,
+      marginBottom: spacing.md,
+      color: theme.colors.foreground,
+    },
+    modalLabel: {
+      ...theme.typography.caption,
+      fontWeight: '600',
+      color: theme.colors.foreground,
+      marginBottom: spacing.xs,
+    },
+    modalInput: {
+      ...theme.input,
+      marginBottom: spacing.md,
+      color: theme.colors.foreground,
+    },
+    modalInputMultiline: {
+      height: 120,
+      paddingTop: spacing.sm,
+      paddingBottom: spacing.sm,
+    },
+    modalActions: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      gap: spacing.sm,
+      marginTop: spacing.sm,
+    },
+    modalCancelButton: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderRadius: radius.md,
+    },
+    modalCancelButtonText: {
+      color: theme.colors.mutedForeground,
+      fontWeight: '600',
+    },
+    modalSaveButton: {
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.sm,
+      borderRadius: radius.md,
+      backgroundColor: theme.colors.primary,
+      minWidth: 100,
+      alignItems: 'center',
+    },
+    modalSaveButtonDisabled: {
+      opacity: 0.5,
+    },
+    modalSaveButtonText: {
+      color: theme.colors.primaryForeground,
+      fontWeight: '600',
+    },
   });
 }

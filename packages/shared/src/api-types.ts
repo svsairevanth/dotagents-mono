@@ -213,6 +213,9 @@ export interface SettingsUpdate {
   // Session History (pinned/archived conversation IDs)
   pinnedSessionIds?: string[];
   archivedSessionIds?: string[];
+
+  // Predefined Prompts
+  predefinedPrompts?: PredefinedPromptSummary[];
 }
 
 // Conversation Sync Types

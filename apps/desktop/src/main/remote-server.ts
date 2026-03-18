@@ -1565,6 +1565,11 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
         updates.archivedSessionIds = body.archivedSessionIds
       }
 
+      // Predefined Prompts
+      if (Array.isArray(body.predefinedPrompts)) {
+        updates.predefinedPrompts = body.predefinedPrompts
+      }
+
       if (Object.keys(updates).length === 0) {
         return reply.code(400).send({ error: "No valid settings to update" })
       }

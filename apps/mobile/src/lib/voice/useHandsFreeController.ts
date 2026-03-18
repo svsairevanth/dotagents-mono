@@ -189,6 +189,21 @@ export function resolveHandsFreeUtterance({
     };
   }
 
+  if (state.phase === 'processing' || state.phase === 'speaking') {
+    const wakeMatch = matchWakePhrase(normalizedTranscript, wakePhrase);
+    if (wakeMatch.matched && wakeMatch.remainder) {
+      return {
+        nextState: {
+          ...state,
+          lastTranscript: wakeMatch.remainder,
+        },
+        action: { type: 'send', text: wakeMatch.remainder },
+        matchedWake: true,
+        matchedSleep: false,
+      };
+    }
+  }
+
   return {
     nextState: { ...state, lastTranscript: normalizedTranscript },
     action: { type: 'none' },
@@ -399,6 +414,21 @@ export function useHandsFreeController(options: HandsFreeControllerOptions) {
     }));
   }, [updateState]);
 
+  const wakeByUser = useCallback(() => {
+    updateState((prev) => ({
+      ...prev,
+      phase: 'listening',
+      pauseReason: null,
+      resumePhase: null,
+      awakeSince: Date.now(),
+      lastError: null,
+    }));
+  }, [updateState]);
+
+  const sleepByUser = useCallback(() => {
+    updateState((prev) => transitionToSleeping(prev));
+  }, [updateState]);
+
   const onRecognizerError = useCallback((message: string) => {
     updateState((prev) => {
       const recognizerErrorCount = prev.recognizerErrorCount + 1;
@@ -458,6 +488,8 @@ export function useHandsFreeController(options: HandsFreeControllerOptions) {
     onRecognizerError,
     pauseByUser,
     resumeByUser,
+    wakeByUser,
+    sleepByUser,
     reset,
     resetError,
   } as const;

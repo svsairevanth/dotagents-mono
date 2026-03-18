@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { View, Text, TextInput, StyleSheet, ScrollView, Modal, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, TextInput, StyleSheet, ScrollView, Modal, TouchableOpacity, ActivityIndicator, Platform, KeyboardAvoidingView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppConfig, saveConfig, useConfigContext } from '../store/config';
 import { useTheme } from '../ui/ThemeProvider';
@@ -216,9 +216,15 @@ export default function ConnectionSettingsScreen({ navigation, route }: any) {
 
   return (
     <>
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: theme.colors.background }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
+    >
       <ScrollView
-        style={{ backgroundColor: theme.colors.background }}
+        style={{ flex: 1 }}
         contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + spacing.md }]}
+        keyboardShouldPersistTaps="handled"
       >
         {/* Connection Status */}
         <View style={styles.statusCard}>
@@ -312,6 +318,7 @@ export default function ConnectionSettingsScreen({ navigation, route }: any) {
           )}
         </TouchableOpacity>
       </ScrollView>
+    </KeyboardAvoidingView>
 
       <Modal visible={showScanner} animationType="slide" onRequestClose={() => setShowScanner(false)}>
         <View style={styles.scannerContainer}>

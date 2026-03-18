@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { View, Text, TextInput, Switch, StyleSheet, ScrollView, Modal, TouchableOpacity, Platform, Pressable, ActivityIndicator, RefreshControl, Share, Alert, LayoutAnimation, UIManager } from 'react-native';
+import { View, Text, TextInput, Switch, StyleSheet, ScrollView, Modal, TouchableOpacity, Platform, Pressable, ActivityIndicator, RefreshControl, Share, Alert, LayoutAnimation, UIManager, KeyboardAvoidingView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   AppConfig,
@@ -1186,8 +1186,13 @@ export default function SettingsScreen({ navigation }: any) {
 
   return (
     <>
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: theme.colors.background }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
+    >
       <ScrollView
-        style={{ backgroundColor: theme.colors.background }}
+        style={{ flex: 1 }}
         contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + spacing['3xl'] + 120 }]}
         keyboardShouldPersistTaps="handled"
         refreshControl={
@@ -2641,6 +2646,7 @@ export default function SettingsScreen({ navigation }: any) {
 	          {saveStatusMessage || saveButtonHint}
 	        </Text>
 	      </View>
+    </KeyboardAvoidingView>
 
       {/* Model Picker Modal */}
       <Modal
@@ -3481,7 +3487,12 @@ function createStyles(theme: ReturnType<typeof useTheme>['theme']) {
       alignSelf: 'flex-start',
     },
     agentDeleteButton: {
-      padding: spacing.xs,
+      ...createMinimumTouchTargetStyle({
+        minSize: 44,
+        horizontalPadding: spacing.sm,
+        verticalPadding: spacing.xs,
+        horizontalMargin: 0,
+      }),
     },
     agentDeleteButtonText: {
       color: theme.colors.destructive,
@@ -3489,7 +3500,12 @@ function createStyles(theme: ReturnType<typeof useTheme>['theme']) {
       fontWeight: '500',
     },
     memoryDeleteButton: {
-      padding: spacing.xs,
+      ...createMinimumTouchTargetStyle({
+        minSize: 44,
+        horizontalPadding: spacing.sm,
+        verticalPadding: spacing.xs,
+        horizontalMargin: 0,
+      }),
       alignSelf: 'flex-start',
     },
     memoryDeleteButtonText: {

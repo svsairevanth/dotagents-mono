@@ -845,7 +845,13 @@ export default function SessionListScreen({ navigation }: Props) {
   const renderSession = ({ item }: { item: SessionSearchResult }) => {
     const isActive = item.id === sessionStore.currentSessionId;
     const isStub = stubSessionIds.has(item.id);
-    const sessionPreviewText = (item.searchPreview ?? item.preview) || 'No messages yet';
+    const rawPreview = (item.searchPreview ?? item.preview) || 'No messages yet';
+    let sessionPreviewText = rawPreview;
+    if (rawPreview.startsWith('tool: [') || rawPreview.includes('{"success":')) {
+      sessionPreviewText = 'Used a tool';
+    } else if (rawPreview.includes('{"')) {
+      sessionPreviewText = rawPreview.replace(/\{.*\}/g, '{...}').trim();
+    }
     const sessionMetaLabel = `${item.messageCount} message${item.messageCount !== 1 ? 's' : ''}${isStub ? ' · from desktop' : ''}`;
 
     return (
@@ -1215,10 +1221,12 @@ function createStyles(theme: Theme, screenHeight: number) {
       color: theme.colors.mutedForeground,
     },
     disconnectedPrimaryButton: {
-      width: '100%' as const,
+      alignSelf: 'center',
+      minWidth: 200,
     },
     disconnectedSecondaryButton: {
-      width: '100%' as const,
+      alignSelf: 'center',
+      minWidth: 200,
       borderRadius: radius.lg,
       borderWidth: 1,
       borderColor: theme.colors.border,
