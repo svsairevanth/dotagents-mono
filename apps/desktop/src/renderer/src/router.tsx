@@ -95,8 +95,8 @@ export const router: ReturnType<typeof createBrowserRouter> =
           loader: legacySettingsRedirect("/settings"),
         },
         {
-          path: "memories",
-          lazy: () => import("./pages/memories"),
+          path: "knowledge",
+          lazy: () => import("./pages/knowledge"),
         },
       ],
     },

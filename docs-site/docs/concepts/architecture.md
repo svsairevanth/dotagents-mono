@@ -33,7 +33,7 @@ DotAgents is a monorepo containing a desktop app, mobile app, shared libraries, 
 │              │  │ Engine  │ │ Service  │ │ Service││      │
 │              │  └─────────┘ └──────────┘ └────────┘│      │
 │              │  ┌─────────┐ ┌──────────┐ ┌────────┐│      │
-│              │  │ Skills  │ │ Memory   │ │ Config ││      │
+│              │  │ Skills  │ │ Notes    │ │ Config ││      │
 │              │  │ Service │ │ Service  │ │ Service││      │
 │              │  └─────────┘ └──────────┘ └────────┘│      │
 │              └──────────────────────────────────────┘      │
@@ -102,7 +102,7 @@ The main process handles all system-level operations:
 - **ACP Service** (`acp-service.ts`) — Spawns external agents, manages JSON-RPC communication
 - **Agent Profile Service** (`agent-profile-service.ts`) — CRUD for agent profiles
 - **Skills Service** (`skills-service.ts`) — Loads and manages agent skills from `.agents/skills/`
-- **Memory Service** (`memory-service.ts`) — Persistent agent context
+- **Knowledge Notes Service** (`knowledge-notes-service.ts`) — Persistent durable context via `.agents/knowledge/`
 - **Keyboard Service** (`keyboard.ts`) — System-wide hotkeys via Rust binary
 - **TTS Services** — Text-to-speech via OpenAI, Groq, Gemini, Kitten, Supertonic
 - **Remote Server** (`remote-server.ts`) — Fastify HTTP API for mobile clients
@@ -148,7 +148,7 @@ LLM Response
     │   │
     │   ├── MCP Tool → execute via MCP server → return result
     │   ├── ACP Delegation → spawn agent → get result
-    │   └── Built-in Tool → execute internally → return result
+    │   └── Runtime Tool → execute internally → return result
     │
     └── Continue agent loop until complete
 ```
@@ -181,8 +181,7 @@ Defaults → config.json → ~/.agents/ (global) → ./.agents/ (workspace)
 
 Tools are namespaced by their source:
 - External MCP: `{serverName}:{toolName}` (e.g., `github:search_repositories`)
-- Built-in settings: `speakmcp-settings:{toolName}`
-- Built-in delegation: `speakmcp-builtin:{toolName}`
+- DotAgents runtime: `{toolName}`
 
 ### Session State Management
 

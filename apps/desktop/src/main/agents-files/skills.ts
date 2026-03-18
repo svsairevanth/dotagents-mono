@@ -1,4 +1,16 @@
-// Re-export from @dotagents/core
+import {
+  AGENTS_SKILLS_DIR,
+  AGENTS_SKILL_CANONICAL_FILENAME,
+  getAgentsSkillsDir,
+  getAgentsSkillsBackupDir,
+  skillIdToDirPath,
+  skillIdToFilePath,
+  stringifySkillMarkdown,
+  parseSkillMarkdown,
+  loadAgentsSkillsLayer,
+  writeAgentsSkillFile,
+} from "../../../../../packages/core/src/agents-files/skills"
+
 export {
   AGENTS_SKILLS_DIR,
   AGENTS_SKILL_CANONICAL_FILENAME,
@@ -10,5 +22,5 @@ export {
   parseSkillMarkdown,
   loadAgentsSkillsLayer,
   writeAgentsSkillFile,
-} from "@dotagents/core"
-export type { AgentsSkillOrigin, LoadedAgentsSkillsLayer } from "@dotagents/core"
+}
+export type { AgentsSkillOrigin, LoadedAgentsSkillsLayer } from "../../../../../packages/core/src/agents-files/skills"

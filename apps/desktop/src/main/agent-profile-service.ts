@@ -21,10 +21,11 @@ import {
   personaToAgentProfile,
   acpAgentConfigToAgentProfile,
 } from "@shared/types"
+import { RESERVED_RUNTIME_TOOL_SERVER_NAMES } from "@shared/runtime-tool-names"
 import { randomUUID } from "crypto"
 import { logApp } from "./debug"
 import { configStore, globalAgentsFolder, resolveWorkspaceAgentsFolder } from "./config"
-import { getBuiltinToolNames } from "./builtin-tool-definitions"
+import { getRuntimeToolNames } from "./runtime-tool-definitions"
 import { acpRegistry } from "./acp/acp-registry"
 import type { ACPAgentDefinition } from "./acp/types"
 import { getAgentsLayerPaths, writeAgentsPrompts, loadAgentsPrompts } from "./agents-files/modular-config"
@@ -60,7 +61,7 @@ const legacyPersonasPath = path.join(app.getPath("userData"), "personas.json")
 // Validation Helpers (ported from profile-service.ts)
 // ============================================================================
 
-const RESERVED_SERVER_NAMES = ["dotagents-internal"]
+const RESERVED_SERVER_NAMES = [...RESERVED_RUNTIME_TOOL_SERVER_NAMES]
 const VALID_PROVIDER_IDS = ["openai", "groq", "gemini"]
 const VALID_STT_PROVIDER_IDS = ["openai", "groq", "parakeet"]
 const VALID_TTS_PROVIDER_IDS = ["openai", "groq", "gemini", "kitten", "supertonic"]
@@ -116,7 +117,7 @@ function isValidMcpServerConfig(config: unknown): config is Partial<ProfileMcpSe
   if (c.disabledServers !== undefined && !isStringArray(c.disabledServers)) return false
   if (c.disabledTools !== undefined && !isStringArray(c.disabledTools)) return false
   if (c.enabledServers !== undefined && !isStringArray(c.enabledServers)) return false
-  if (c.enabledBuiltinTools !== undefined && !isStringArray(c.enabledBuiltinTools)) return false
+  if (c.enabledRuntimeTools !== undefined && !isStringArray(c.enabledRuntimeTools)) return false
   if (c.allServersDisabledByDefault !== undefined && typeof c.allServersDisabledByDefault !== "boolean") return false
   return true
 }
@@ -158,7 +159,7 @@ export function toolConfigToMcpServerConfig(toolConfig?: AgentProfileToolConfig)
     disabledTools: toolConfig.disabledTools,
     allServersDisabledByDefault: toolConfig.allServersDisabledByDefault,
     enabledServers: toolConfig.enabledServers,
-    enabledBuiltinTools: toolConfig.enabledBuiltinTools,
+    enabledRuntimeTools: toolConfig.enabledRuntimeTools,
   }
 }
 
@@ -173,7 +174,7 @@ export function mcpServerConfigToToolConfig(mcpConfig?: ProfileMcpServerConfig):
     disabledTools: mcpConfig.disabledTools,
     allServersDisabledByDefault: mcpConfig.allServersDisabledByDefault,
     enabledServers: mcpConfig.enabledServers,
-    enabledBuiltinTools: mcpConfig.enabledBuiltinTools,
+    enabledRuntimeTools: mcpConfig.enabledRuntimeTools,
   }
 }
 
@@ -834,10 +835,10 @@ class AgentProfileService {
       ...(mcpServerConfig.disabledTools !== undefined && { disabledTools: mcpServerConfig.disabledTools }),
       ...(mcpServerConfig.allServersDisabledByDefault !== undefined && { allServersDisabledByDefault: mcpServerConfig.allServersDisabledByDefault }),
       ...(mcpServerConfig.enabledServers !== undefined && { enabledServers: mcpServerConfig.enabledServers }),
-      ...(mcpServerConfig.enabledBuiltinTools !== undefined && {
-        // Empty array is treated as "not configured" (allow all built-ins) — clear persisted whitelist.
-        enabledBuiltinTools: mcpServerConfig.enabledBuiltinTools.length > 0
-          ? mcpServerConfig.enabledBuiltinTools
+      ...(mcpServerConfig.enabledRuntimeTools !== undefined && {
+        // Empty array is treated as "not configured" (allow all runtime tools) — clear persisted whitelist.
+        enabledRuntimeTools: mcpServerConfig.enabledRuntimeTools.length > 0
+          ? mcpServerConfig.enabledRuntimeTools
           : undefined,
       }),
     }
@@ -853,13 +854,13 @@ class AgentProfileService {
     disabledServers: string[],
     disabledTools: string[],
     enabledServers?: string[],
-    enabledBuiltinTools?: string[],
+    enabledRuntimeTools?: string[],
   ): AgentProfile | undefined {
     return this.updateProfileMcpConfig(id, {
       disabledServers,
       disabledTools,
       ...(enabledServers !== undefined && { enabledServers }),
-      ...(enabledBuiltinTools !== undefined && { enabledBuiltinTools }),
+      ...(enabledRuntimeTools !== undefined && { enabledRuntimeTools }),
     })
   }
 
@@ -1088,7 +1089,7 @@ class AgentProfileService {
       // Create default tool config with all servers disabled
       const appConfig = configStore.get()
       const allServerNames = Object.keys(appConfig.mcpConfig?.mcpServers || {})
-      const builtinToolNames = getBuiltinToolNames()
+      const runtimeToolNames = getRuntimeToolNames()
 
       const newProfile = this.create({
         name: importData.name,
@@ -1102,7 +1103,7 @@ class AgentProfileService {
         isAgentTarget: true,
         toolConfig: {
           disabledServers: allServerNames,
-          disabledTools: builtinToolNames,
+            disabledTools: runtimeToolNames,
           allServersDisabledByDefault: true,
         },
       })
@@ -1216,12 +1217,12 @@ class AgentProfileService {
 
   /**
    * Create an agent with legacy-style parameters.
-   * Used by backward-compatible IPC handlers and builtin tools.
+   * Used by backward-compatible IPC handlers and runtime tools.
    */
   createUserProfile(name: string, guidelines: string, systemPrompt?: string): AgentProfile {
     const config = configStore.get()
     const allServerNames = Object.keys(config.mcpConfig?.mcpServers || {})
-    const builtinToolNames = getBuiltinToolNames()
+    const runtimeToolNames = getRuntimeToolNames()
 
     return this.create({
       name,
@@ -1235,7 +1236,7 @@ class AgentProfileService {
       isAgentTarget: true,
       toolConfig: {
         disabledServers: allServerNames,
-        disabledTools: builtinToolNames,
+          disabledTools: runtimeToolNames,
         allServersDisabledByDefault: true,
       },
     })

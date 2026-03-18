@@ -72,7 +72,7 @@ const FeatureList: FeatureItem[] = [
     link: '/desktop/overview',
   },
   {
-    title: 'Skills & Memory',
+    title: 'Skills & Knowledge',
     emoji: '\uD83E\uDDE0',
     description: (
       <>

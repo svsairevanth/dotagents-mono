@@ -7,7 +7,7 @@ import SessionListScreen from './src/screens/SessionListScreen';
 import SplitChatScreen from './src/screens/SplitChatScreen';
 import ConnectionSettingsScreen from './src/screens/ConnectionSettingsScreen';
 import AgentEditScreen from './src/screens/AgentEditScreen';
-import MemoryEditScreen from './src/screens/MemoryEditScreen';
+import KnowledgeNoteEditScreen from './src/screens/KnowledgeNoteEditScreen';
 import LoopEditScreen from './src/screens/LoopEditScreen';
 import { AppConfig, ConfigContext, useConfig, saveConfig } from './src/store/config';
 import { SessionContext, useSessions } from './src/store/sessions';
@@ -419,9 +419,9 @@ function Navigation() {
                       options={{ title: 'Agent' }}
                     />
                     <Stack.Screen
-                      name="MemoryEdit"
-                      component={MemoryEditScreen}
-                      options={{ title: 'Memory' }}
+                      name="KnowledgeNoteEdit"
+                      component={KnowledgeNoteEditScreen}
+                      options={{ title: 'Note' }}
                     />
                     <Stack.Screen
                       name="LoopEdit"

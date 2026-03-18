@@ -153,7 +153,7 @@ Agents have fine-grained tool access:
 - **enabledServers** — Whitelist of MCP servers
 - **disabledServers** — Blacklist of MCP servers
 - **disabledTools** — Specific tools to block
-- **enabledBuiltinTools** — Whitelist of built-in tools
+- **enabledRuntimeTools** — Whitelist of DotAgents runtime tools
 
 ---
 
@@ -165,8 +165,8 @@ Agents have fine-grained tool access:
 │                 (Configuration Layer)                        │
 │                                                             │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │ Agent        │  │ Skills       │  │ Memories     │      │
-│  │ Profiles     │  │              │  │              │      │
+│  │ Agent        │  │ Skills       │  │ Knowledge    │      │
+│  │ Profiles     │  │              │  │ & Notes      │      │
 │  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘      │
 └─────────┼─────────────────┼─────────────────┼───────────────┘
           │                 │                 │
@@ -176,7 +176,7 @@ Agents have fine-grained tool access:
 │                                                      │
 │  Agent Profile defines WHO the agent is              │
 │  Skills define WHAT the agent knows                  │
-│  Memories provide CONTEXT across sessions            │
+│  Notes provide durable CONTEXT across sessions       │
 │                                                      │
 │  ┌──────────────────┐  ┌──────────────────┐          │
 │  │  MCP Service     │  │  ACP Service     │          │
@@ -194,12 +194,12 @@ Agents have fine-grained tool access:
 ### Complete Flow Example
 
 1. **App starts** → Loads `.agents/` config (global + workspace layers)
-2. **Agent initialized** → Profile loaded, skills indexed, memories attached
+2. **Agent initialized** → Profile loaded, skills indexed, relevant notes resolved
 3. **User speaks** → Voice transcribed, sent to agent
 4. **Agent reasons** → Uses skills knowledge, checks available tools
 5. **Agent acts** → Calls MCP tools or delegates to ACP agents
 6. **Results returned** → Displayed to user, saved to conversation history
-7. **Memory updated** → Relevant context persisted for future sessions
+7. **Note updated** → Relevant context persisted for future sessions
 
 ---
 

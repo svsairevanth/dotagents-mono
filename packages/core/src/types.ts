@@ -18,21 +18,24 @@ export type { ModelPreset } from '@dotagents/shared'
 export type Config = Record<string, any>
 
 // ============================================================================
-// Agent Memory
+// Knowledge Note
 // ============================================================================
-export interface AgentMemory {
+export type KnowledgeNoteContext = "auto" | "search-only"
+export type KnowledgeNoteEntryType = "note" | "entry" | "overview"
+
+export interface KnowledgeNote {
   id: string
-  createdAt: number
-  updatedAt: number
-  sessionId?: string
-  conversationId?: string
-  conversationTitle?: string
   title: string
-  content: string
+  context: KnowledgeNoteContext
+  updatedAt: number
   tags: string[]
-  importance: "low" | "medium" | "high" | "critical"
-  keyFindings?: string[]
-  userNotes?: string
+  body: string
+  summary?: string
+  createdAt?: number
+  references?: string[]
+  group?: string
+  series?: string
+  entryType?: KnowledgeNoteEntryType
 }
 
 // ============================================================================
@@ -72,7 +75,7 @@ export type ProfileMcpServerConfig = {
   disabledTools?: string[]
   allServersDisabledByDefault?: boolean
   enabledServers?: string[]
-  enabledBuiltinTools?: string[]
+  enabledRuntimeTools?: string[]
 }
 
 export type ProfileModelConfig = {
@@ -123,7 +126,7 @@ export type AgentProfileToolConfig = {
   enabledServers?: string[]
   disabledServers?: string[]
   disabledTools?: string[]
-  enabledBuiltinTools?: string[]
+  enabledRuntimeTools?: string[]
   allServersDisabledByDefault?: boolean
 }
 

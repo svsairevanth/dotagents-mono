@@ -8,9 +8,9 @@ slug: /intro
 
 > **One dot. Every agent.** Your assistant. Your machine. Your rules.
 
-Welcome to the DotAgents documentation. DotAgents is a voice-first AI agent orchestrator that gives you a team of AI specialists — each with memory, skills, and tools — controlled by your voice.
+Welcome to the DotAgents documentation. DotAgents is a voice-first AI agent orchestrator that gives you a team of AI specialists — each with durable knowledge, skills, and tools — controlled by your voice.
 
-Built on the `.agents` open standard, your skills work across Claude Code, Cursor, Codex, and every tool adopting the protocol.
+Built on the `.agents` open standard, your skills and notes work across Claude Code, Cursor, Codex, and every tool adopting the protocol.
 
 ---
 
@@ -38,7 +38,7 @@ Built on the `.agents` open standard, your skills work across Claude Code, Curso
 
 - **[Agent Profiles](agents/profiles)** — Specialized AI personas with distinct skills and tools
 - **[Skills](agents/skills)** — Portable, reusable agent capabilities
-- **[Memory](agents/memory)** — Persistent context across sessions
+- **[Knowledge & Notes](agents/knowledge-notes)** — Durable knowledge across sessions
 - **[Multi-Agent Delegation (ACP)](agents/delegation)** — Agents delegating tasks to other agents
 
 ### Tools & Integrations
@@ -79,7 +79,7 @@ DotAgents is three things:
 
 **1. An App** — A voice-first AI agent interface. Hold to speak, release to act. Your agents listen, think, and execute tools on your behalf. Available on desktop (macOS, Windows, Linux) and mobile (iOS, Android).
 
-**2. The `.agents` Protocol** — An open standard for agent skills, memories, and commands. Define your skills once in `.agents/`, and they work across Claude Code, Cursor, OpenCode, and any tool that adopts the protocol.
+**2. The `.agents` Protocol** — An open standard for agent skills, knowledge notes, and commands. Define them once in `.agents/`, and they work across Claude Code, Cursor, OpenCode, and any tool that adopts the protocol.
 
 **3. Agent Skills** — Reusable capabilities your agents can learn. Skills are portable, shareable, and composable — not locked into any single tool or vendor.
 

@@ -17,7 +17,7 @@ import { tipcClient } from "@renderer/lib/tipc-client"
 import { toast } from "sonner"
 
 type ConflictStrategy = "skip" | "overwrite" | "rename"
-type BundleComponentKey = "agentProfiles" | "mcpServers" | "skills" | "repeatTasks" | "memories"
+type BundleComponentKey = "agentProfiles" | "mcpServers" | "skills" | "repeatTasks" | "knowledgeNotes"
 type BundleComponentsState = Record<BundleComponentKey, boolean>
 
 const DEFAULT_COMPONENTS: BundleComponentsState = {
@@ -25,10 +25,10 @@ const DEFAULT_COMPONENTS: BundleComponentsState = {
   mcpServers: true,
   skills: true,
   repeatTasks: true,
-  memories: true,
+  knowledgeNotes: true,
 }
 
-const COMPONENT_KEYS: BundleComponentKey[] = ["agentProfiles", "mcpServers", "skills", "repeatTasks", "memories"]
+const COMPONENT_KEYS: BundleComponentKey[] = ["agentProfiles", "mcpServers", "skills", "repeatTasks", "knowledgeNotes"]
 
 function resolveComponents(initialComponents?: Partial<BundleComponentsState>): BundleComponentsState {
   return { ...DEFAULT_COMPONENTS, ...initialComponents }
@@ -45,7 +45,7 @@ interface BundleManifest {
     mcpServers: number
     skills: number
     repeatTasks: number
-    memories: number
+    knowledgeNotes: number
   }
 }
 
@@ -66,7 +66,7 @@ interface BundlePreview {
     mcpServers: PreviewConflict[]
     skills: PreviewConflict[]
     repeatTasks: PreviewConflict[]
-    memories: PreviewConflict[]
+    knowledgeNotes: PreviewConflict[]
   }
   error?: string
 }
@@ -196,7 +196,7 @@ export function BundleImportDialog({
           result.mcpServers.filter(r => r.action !== "skipped").length,
           result.skills.filter(r => r.action !== "skipped").length,
           result.repeatTasks.filter(r => r.action !== "skipped").length,
-          result.memories.filter(r => r.action !== "skipped").length,
+          result.knowledgeNotes.filter(r => r.action !== "skipped").length,
         ].reduce((a, b) => a + b, 0)
         toast.success(`Successfully imported ${imported} item(s)`)
         onImportComplete()
@@ -314,14 +314,14 @@ export function BundleImportDialog({
                     onToggle={() => toggleComponent("repeatTasks")}
                   />
                 )}
-                {isComponentAvailable("memories") && (
+                {isComponentAvailable("knowledgeNotes") && (
                   <ComponentRow
                     icon={Brain}
-                    label="Memories"
-                    count={manifest.components.memories}
-                    conflicts={conflicts?.memories.length ?? 0}
-                    checked={components.memories}
-                    onToggle={() => toggleComponent("memories")}
+                    label="Knowledge notes"
+                    count={manifest.components.knowledgeNotes}
+                    conflicts={conflicts?.knowledgeNotes.length ?? 0}
+                    checked={components.knowledgeNotes}
+                    onToggle={() => toggleComponent("knowledgeNotes")}
                   />
                 )}
               </div>

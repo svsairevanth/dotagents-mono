@@ -26,7 +26,7 @@ interface PublishForm { name: string; catalogId: string; artifactUrl: string; de
 interface PublishComponents extends BundleComponentSelectionState {}
 interface PublishPreviewState { payloadJson: string; bundleJson: string; installUrl: string; submissionJson: string; catalogId: string }
 const EMPTY: PublishForm = { name: "", catalogId: "", artifactUrl: "", description: "", summary: "", authorName: "", authorHandle: "", authorUrl: "", tags: "" }
-const DEFAULT_PUBLISH_COMPONENTS: PublishComponents = { agentProfiles: true, mcpServers: true, skills: true, repeatTasks: false, memories: false }
+const DEFAULT_PUBLISH_COMPONENTS: PublishComponents = { agentProfiles: true, mcpServers: true, skills: true, repeatTasks: false, knowledgeNotes: false }
 
 function buildMeta(f: PublishForm) {
   return {
@@ -91,7 +91,7 @@ export function BundlePublishDialog({ open, onOpenChange }: PublishDialogProps) 
         mcpServerNames: selection.mcpServerNames,
         skillIds: selection.skillIds,
         repeatTaskIds: selection.repeatTaskIds,
-        memoryIds: selection.memoryIds,
+        knowledgeNoteIds: selection.knowledgeNoteIds,
       })
       const submission: HubPublishSubmission = {
         source: "dotagents-desktop",
@@ -118,7 +118,7 @@ export function BundlePublishDialog({ open, onOpenChange }: PublishDialogProps) 
         mcpServerNames: selection.mcpServerNames,
         skillIds: selection.skillIds,
         repeatTaskIds: selection.repeatTaskIds,
-        memoryIds: selection.memoryIds,
+        knowledgeNoteIds: selection.knowledgeNoteIds,
       })
       if (r.success) toast.success("Bundle saved"); else if (r.canceled) toast.message("Canceled"); else toast.error(r.error || "Failed")
     } catch (e) { toast.error(`Save failed: ${e instanceof Error ? e.message : String(e)}`) }
@@ -147,7 +147,7 @@ export function BundlePublishDialog({ open, onOpenChange }: PublishDialogProps) 
             <div className="space-y-4 py-2">
               <div className="rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3 flex gap-2">
                 <Info className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
-                <p className="text-xs text-blue-700 dark:text-blue-300">Anything enabled below becomes part of the public <code>.dotagents</code> artifact and publish handoff. Memories and repeat tasks are off by default. API keys and secrets are stripped automatically, but enabled content is still public. If you leave listing ID or artifact URL blank, DotAgents derives Hub-friendly defaults for you.</p>
+                <p className="text-xs text-blue-700 dark:text-blue-300">Anything enabled below becomes part of the public <code>.dotagents</code> artifact and publish handoff. Knowledge notes and repeat tasks are off by default. API keys and secrets are stripped automatically, but enabled content is still public. If you leave listing ID or artifact URL blank, DotAgents derives Hub-friendly defaults for you.</p>
               </div>
               <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-3 flex gap-2">
                 <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />

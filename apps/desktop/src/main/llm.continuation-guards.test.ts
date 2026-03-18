@@ -182,7 +182,7 @@ describe("continuation guard helpers", () => {
   it("rejects garbled tool-call-as-text output (regression)", () => {
     // Real examples from production: model hallucinates tool call syntax as text
     expect(isDeliverableResponseContent(
-      '[Calling tools: multi_tool_use.parallel] to=multi_tool_use.parallel  qq天天中彩票 json\n{"tool_uses":[{"recipient_name":"functions.save_memory","parameters":{"content":"test"}}]}'
+      '[Calling tools: multi_tool_use.parallel] to=multi_tool_use.parallel  qq天天中彩票 json\n{"tool_uses":[{"recipient_name":"functions.save_note","parameters":{"body":"test"}}]}'
     )).toBe(false)
     expect(isDeliverableResponseContent(
       '[Calling tools: respond_to_user]ҩцәа to=functions.respond_to_user json\n{"text":"some response"}'

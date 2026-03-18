@@ -1,6 +1,6 @@
 import type { AgentUserResponseEvent } from "@dotagents/shared"
 
-import { RESPOND_TO_USER_TOOL } from "../shared/builtin-tool-names"
+import { RESPOND_TO_USER_TOOL } from "../shared/runtime-tool-names"
 
 type ToolCallLike = {
   name?: string

@@ -21,6 +21,7 @@ import { toolApprovalManager, agentSessionStateManager } from "./state"
 import { agentProfileService } from "./agent-profile-service"
 import { emitAgentProgress } from "./emit-agent-progress"
 import { logACP, logApp } from "./debug"
+import { RUNTIME_TOOLS_SERVER_NAME } from "../shared/runtime-tool-names"
 import {
   clearAcpClientSessionTokenMapping,
   getAppRunIdForAcpSession,
@@ -1733,7 +1734,7 @@ class ACPService extends EventEmitter {
     }
 
     try {
-      // Build MCP servers list - optionally inject DotAgents builtin tools
+      // Build MCP servers list - optionally inject DotAgents runtime tools
       const mcpServers: Array<{
         type?: string
         name: string
@@ -1742,18 +1743,18 @@ class ACPService extends EventEmitter {
       }> = []
       instance.clientSessionToken = undefined
 
-      // Check if we should inject DotAgents builtin tools
+      // Check if we should inject DotAgents runtime tools
       const config = configStore.get()
-      if (config.acpInjectBuiltinTools !== false && config.remoteServerEnabled) {
+      if (config.acpInjectRuntimeTools !== false && config.remoteServerEnabled) {
         const port = config.remoteServerPort || 3210
         const apiKey = config.remoteServerApiKey
         const clientSessionToken = randomUUID()
 
         if (apiKey) {
-          // Add DotAgents' MCP server as an HTTP endpoint
+          // Add DotAgents runtime tools over an MCP HTTP endpoint
           mcpServers.push({
             type: "http",
-            name: "dotagents-builtin",
+            name: RUNTIME_TOOLS_SERVER_NAME,
             url: `http://127.0.0.1:${port}/mcp/${encodeURIComponent(clientSessionToken)}`,
             headers: [
               { name: "Authorization", value: `Bearer ${apiKey}` },
@@ -1763,7 +1764,7 @@ class ACPService extends EventEmitter {
           if (pendingInjectedMcpContext?.appSessionId) {
             setPendingAcpClientSessionTokenMapping(clientSessionToken, pendingInjectedMcpContext.appSessionId)
           }
-          logACP("REQUEST", agentName, "session/new", `Injecting DotAgents builtin tools on port ${port}`)
+          logACP("REQUEST", agentName, "session/new", `Injecting DotAgents runtime tools on port ${port}`)
         }
       }
 

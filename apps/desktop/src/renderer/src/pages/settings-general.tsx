@@ -400,11 +400,11 @@ export function Component() {
                 </div>
               )}
 
-              <Control label={<ControlLabel label="Inject DotAgents Tools" tooltip="When enabled, DotAgents's builtin tools (delegation, settings management) are injected into ACP agent sessions. This allows the ACP agent to delegate tasks to other agents. Requires Remote Server to be enabled." />} className="px-3">
+              <Control label={<ControlLabel label="Inject DotAgents Runtime Tools" tooltip="When enabled, DotAgents runtime tools (delegation, user communication, completion signaling, command execution, skill loading) are injected into ACP agent sessions. Requires Remote Server to be enabled." />} className="px-3">
                 <Switch
-                  checked={configQuery.data?.acpInjectBuiltinTools !== false}
+                  checked={configQuery.data?.acpInjectRuntimeTools !== false}
                   disabled={!configQuery.data?.remoteServerEnabled}
-                  onCheckedChange={(value) => saveConfig({ acpInjectBuiltinTools: value })}
+                  onCheckedChange={(value) => saveConfig({ acpInjectRuntimeTools: value })}
                 />
               </Control>
               {!configQuery.data?.remoteServerEnabled && (
@@ -588,8 +588,8 @@ export function Component() {
             Advanced configuration can live in <span className="font-mono">.agents</span>. Workspace{" "}
             <span className="font-mono">.agents</span> overrides the global layer when present (or when{" "}
             <span className="font-mono">DOTAGENTS_WORKSPACE_DIR</span> is set). Skills live in{" "}
-            <span className="font-mono">skills/&lt;id&gt;/skill.md</span> and memories in{" "}
-            <span className="font-mono">memories/&lt;id&gt;.md</span>. Frontmatter uses simple{" "}
+            <span className="font-mono">skills/&lt;id&gt;/skill.md</span> and knowledge notes in{" "}
+            <span className="font-mono">knowledge/&lt;slug&gt;/&lt;slug&gt;.md</span>. Frontmatter uses simple{" "}
             <span className="font-mono">key: value</span> lines (not YAML).
           </div>
           <Control label="Global folder" className="px-3">

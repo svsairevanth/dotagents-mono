@@ -25,6 +25,8 @@ import {
   ChevronDown,
   ChevronRight,
   Settings,
+  Server,
+  Wrench,
   Eye,
   EyeOff,
   Power,
@@ -32,15 +34,9 @@ import {
 } from "lucide-react"
 import { tipcClient } from "@renderer/lib/tipc-client"
 import { toast } from "sonner"
+import type { DetailedToolInfo } from "@shared/types"
 
-interface DetailedTool {
-  name: string
-  description: string
-  serverName: string
-  enabled: boolean
-  serverEnabled: boolean
-  inputSchema: any
-}
+type DetailedTool = DetailedToolInfo
 
 interface MCPToolManagerProps {
   onToolToggle?: (toolName: string, enabled: boolean) => void
@@ -49,8 +45,8 @@ interface MCPToolManagerProps {
 export function MCPToolManager({ onToolToggle }: MCPToolManagerProps) {
   const [tools, setTools] = useState<DetailedTool[]>([])
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedServer, setSelectedServer] = useState<string>("all")
-  const [expandedServers, setExpandedServers] = useState<Set<string>>(new Set())
+  const [selectedSource, setSelectedSource] = useState<string>("all")
+  const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set())
   const [showDisabledTools, setShowDisabledTools] = useState(true)
 
   // Fetch tools periodically
@@ -69,28 +65,28 @@ export function MCPToolManager({ onToolToggle }: MCPToolManagerProps) {
   }, [])
 
   // Filter tools to only include those from enabled servers
-  const toolsFromEnabledServers = tools.filter((tool) => tool.serverEnabled)
+  const toolsFromEnabledSources = tools.filter((tool) => tool.serverEnabled)
 
-  // Group tools by server (only from enabled servers)
-  const toolsByServer = toolsFromEnabledServers.reduce(
+  // Group tools by source (real MCP server or DotAgents runtime tools)
+  const toolsBySource = toolsFromEnabledSources.reduce(
     (acc, tool) => {
-      if (!acc[tool.serverName]) {
-        acc[tool.serverName] = []
+      if (!acc[tool.sourceName]) {
+        acc[tool.sourceName] = []
       }
-      acc[tool.serverName].push(tool)
+      acc[tool.sourceName].push(tool)
       return acc
     },
     {} as Record<string, DetailedTool[]>,
   )
 
   // Filter tools based on search and server selection
-  const filteredToolsByServer = (Object.entries(toolsByServer) as Array<[string, DetailedTool[]]>).reduce<Record<string, DetailedTool[]>>(
-    (acc, [serverName, serverTools]) => {
-      if (selectedServer !== "all" && serverName !== selectedServer) {
+  const filteredToolsBySource = (Object.entries(toolsBySource) as Array<[string, DetailedTool[]]>).reduce<Record<string, DetailedTool[]>>(
+    (acc, [sourceName, sourceTools]) => {
+      if (selectedSource !== "all" && sourceName !== selectedSource) {
         return acc
       }
 
-      const filteredTools = serverTools.filter((tool) => {
+      const filteredTools = sourceTools.filter((tool) => {
         const matchesSearch =
           tool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           tool.description.toLowerCase().includes(searchQuery.toLowerCase())
@@ -99,7 +95,7 @@ export function MCPToolManager({ onToolToggle }: MCPToolManagerProps) {
       })
 
       if (filteredTools.length > 0) {
-        acc[serverName] = filteredTools
+        acc[sourceName] = filteredTools
       }
 
       return acc
@@ -147,25 +143,26 @@ export function MCPToolManager({ onToolToggle }: MCPToolManagerProps) {
     }
   }
 
-  const toggleServerExpansion = (serverName: string) => {
-    setExpandedServers((prev) => {
+  const toggleSourceExpansion = (sourceName: string) => {
+    setExpandedSources((prev) => {
       const newSet = new Set(prev)
-      if (newSet.has(serverName)) {
-        newSet.delete(serverName)
+      if (newSet.has(sourceName)) {
+        newSet.delete(sourceName)
       } else {
-        newSet.add(serverName)
+        newSet.add(sourceName)
       }
       return newSet
     })
   }
 
-  const handleToggleAllTools = async (serverName: string, enable: boolean) => {
-    const serverTools = tools.filter((tool) => tool.serverName === serverName)
-    if (serverTools.length === 0) return
+  const handleToggleAllTools = async (sourceName: string, enable: boolean) => {
+    const sourceTools = tools.filter((tool) => tool.sourceName === sourceName)
+    if (sourceTools.length === 0) return
+    const sourceLabel = sourceTools[0]?.sourceLabel || sourceName
 
     // Update local state immediately for better UX
     const updatedTools = tools.map((tool) => {
-      if (tool.serverName === serverName) {
+      if (tool.sourceName === sourceName) {
         return { ...tool, enabled: enable }
       }
       return tool
@@ -173,7 +170,7 @@ export function MCPToolManager({ onToolToggle }: MCPToolManagerProps) {
     setTools(updatedTools)
 
     // Track promises for all backend calls
-    const promises = serverTools.map((tool) =>
+    const promises = sourceTools.map((tool) =>
       tipcClient.setMcpToolEnabled({ toolName: tool.name, enabled: enable }),
     )
 
@@ -188,18 +185,18 @@ export function MCPToolManager({ onToolToggle }: MCPToolManagerProps) {
 
       if (failed === 0) {
         toast.success(
-          `All ${serverTools.length} tools for ${serverName} ${enable ? "enabled" : "disabled"}`,
+          `All ${sourceTools.length} tools for ${sourceLabel} ${enable ? "enabled" : "disabled"}`,
         )
       } else {
         // Revert local state for failed calls (rejected OR success:false)
-        const failedTools = serverTools.filter(
+        const failedTools = sourceTools.filter(
           (_, index) => {
             const r = results[index]
             return r.status === "rejected" || !(r.value as any)?.success
           },
         )
         const revertedTools = tools.map((tool) => {
-          if (tool.serverName === serverName && failedTools.includes(tool)) {
+          if (tool.sourceName === sourceName && failedTools.includes(tool)) {
             return { ...tool, enabled: !enable }
           }
           return tool
@@ -207,31 +204,31 @@ export function MCPToolManager({ onToolToggle }: MCPToolManagerProps) {
         setTools(revertedTools)
 
         toast.warning(
-          `${successful}/${serverTools.length} tools ${enable ? "enabled" : "disabled"} for ${serverName} (${failed} failed)`,
+          `${successful}/${sourceTools.length} tools ${enable ? "enabled" : "disabled"} for ${sourceLabel} (${failed} failed)`,
         )
       }
     } catch (error) {
       // Revert all tools on error
       const revertedTools = tools.map((tool) => {
-        if (tool.serverName === serverName) {
+        if (tool.sourceName === sourceName) {
           return { ...tool, enabled: !enable }
         }
         return tool
       })
       setTools(revertedTools)
-      toast.error(`Error toggling tools for ${serverName}: ${error.message}`)
+      toast.error(`Error toggling tools for ${sourceLabel}: ${error.message}`)
     }
   }
 
-  const serverNames = Object.keys(toolsByServer)
-  const totalTools = toolsFromEnabledServers.length
-  const enabledTools = toolsFromEnabledServers.filter((tool) => tool.enabled).length
+  const sourceNames = Object.keys(toolsBySource)
+  const totalTools = toolsFromEnabledSources.length
+  const enabledTools = toolsFromEnabledSources.filter((tool) => tool.enabled).length
 
   return (
     <div className="min-w-0 space-y-6">
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-3">
-          <h3 className="text-lg font-medium">MCP Tool Management</h3>
+          <h3 className="text-lg font-medium">Tool Management</h3>
           <Badge variant="secondary" className="shrink-0 text-sm">
             {enabledTools}/{totalTools} enabled
           </Badge>
@@ -268,14 +265,14 @@ export function MCPToolManager({ onToolToggle }: MCPToolManagerProps) {
         </div>
         <div className="w-full sm:w-48">
           <select
-            value={selectedServer}
-            onChange={(e) => setSelectedServer(e.target.value)}
+            value={selectedSource}
+            onChange={(e) => setSelectedSource(e.target.value)}
             className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
           >
-            <option value="all">All Servers</option>
-            {serverNames.map((serverName) => (
-              <option key={serverName} value={serverName}>
-                {serverName} ({toolsByServer[serverName].length})
+            <option value="all">All Sources</option>
+            {sourceNames.map((sourceName) => (
+              <option key={sourceName} value={sourceName}>
+                {toolsBySource[sourceName][0]?.sourceLabel || sourceName} ({toolsBySource[sourceName].length})
               </option>
             ))}
           </select>
@@ -284,38 +281,41 @@ export function MCPToolManager({ onToolToggle }: MCPToolManagerProps) {
 
       {/* Tools List */}
       <div className="space-y-4">
-        {Object.keys(filteredToolsByServer).length === 0 ? (
+        {Object.keys(filteredToolsBySource).length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-8">
               <Settings className="mb-4 h-12 w-12 text-muted-foreground" />
               <p className="text-center text-muted-foreground">
                 {tools.length === 0
-                  ? "No tools available. Configure MCP servers to see tools."
-                  : toolsFromEnabledServers.length === 0
-                    ? "No tools from enabled servers. Enable a server to see its tools."
+                  ? "No tools available."
+                  : toolsFromEnabledSources.length === 0
+                    ? "No tools from enabled sources. Enable an MCP server or runtime tool source to see its tools."
                     : "No tools match your search criteria."}
               </p>
             </CardContent>
           </Card>
         ) : (
-          Object.entries(filteredToolsByServer).map(
-            ([serverName, serverTools]) => (
-              <Card key={serverName}>
+          Object.entries(filteredToolsBySource).map(
+            ([sourceName, sourceTools]) => (
+              <Card key={sourceName}>
                 <CardHeader
                   className="cursor-pointer transition-colors hover:bg-accent/50"
-                  onClick={() => toggleServerExpansion(serverName)}
+                  onClick={() => toggleSourceExpansion(sourceName)}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex min-w-0 flex-1 items-center gap-2">
-                      {expandedServers.has(serverName) ? (
+                      {expandedSources.has(sourceName) ? (
                         <ChevronDown className="h-4 w-4 shrink-0" />
                       ) : (
                         <ChevronRight className="h-4 w-4 shrink-0" />
                       )}
-                      <CardTitle className="truncate text-base">{serverName}</CardTitle>
+                      {sourceTools[0]?.sourceKind === "runtime"
+                        ? <Wrench className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        : <Server className="h-4 w-4 shrink-0 text-muted-foreground" />}
+                      <CardTitle className="truncate text-base">{sourceTools[0]?.sourceLabel || sourceName}</CardTitle>
                       <Badge variant="secondary" className="shrink-0">
-                        {serverTools.filter((t) => t.enabled).length}/
-                        {serverTools.length} enabled
+                        {sourceTools.filter((t) => t.enabled).length}/
+                        {sourceTools.length} enabled
                       </Badge>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
@@ -324,7 +324,7 @@ export function MCPToolManager({ onToolToggle }: MCPToolManagerProps) {
                         size="sm"
                         onClick={(e) => {
                           e.stopPropagation()
-                          handleToggleAllTools(serverName, true)
+                          handleToggleAllTools(sourceName, true)
                         }}
                         className="h-7 gap-1 px-2 text-xs"
                       >
@@ -336,7 +336,7 @@ export function MCPToolManager({ onToolToggle }: MCPToolManagerProps) {
                         size="sm"
                         onClick={(e) => {
                           e.stopPropagation()
-                          handleToggleAllTools(serverName, false)
+                          handleToggleAllTools(sourceName, false)
                         }}
                         className="h-7 gap-1 px-2 text-xs"
                       >
@@ -346,10 +346,10 @@ export function MCPToolManager({ onToolToggle }: MCPToolManagerProps) {
                     </div>
                   </div>
                 </CardHeader>
-                {expandedServers.has(serverName) && (
+                {expandedSources.has(sourceName) && (
                   <CardContent className="pt-0">
                     <div className="space-y-3">
-                      {serverTools.map((tool) => (
+                      {sourceTools.map((tool) => (
                         <div
                           key={tool.name}
                           className="flex items-center justify-between rounded-lg border p-3"

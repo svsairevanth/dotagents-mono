@@ -66,7 +66,8 @@ import {
   MoreHorizontal,
 } from "lucide-react"
 import { Spinner } from "@renderer/components/ui/spinner"
-import { MCPConfig, MCPServerConfig, MCPTransportType, OAuthConfig, ServerLogEntry } from "@shared/types"
+import { MCPConfig, MCPServerConfig, MCPTransportType, OAuthConfig, ServerLogEntry, DetailedToolInfo } from "@shared/types"
+import { RESERVED_RUNTIME_TOOL_SERVER_NAMES } from "@shared/runtime-tool-names"
 import { tipcClient } from "@renderer/lib/tipc-client"
 import { toast } from "sonner"
 import { OAuthServerConfig } from "./OAuthServerConfig"
@@ -75,14 +76,7 @@ import { parseShellCommand } from "@shared/shell-parse"
 
 
 
-interface DetailedTool {
-  name: string
-  description: string
-  serverName: string
-  enabled: boolean
-  serverEnabled: boolean
-  inputSchema: any
-}
+type DetailedTool = DetailedToolInfo
 
 
 
@@ -108,8 +102,8 @@ interface ServerDialogProps {
   isOpen?: boolean
 }
 
-// Reserved server names that cannot be used by users (used for built-in functionality)
-const RESERVED_SERVER_NAMES = ["dotagents-internal"]
+// Reserved internal server aliases that cannot be used by user-defined MCP servers.
+const RESERVED_SERVER_NAMES = [...RESERVED_RUNTIME_TOOL_SERVER_NAMES]
 
 function ServerDialog({ server, onSave, onCancel, onImportFromFile, onImportFromText, isOpen }: ServerDialogProps) {
   const [name, setName] = useState(server?.name || "")
@@ -923,7 +917,7 @@ export function MCPConfigManager({
     // - undefined: never persisted before (first time) → all collapsed by default
     // - []: explicitly persisted as "no servers collapsed" (e.g., user clicked "expand all") → all expanded
     // - [...names]: specific servers are collapsed → expand all except those
-    const allServerNames = [...Object.keys(config.mcpServers || {}), "dotagents-internal"]
+    const allServerNames = Object.keys(config.mcpServers || {})
 
     // If collapsedServers is undefined, we haven't persisted yet - default to all collapsed
     if (collapsedServers === undefined) {
@@ -955,7 +949,6 @@ export function MCPConfigManager({
   const warnedReservedServersRef = useRef<Set<string>>(new Set())
 
   // Track known server names to detect new servers
-  // Include RESERVED_SERVER_NAMES so built-in servers aren't treated as "new" on first mount
   const [knownServers, setKnownServers] = useState<Set<string>>(() => new Set([...Object.keys(config.mcpServers || {}), ...RESERVED_SERVER_NAMES]))
 
   // Track if we've completed the initial config hydration
@@ -969,7 +962,7 @@ export function MCPConfigManager({
   )
 
   // Handle server changes: prune stale entries (new servers stay collapsed by default)
-  // Include reserved server names (built-in servers) so they don't get pruned
+  // Include reserved runtime-tool server names so they don't get pruned
   useEffect(() => {
     const currentServerNames = new Set([...Object.keys(servers), ...RESERVED_SERVER_NAMES])
 
@@ -1142,25 +1135,24 @@ export function MCPConfigManager({
     return () => clearInterval(interval)
   }, [fetchTools])
 
-  // Track known tool server names to detect new servers
+  // Track known tool source names to detect new sources
   const [knownToolServers, setKnownToolServers] = useState<Set<string>>(new Set())
 
-  // Initialize expandedToolServers when tools are first loaded
-  // All servers are expanded by default - only collapse those in collapsedToolServers
-  // Also handles new servers appearing after initialization - they default to expanded
+  // Initialize expanded tool groups when tools are first loaded.
+  // All sources are expanded by default; only persisted collapsed groups stay collapsed.
   useEffect(() => {
     if (tools.length > 0) {
-      const allToolServerNames = [...new Set<string>(tools.map(t => t.serverName))]
+      const allToolServerNames = [...new Set<string>(tools.map(t => t.sourceName))]
       const collapsedSet = new Set<string>(collapsedToolServers ?? [])
 
       if (!toolServersInitialized) {
-        // Initial setup: all servers expanded by default, except those persisted as collapsed
+        // Initial setup: all sources expanded by default, except those persisted as collapsed
         const expanded = new Set<string>(allToolServerNames.filter(name => !collapsedSet.has(name)))
         setExpandedToolServers(expanded)
         setKnownToolServers(new Set<string>(allToolServerNames))
         setToolServersInitialized(true)
       } else {
-        // After initialization: detect new servers and expand them by default
+        // After initialization: detect new sources and expand them by default
         const newServers = allToolServerNames.filter(name => !knownToolServers.has(name))
         if (newServers.length > 0) {
           setExpandedToolServers(prev => {
@@ -1192,7 +1184,7 @@ export function MCPConfigManager({
     if (collapsedChanged && toolServersInitialized) {
       prevCollapsedToolServersRef.current = collapsedToolServers
       // Re-sync expandedToolServers from the new collapsed list
-      const allToolServerNames = [...new Set<string>(tools.map(t => t.serverName))]
+      const allToolServerNames = [...new Set<string>(tools.map(t => t.sourceName))]
       const collapsedSet = new Set<string>(collapsedToolServers ?? [])
       const newExpanded = new Set<string>(allToolServerNames.filter(name => !collapsedSet.has(name)))
       setExpandedToolServers(newExpanded)
@@ -1201,20 +1193,20 @@ export function MCPConfigManager({
 
 
 
-  // Group tools by server
+  // Group tools by source
   const toolsByServer = tools.reduce(
     (acc, tool) => {
-      if (!acc[tool.serverName]) {
-        acc[tool.serverName] = []
+      if (!acc[tool.sourceName]) {
+        acc[tool.sourceName] = []
       }
-      acc[tool.serverName].push(tool)
+      acc[tool.sourceName].push(tool)
       return acc
     },
     {} as Record<string, DetailedTool[]>,
   )
 
-  // Filter tools for a specific server
-  // Only include tools from enabled servers
+  // Filter tools for a specific source
+  // Only include tools from enabled sources
   const getFilteredToolsForServer = (serverName: string) => {
     const serverTools = toolsByServer[serverName] || []
     return serverTools.filter((tool) => {
@@ -1265,12 +1257,13 @@ export function MCPConfigManager({
   }
 
   const handleToggleAllToolsForServer = async (serverName: string, enable: boolean) => {
-    const serverTools = tools.filter((tool) => tool.serverName === serverName)
+    const serverTools = tools.filter((tool) => tool.sourceName === serverName)
     if (serverTools.length === 0) return
+    const sourceLabel = serverTools[0]?.sourceLabel || serverName
 
     // Update local state immediately for better UX
     const updatedTools = tools.map((tool) => {
-      if (tool.serverName === serverName) {
+      if (tool.sourceName === serverName) {
         return { ...tool, enabled: enable }
       }
       return tool
@@ -1293,7 +1286,7 @@ export function MCPConfigManager({
 
       if (failed === 0) {
         toast.success(
-          `All ${serverTools.length} tools for ${serverName} ${enable ? "enabled" : "disabled"}`,
+          `All ${serverTools.length} tools for ${sourceLabel} ${enable ? "enabled" : "disabled"}`,
         )
       } else {
         // Revert local state for failed calls (rejected OR success:false)
@@ -1304,7 +1297,7 @@ export function MCPConfigManager({
           },
         )
         const revertedTools = tools.map((tool) => {
-          if (tool.serverName === serverName && failedTools.includes(tool)) {
+          if (tool.sourceName === serverName && failedTools.includes(tool)) {
             return { ...tool, enabled: !enable }
           }
           return tool
@@ -1312,28 +1305,28 @@ export function MCPConfigManager({
         setTools(revertedTools)
 
         toast.warning(
-          `${successful}/${serverTools.length} tools ${enable ? "enabled" : "disabled"} for ${serverName} (${failed} failed)`,
+          `${successful}/${serverTools.length} tools ${enable ? "enabled" : "disabled"} for ${sourceLabel} (${failed} failed)`,
         )
       }
     } catch (error: any) {
       // Revert all tools on error
       const revertedTools = tools.map((tool) => {
-        if (tool.serverName === serverName) {
+        if (tool.sourceName === serverName) {
           return { ...tool, enabled: !enable }
         }
         return tool
       })
       setTools(revertedTools)
-      toast.error(`Error toggling tools for ${serverName}: ${error.message}`)
+      toast.error(`Error toggling tools for ${sourceLabel}: ${error.message}`)
     }
   }
 
   const toggleToolsExpansion = (serverName: string) => {
     setExpandedToolServers(prev => {
-      const allToolServerNames = [...new Set<string>(tools.map(t => t.serverName))]
+      const allToolServerNames = [...new Set<string>(tools.map(t => t.sourceName))]
       const collapsedSet = new Set<string>(collapsedToolServers ?? [])
 
-      // If not yet initialized, start with all servers expanded (minus persisted collapsed ones)
+      // If not yet initialized, start with all sources expanded (minus persisted collapsed ones)
       // This ensures first toggle behaves correctly even before useEffect runs
       let newSet: Set<string>
       if (!toolServersInitialized && prev.size === 0) {
@@ -1676,21 +1669,17 @@ export function MCPConfigManager({
     })
   }
 
-  // Build combined servers list (config servers + builtin server)
+  // Build the user-configurable server list only.
   // Filter out any user servers with reserved names to prevent collisions
   // Defined before toggleServerExpansion so it can use allServers for persistence
-  const BUILTIN_SERVER_NAME = "dotagents-internal"
-  const filteredUserServers = Object.fromEntries(
+  const filteredUserServers: Record<string, MCPServerConfig> = Object.fromEntries(
     Object.entries(servers).filter(
       ([name]) => !RESERVED_SERVER_NAMES.some(
         (reserved) => name.trim().toLowerCase() === reserved.toLowerCase()
       )
     )
-  )
-  const allServers: Record<string, MCPServerConfig | { isBuiltin: true }> = {
-    ...filteredUserServers,
-    [BUILTIN_SERVER_NAME]: { isBuiltin: true } as any,
-  }
+  ) as Record<string, MCPServerConfig>
+  const allServers: Record<string, MCPServerConfig> = filteredUserServers
 
   const toggleServerExpansion = (serverName: string) => {
     setExpandedServers(prev => {
@@ -1701,7 +1690,6 @@ export function MCPConfigManager({
         newSet.add(serverName)
       }
       // Persist the collapsed state (servers NOT in expanded set are collapsed)
-      // Use allServers to include built-in server in persistence
       if (onCollapsedServersChange) {
         const allServerNames = Object.keys(allServers)
         const collapsed = allServerNames.filter(name => !newSet.has(name))
@@ -1961,16 +1949,18 @@ export function MCPConfigManager({
                     : "No tools match your search"}
                 </div>
               ) : (
-                // Group filtered tools by server
+                // Group filtered tools by source
                 (Object.entries(
                   getAllFilteredTools().reduce((acc, tool) => {
-                    if (!acc[tool.serverName]) {
-                      acc[tool.serverName] = []
+                    if (!acc[tool.sourceName]) {
+                      acc[tool.sourceName] = []
                     }
-                    acc[tool.serverName].push(tool)
+                    acc[tool.sourceName].push(tool)
                     return acc
                   }, {} as Record<string, DetailedTool[]>)
                 ) as Array<[string, DetailedTool[]]>).map(([serverName, serverTools]) => {
+                  const sourceLabel = serverTools[0]?.sourceLabel || serverName
+                  const isRuntimeBuiltinSource = serverTools[0]?.sourceKind === "runtime"
                   // Before initialization: expanded unless in collapsedToolServers (respects persisted state)
                   // After initialization: use the expandedToolServers set
                   const isExpanded = !toolServersInitialized
@@ -1983,7 +1973,7 @@ export function MCPConfigManager({
                       role="button"
                       tabIndex={0}
                       aria-expanded={isExpanded}
-                      aria-label={`Toggle ${serverName} tools`}
+                      aria-label={`Toggle ${sourceLabel} tools`}
                       className="flex items-center justify-between bg-muted/50 rounded-lg px-3 py-2 cursor-pointer hover:bg-muted/70 transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
                       onClick={() => toggleToolsExpansion(serverName)}
                       onKeyDown={(e) => {
@@ -1999,8 +1989,10 @@ export function MCPConfigManager({
                         ) : (
                           <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform" />
                         )}
-                        <Server className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm font-medium">{serverName}</span>
+                        {isRuntimeBuiltinSource
+                          ? <Wrench className="h-4 w-4 text-muted-foreground" />
+                          : <Server className="h-4 w-4 text-muted-foreground" />}
+                        <span className="text-sm font-medium">{sourceLabel}</span>
                         <Badge variant="secondary" className="text-xs">
                           {serverTools.filter(t => t.enabled).length}/{serverTools.length} enabled
                         </Badge>
@@ -2067,10 +2059,10 @@ export function MCPConfigManager({
                                   <div className="space-y-4 min-w-0">
                                     <div className="min-w-0">
                                       <Label className="text-sm font-medium">
-                                        Server
+                                        Source
                                       </Label>
                                       <p className="text-sm text-muted-foreground mt-1 break-words">
-                                        {tool.serverName}
+                                        {tool.sourceLabel}
                                       </p>
                                     </div>
                                     <div className="min-w-0">
@@ -2162,9 +2154,7 @@ export function MCPConfigManager({
         {serversSectionExpanded && (
           <CardContent className="border-t pt-4">
             <div className="grid gap-2">
-              {Object.entries(allServers).map(([name, serverConfigOrBuiltin]) => {
-                const isBuiltin = name === BUILTIN_SERVER_NAME
-                const serverConfig = isBuiltin ? null : (serverConfigOrBuiltin as MCPServerConfig)
+              {Object.entries(allServers).map(([name, serverConfig]) => {
                 const status = serverStatus[name]
                 const serverTools = toolsByServer[name] || []
                 const enabledToolCount = serverTools.filter((t) => t.enabled).length
@@ -2193,17 +2183,7 @@ export function MCPConfigManager({
                           <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
                         )}
                         <span className="font-medium truncate">{name}</span>
-                        {isBuiltin ? (
-                          <div className="flex shrink-0 items-center gap-1">
-                            <CheckCircle className="h-3 w-3 text-green-500" />
-                            <Badge variant="outline" className="text-xs border-green-300 text-green-600">
-                              Built-in
-                            </Badge>
-                            <Badge variant="default" className="text-xs">
-                              {enabledToolCount}/{serverTools.length} tools
-                            </Badge>
-                          </div>
-                        ) : serverConfig?.disabled ? (
+                        {serverConfig?.disabled ? (
                           <Badge variant="secondary" className="shrink-0">Disabled</Badge>
                         ) : status?.runtimeEnabled === false ? (
                           <div className="flex shrink-0 items-center gap-1">
@@ -2241,7 +2221,7 @@ export function MCPConfigManager({
                         )}
                       </div>
                       {/* Action buttons - stop propagation so clicks/keys don't toggle expansion */}
-                      {!isBuiltin && serverConfig && (
+                      {serverConfig && (
                         <div
                           className="flex shrink-0 items-center gap-1"
                           onClick={(e) => e.stopPropagation()}
@@ -2323,14 +2303,7 @@ export function MCPConfigManager({
                       <>
                         <CardContent className="pt-0 border-t">
                           <div className="space-y-3 py-3">
-                            {isBuiltin ? (
-                              <div className="text-sm">
-                                <span className="font-medium text-muted-foreground">Type:</span>{" "}
-                                <span className="text-xs text-muted-foreground">
-                                  Built-in tools (always available)
-                                </span>
-                              </div>
-                            ) : serverConfig && (
+                            {serverConfig && (
                               <>
                                 {/* Command/Transport Info */}
                                 <div className="text-sm">
@@ -2373,8 +2346,8 @@ export function MCPConfigManager({
                           </div>
                         </CardContent>
 
-                        {/* Server Logs Section - only show for stdio servers (not builtin) */}
-                        {!isBuiltin && serverConfig && (serverConfig.transport === "stdio" || !serverConfig.transport) && (
+                        {/* Server Logs Section - only show for stdio servers */}
+                        {serverConfig && (serverConfig.transport === "stdio" || !serverConfig.transport) && (
                           <CardContent className="pt-0 border-t">
                             <div className="space-y-2 py-2">
                               <div className="flex items-center justify-between">

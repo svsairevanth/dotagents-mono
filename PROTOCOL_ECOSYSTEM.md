@@ -45,8 +45,8 @@ interface MCPServerConfig {
 
 ### Tool Naming Convention
 - Tools are prefixed with server name: `{serverName}:{toolName}`
-- Example: `github:search_repositories`, `memory:save_memory`
-- Built-in tools use special prefix: `speakmcp-settings:list_mcp_servers`
+- Example: `github:search_repositories`, `exa:search`
+- DotAgents runtime tools use plain tool names with no server prefix.
 
 ### Key Features
 - **OAuth 2.1 Support**: Automatic token refresh for protected servers
@@ -121,7 +121,7 @@ interface ACPAgentDefinition {
 - **Capability Negotiation**: Protocol version and feature handshake
 
 ### Agent Delegation Flow
-1. Main agent calls `speakmcp-builtin:delegate_to_agent` tool
+1. Main agent calls `delegate_to_agent`
 2. ACP router looks up agent in registry
 3. Agent is spawned (if not already running)
 4. Request is sent via JSON-RPC
@@ -136,7 +136,7 @@ interface ACPAgentDefinition {
 Skills are **instruction-based capability extensions** based on Anthropic's Agent Skills specification. They allow agents to be extended with specialized knowledge without code changes.
 
 ### Skill Format
-Skills are stored as markdown files with YAML frontmatter:
+Skills are stored as markdown files with simple `key: value` frontmatter (not full YAML):
 
 ```markdown
 ---
@@ -166,7 +166,7 @@ Your detailed instructions here in markdown...
 
 ### Skill Usage
 1. Agent sees skill name/description in system prompt
-2. Agent calls `speakmcp-settings:load_skill_instructions` to get full instructions
+2. Agent calls `load_skill_instructions` to get full instructions
 3. Agent uses skill knowledge to complete tasks
 4. Skills can reference external files via `filePath` field
 
@@ -257,17 +257,17 @@ interface AgentProfileToolConfig {
   enabledServers?: string[]           // Whitelist of MCP servers
   disabledServers?: string[]          // Blacklist of MCP servers
   disabledTools?: string[]            // Specific tools to disable
-  enabledBuiltinTools?: string[]       // Whitelist of built-in tools
+  enabledRuntimeTools?: string[]       // Whitelist of DotAgents runtime tools
   allServersDisabledByDefault?: boolean
 }
 ```
 
-### Built-in Tool Control (Option B Semantics)
-- **Built-in tools** (`speakmcp-settings:*`, `speakmcp-builtin:*`): Controlled via `enabledBuiltinTools` **allowlist**
-  - `undefined` or `null` = allow all built-ins
-  - `[]` = unconfigured, allow all built-ins
+### Runtime Tool Control (Option B Semantics)
+- **DotAgents runtime tools**: Controlled via `enabledRuntimeTools` **allowlist**
+  - `undefined` or `null` = allow all runtime tools
+  - `[]` = unconfigured, allow all runtime tools
   - `["tool1", "tool2"]` = allow only these + essential tools
-  - `speakmcp-settings:mark_work_complete` is **always enabled**
+  - `mark_work_complete` is **always enabled**
 - **External MCP tools**: Controlled via `disabledTools` **denylist**
 
 ### Agent Roles
@@ -285,7 +285,7 @@ interface AgentProfileToolConfig {
 ## 5. .agents/ Protocol (Modular Configuration)
 
 ### What It Is
-A **file-based, modular configuration system** that stores agent-related settings, skills, and memories as organized files instead of a monolithic JSON blob.
+A **file-based, modular configuration system** that stores agent-related settings, skills, agent profiles, and knowledge notes as organized files instead of a monolithic JSON blob.
 
 ### Design Philosophy
 - **Modular**: Separate concerns into different files
@@ -297,7 +297,7 @@ A **file-based, modular configuration system** that stores agent-related setting
 ### Directory Structure
 ```
 .agents/
-├── speakmcp-settings.json        # General settings (subset of Config)
+├── dotagents-settings.json       # General settings (subset of Config)
 ├── mcp.json                      # MCP servers + tool config
 ├── models.json                   # Model presets + provider keys
 ├── system-prompt.md              # Custom system prompt
@@ -309,12 +309,14 @@ A **file-based, modular configuration system** that stores agent-related setting
 │   │   └── skill.md              # Skill definition + instructions
 │   └── skill-2/
 │       └── skill.md
-├── memories/
-│   ├── memory_1.md               # Memory entry + frontmatter
-│   └── memory_2.md
+├── knowledge/
+│   └── project-architecture/
+│       ├── project-architecture.md  # Note frontmatter + markdown body
+│       ├── diagram.png              # Note-local asset
+│       └── db-schema.pdf            # Note-local asset
 └── .backups/                     # Timestamped backups (auto-rotated)
     ├── skills/
-    └── memories/
+    └── knowledge/
 ```
 
 ### Two-Layer System
@@ -335,9 +337,13 @@ A **file-based, modular configuration system** that stores agent-related setting
 Final Config = Global Config + Workspace Config (workspace wins on conflicts)
 ```
 
+Skills and knowledge notes merge by ID, with workspace content overriding global content on conflicts.
+
 ### File Formats
 
-#### JSON Files (speakmcp-settings.json, mcp.json, models.json)
+Markdown frontmatter in `.agents/` uses a simple `key: value` format. It is not full YAML.
+
+#### JSON Files (dotagents-settings.json, mcp.json, models.json)
 ```json
 {
   "key": "value",
@@ -348,7 +354,7 @@ Final Config = Global Config + Workspace Config (workspace wins on conflicts)
 #### Markdown Files (system-prompt.md, agents.md)
 ```markdown
 ---
-# Optional frontmatter (currently unused)
+# Optional simple frontmatter
 ---
 
 # Markdown body content
@@ -373,22 +379,26 @@ filePath: /path/to/execution/context
 Your detailed instructions...
 ```
 
-#### Memory Files (.agents/memories/<memory-id>.md)
+#### Note Files (.agents/knowledge/<slug>/<slug>.md)
 ```markdown
 ---
-kind: memory
-id: memory_123
-createdAt: 1234567890
+kind: note
+id: project-architecture
+title: Project Architecture
+context: auto
 updatedAt: 1234567890
-title: Memory Title
-content: Memory content summary
-importance: low | medium | high | critical
-tags: tag1, tag2, tag3
-keyFindings: ["finding1", "finding2"]
+tags: architecture, backend
+summary: Service-oriented Electron app with layered .agents config.
 ---
 
-Optional notes in markdown body.
+## Details
+
+Longer-form markdown content goes here.
 ```
+
+Notes are the canonical markdown artifact under `.agents/knowledge/`. The small runtime-injected subset are **working notes**, selected via `context: auto`; most notes should default to `context: search-only`.
+
+Note-local assets such as images or PDFs may live anywhere inside the same note folder.
 
 ### Infrastructure Components
 
@@ -416,11 +426,11 @@ Optional notes in markdown body.
 - Skill merging by ID
 - Recursive directory scanning
 
-**memories.ts**
-- `loadAgentsMemoriesLayer()` loads memories
-- `parseMemoryMarkdown()` / `stringifyMemoryMarkdown()`
-- List value parsing (CSV or JSON array)
-- Memory merging by ID
+**knowledge / notes loader**
+- Loads notes from `.agents/knowledge/`
+- Parses note frontmatter and markdown body
+- Merges notes by ID across global and workspace layers
+- Uses `context: auto | search-only` to determine runtime selection behavior
 
 ---
 
@@ -440,7 +450,7 @@ Optional notes in markdown body.
         │ Agent        │ │ MCP      │ │ .agents/     │
         │ Profiles     │ │ Servers  │ │ Config       │
         │ (ACP)        │ │ (Tools)  │ │ (Skills,     │
-        │              │ │          │ │  Memories)   │
+        │              │ │          │ │  Knowledge)  │
         └──────────────┘ └──────────┘ └──────────────┘
                 │             │             │
                 └─────────────┼─────────────┘
@@ -461,13 +471,13 @@ Optional notes in markdown body.
 2. **Agent Initialization**:
    - Load `AgentProfile` from config
    - Load skills for agent from `.agents/skills/`
-   - Load memories from `.agents/memories/`
-   - Build system prompt with skills list
+   - Load notes from `.agents/knowledge/`
+   - Build system prompt with skills plus working notes (`context: auto`)
    - Initialize MCP service with servers from config
 
 3. **Tool Execution**:
    - Agent calls tool: `{server}:{toolName}`
-   - If built-in tool → execute in `builtin-tools.ts`
+   - If runtime tool → execute in `runtime-tools.ts`
    - If MCP tool → route to appropriate MCP server
    - If ACP delegation tool → spawn/communicate with ACP agent
 
@@ -478,11 +488,11 @@ User Input
     ▼
 Main Agent (internal LLM)
     │
-    ├─ Sees available agents via speakmcp-builtin:list_available_agents
+    ├─ Sees available agents via list_available_agents
     │
     ├─ Decides to delegate to "code-agent"
     │
-    ├─ Calls speakmcp-builtin:delegate_to_agent
+    ├─ Calls delegate_to_agent
     │
     ▼
 ACP Router
@@ -516,7 +526,7 @@ Agent System Prompt includes:
 Agent decides to use document-processing skill
     │
     ▼
-Agent calls speakmcp-settings:load_skill_instructions
+Agent calls load_skill_instructions
     │
     ▼
 Load from .agents/skills/document-processing/skill.md
@@ -548,7 +558,7 @@ export const myService = MyService.getInstance()
 
 ### 2. Dependency-Free Definitions
 Tool definitions are kept in separate files without dependencies:
-- `builtin-tool-definitions.ts` (no imports from services)
+- `runtime-tool-definitions.ts` (no imports from services)
 - `acp-router-tool-definitions.ts` (no imports from services)
 - Handlers are in separate files that can import services
 
@@ -565,8 +575,7 @@ config.json (user settings)
 
 ### 4. Tool Naming Convention
 - External MCP: `{serverName}:{toolName}`
-- Built-in settings: `speakmcp-settings:{toolName}`
-- Built-in delegation: `speakmcp-builtin:{toolName}`
+- DotAgents runtime tools: `{toolName}`
 - Sanitization: `:` → `__COLON__` for LLM providers
 
 ### 5. Bidirectional Communication
@@ -575,27 +584,25 @@ config.json (user settings)
 
 ---
 
-## Type Hierarchy
+## Conceptual Data Model
 
 ```
 @speakmcp/shared (packages/shared/src/types.ts)
   └─ ToolCall, ToolResult, BaseChatMessage, ChatApiResponse
 
-src/shared/types.ts (apps/desktop/src/shared/types.ts)
-  ├─ MCPServerConfig, MCPConfig, MCPTransportType
-  ├─ OAuthConfig, OAuthTokens
-  ├─ AgentProfile, AgentProfileConnection, AgentProfileToolConfig
-  ├─ AgentSkill, AgentSkillsData
-  ├─ AgentMemory
-  ├─ Config (main app config)
-  └─ Legacy types: Profile, Persona, ACPAgentConfig (for migration)
+Conceptual .agents model
+  ├─ AgentProfile
+  ├─ AgentSkill
+  ├─ KnowledgeNote
+  ├─ WorkingNote (note where context = auto)
+  └─ Config (main app config)
 
-apps/desktop/src/main/agents-files/
-  ├─ AgentsLayerPaths (modular-config.ts)
-  ├─ LoadedAgentsSkillsLayer (skills.ts)
-  └─ LoadedAgentsMemoriesLayer (memories.ts)
+Layer loaders
+  ├─ AgentsLayerPaths
+  ├─ LoadedAgentsSkillsLayer
+  └─ LoadedAgentsKnowledgeLayer
 
-apps/desktop/src/main/acp/types.ts
+ACP protocol types
   ├─ ACPAgentDefinition
   ├─ ACPRunRequest, ACPRunResult
   └─ ACPMessage
@@ -618,11 +625,11 @@ The repo now contains a static website in `website/` for `https://dotagents.app`
 
 DotAgents is building a **composable, open protocol ecosystem** where:
 
-1. **MCP** provides standardized **tool access** (GitHub, Exa, Memory, etc.)
+1. **MCP** provides standardized **tool access** (GitHub, Exa, filesystem, etc.)
 2. **ACP** enables **agent delegation** (Auggie, Claude Code, custom agents)
 3. **Skills** extend agents with **specialized knowledge** (document processing, code generation)
 4. **Agent Profiles** unify **agent configuration** (system prompt, guidelines, tools, skills)
-5. **.agents/ Protocol** provides **modular, portable configuration** (version-controllable, workspace-aware)
+5. **.agents/ Protocol** provides **modular, portable configuration and knowledge notes** (version-controllable, workspace-aware)
 
 These protocols are **not competing standards** but **complementary layers** that work together:
 - **MCP** = "What tools can I access?"

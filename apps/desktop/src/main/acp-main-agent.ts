@@ -15,7 +15,7 @@ import {
 } from "./acp-session-state"
 import { emitAgentProgress } from "./emit-agent-progress"
 import { AgentProgressUpdate, AgentProgressStep, SessionProfileSnapshot, ACPConfigOption, ToolCall, ToolResult } from "../shared/types"
-import { BUILTIN_SERVER_NAME, MARK_WORK_COMPLETE_TOOL, RESPOND_TO_USER_TOOL } from "../shared/builtin-tool-names"
+import { MARK_WORK_COMPLETE_TOOL, RESPOND_TO_USER_TOOL } from "../shared/runtime-tool-names"
 import { logApp } from "./debug"
 import { conversationService } from "./conversation-service"
 import { buildProfileContext } from "./agent-run-utils"
@@ -24,12 +24,11 @@ import { resolveMessageTimestamps, type AgentConversationState, type AgentUserRe
 
 type ConversationHistoryMessage = NonNullable<AgentProgressUpdate["conversationHistory"]>[number]
 
-const ACP_INJECTED_BUILTIN_SERVER_NAME = "dotagents-builtin"
-const ACP_BUILTIN_TOOL_PROMPT_CONTEXT = [
-  `If the injected MCP server "${ACP_INJECTED_BUILTIN_SERVER_NAME}" is available, prefer it for DotAgents builtin user-facing communication tools.`,
+const ACP_RUNTIME_TOOL_PROMPT_CONTEXT = [
+  `If injected DotAgents runtime tools are available, prefer them for user-facing communication and completion signaling.`,
   `When "${RESPOND_TO_USER_TOOL}" is available, use it for every user-facing response instead of plain assistant text.`,
   `When the task is fully complete and "${MARK_WORK_COMPLETE_TOOL}" is available, call "${RESPOND_TO_USER_TOOL}" first with the final user-facing answer, then call "${MARK_WORK_COMPLETE_TOOL}" with a concise completion summary.`,
-  `Only fall back to plain assistant text if those builtin tools are unavailable or fail repeatedly.`,
+  `Only fall back to plain assistant text if those runtime tools are unavailable or fail repeatedly.`,
 ].join("\n")
 
 export interface ACPMainAgentOptions {
@@ -193,11 +192,7 @@ function normalizeAcpToolName(name: string | undefined): string | undefined {
   if (!trimmed) return undefined
 
   const withoutToolPrefix = trimmed.replace(/^tool:\s*/i, "")
-  const withoutBuiltinPrefix = withoutToolPrefix.startsWith(`${BUILTIN_SERVER_NAME}:`)
-    ? withoutToolPrefix.slice(BUILTIN_SERVER_NAME.length + 1)
-    : withoutToolPrefix
-
-  const normalized = withoutBuiltinPrefix
+  const normalized = withoutToolPrefix
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")
@@ -762,7 +757,7 @@ export async function processTranscriptWithACPAgent(
 
     try {
       // Send the prompt
-      const promptContext = buildProfileContext(profileSnapshot, ACP_BUILTIN_TOOL_PROMPT_CONTEXT)
+      const promptContext = buildProfileContext(profileSnapshot, ACP_RUNTIME_TOOL_PROMPT_CONTEXT)
       const result = await acpService.sendPrompt(agentName, acpSessionId, transcript, promptContext)
 
       const { userResponse } = deriveAcpUserResponseState(conversationHistory, {

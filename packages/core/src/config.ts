@@ -147,19 +147,6 @@ function migrateAgentsFolderToHome(dataFolder: string): void {
     path.join(globalAgentsFolder, "layouts", "ui.json"),
   )
 
-  // memories/ — copy individual .md files
-  const srcMemories = path.join(legacyAppDataAgentsFolder, "memories")
-  const dstMemories = path.join(globalAgentsFolder, "memories")
-  try {
-    if (fs.existsSync(srcMemories) && fs.statSync(srcMemories).isDirectory()) {
-      fs.mkdirSync(dstMemories, { recursive: true })
-      for (const file of fs.readdirSync(srcMemories)) {
-        copyIfMissing(path.join(srcMemories, file), path.join(dstMemories, file))
-      }
-    }
-  } catch {
-    // best-effort
-  }
 }
 
 type LoadedConfig = {
@@ -337,9 +324,9 @@ const getConfig = (): LoadedConfig => {
     dualModelSummarizationFrequency: "every_response",
     dualModelSummaryDetailLevel: "compact",
 
-    // ACP Tool Injection - when true, injects DotAgents builtin tools into ACP agent sessions
-    // This allows ACP agents to use delegation, settings management, etc.
-    acpInjectBuiltinTools: true,
+    // ACP Tool Injection - when true, injects DotAgents runtime tools into ACP agent sessions
+    // This allows ACP agents to use delegation, user communication, and completion signaling.
+    acpInjectRuntimeTools: true,
   }
 
   // 1) Preferred: modular `.agents` format (global + optional workspace overlay)

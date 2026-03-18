@@ -2,7 +2,7 @@
  * Summarization Service for Dual-Model Agent Mode
  *
  * Uses a "weak" (cheaper/faster) model to summarize agent steps
- * for user-facing UI and memory extraction.
+ * for user-facing UI and knowledge-note extraction.
  */
 
 import { generateText } from "ai"
@@ -159,7 +159,7 @@ Respond in this exact JSON format:
   "keyFindings": ["Finding 1", "Finding 2"],
   "nextSteps": "What the agent plans to do next (if apparent)",
   "decisionsMade": ["Decision 1"],
-  "memoryCandidates": [
+  "noteCandidates": [
     "preference: ...",
     "constraint: ...",
     "decision: ...",
@@ -168,7 +168,7 @@ Respond in this exact JSON format:
   ],
   "importance": "low|medium|high|critical"
 }
-Rules for memoryCandidates:
+Rules for noteCandidates:
 - Only include durable, reusable items that will still matter in future sessions.
 - Good candidates: user preferences, constraints/safety rules, important decisions, repo/environment facts, key insights.
 - Bad candidates: step telemetry ("ran tool X"), temporary state, long excerpts, or anything sensitive (secrets, API keys, personal data).
@@ -199,8 +199,8 @@ export function parseSummaryResponse(response: string, input: SummarizationInput
 
     const parsed = JSON.parse(jsonMatch[0])
 
-    const memoryCandidates = Array.isArray(parsed.memoryCandidates)
-      ? parsed.memoryCandidates
+    const noteCandidates = Array.isArray(parsed.noteCandidates)
+      ? parsed.noteCandidates
           .filter((c: unknown): c is string => typeof c === "string")
           .map(c => c.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim())
           .filter(Boolean)
@@ -214,7 +214,7 @@ export function parseSummaryResponse(response: string, input: SummarizationInput
       stepNumber: input.stepNumber,
       timestamp: Date.now(),
       actionSummary: parsed.actionSummary || "Agent executed a step",
-      memoryCandidates,
+      noteCandidates,
       keyFindings: Array.isArray(parsed.keyFindings) ? parsed.keyFindings : [],
       nextSteps: parsed.nextSteps || undefined,
       decisionsMade: Array.isArray(parsed.decisionsMade) ? parsed.decisionsMade : undefined,
@@ -234,7 +234,7 @@ export function parseSummaryResponse(response: string, input: SummarizationInput
       stepNumber: input.stepNumber,
       timestamp: Date.now(),
       actionSummary: input.assistantResponse?.slice(0, 100) || "Agent step completed",
-      memoryCandidates: [],
+      noteCandidates: [],
       keyFindings: [],
       importance: "medium",
     }

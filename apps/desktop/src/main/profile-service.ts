@@ -2,12 +2,13 @@ import { app } from "electron"
 import path from "path"
 import fs from "fs"
 import { Profile, ProfilesData, ProfileMcpServerConfig, ProfileModelConfig, ProfileSkillsConfig, MCPServerConfig } from "@shared/types"
+import { RESERVED_RUNTIME_TOOL_SERVER_NAMES } from "@shared/runtime-tool-names"
 import { randomUUID } from "crypto"
 import { logApp } from "./debug"
 import { configStore } from "./config"
-import { getBuiltinToolNames } from "./builtin-tool-definitions"
+import { getRuntimeToolNames } from "./runtime-tool-definitions"
 
-const RESERVED_SERVER_NAMES = ["dotagents-internal"]
+const RESERVED_SERVER_NAMES = [...RESERVED_RUNTIME_TOOL_SERVER_NAMES]
 
 // Valid provider IDs that are supported by the application
 const VALID_PROVIDER_IDS = ["openai", "groq", "gemini"]
@@ -306,14 +307,14 @@ class ProfileService {
     const config = configStore.get()
     const mcpConfig = config.mcpConfig
     const allServerNames = Object.keys(mcpConfig?.mcpServers || {})
-    // Also disable all builtin tools by default - users must opt-in
-    const builtinToolNames = getBuiltinToolNames()
+    // Also disable all runtime tools by default - users must opt-in
+    const runtimeToolNames = getRuntimeToolNames()
 
     const defaultProfileWithMcpConfig: Profile = {
       ...DEFAULT_PROFILES[0],
       mcpServerConfig: {
         disabledServers: allServerNames,
-        disabledTools: builtinToolNames,
+        disabledTools: runtimeToolNames,
         // Flag ensures newly-added servers are also disabled by default
         allServersDisabledByDefault: true,
       },
@@ -367,8 +368,8 @@ class ProfileService {
     const config = configStore.get()
     const mcpConfig = config.mcpConfig
     const allServerNames = Object.keys(mcpConfig?.mcpServers || {})
-    // Also disable all builtin tools by default - users must opt-in
-    const builtinToolNames = getBuiltinToolNames()
+    // Also disable all runtime tools by default - users must opt-in
+    const runtimeToolNames = getRuntimeToolNames()
 
     const newProfile: Profile = {
       id: randomUUID(),
@@ -381,7 +382,7 @@ class ProfileService {
       // Users can enable specific MCPs as needed
       mcpServerConfig: {
         disabledServers: allServerNames,
-        disabledTools: builtinToolNames,
+        disabledTools: runtimeToolNames,
         // Flag ensures newly-added servers are also disabled by default
         allServersDisabledByDefault: true,
       },
@@ -895,14 +896,14 @@ class ProfileService {
     const config = configStore.get()
     const mcpConfig = config.mcpConfig
     const allServerNames = Object.keys(mcpConfig?.mcpServers || {})
-    // Also disable all builtin tools by default - users must opt-in
-    const builtinToolNames = getBuiltinToolNames()
+    // Also disable all runtime tools by default - users must opt-in
+    const runtimeToolNames = getRuntimeToolNames()
 
     const defaultProfileWithMcpConfig: Profile = {
       ...DEFAULT_PROFILES[0],
       mcpServerConfig: {
         disabledServers: allServerNames,
-        disabledTools: builtinToolNames,
+        disabledTools: runtimeToolNames,
         // Flag ensures newly-added servers are also disabled by default
         allServersDisabledByDefault: true,
       },

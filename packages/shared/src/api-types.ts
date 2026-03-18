@@ -68,7 +68,7 @@ export interface Settings {
   mcpUnlimitedIterations?: boolean;
   mainAgentMode?: 'api' | 'acp';
   mainAgentName?: string;
-  acpInjectBuiltinTools?: boolean;
+  acpInjectRuntimeTools?: boolean;
   mcpVerifyCompletionEnabled?: boolean;
   mcpFinalSummaryEnabled?: boolean;
 
@@ -150,7 +150,7 @@ export interface SettingsUpdate {
   mcpUnlimitedIterations?: boolean;
   mainAgentMode?: 'api' | 'acp';
   mainAgentName?: string;
-  acpInjectBuiltinTools?: boolean;
+  acpInjectRuntimeTools?: boolean;
   mcpVerifyCompletionEnabled?: boolean;
   mcpFinalSummaryEnabled?: boolean;
 
@@ -290,20 +290,27 @@ export interface SkillsResponse {
   currentProfileId?: string;
 }
 
-// Memories Types
-export interface Memory {
+// Knowledge Note Types
+export type KnowledgeNoteContext = 'auto' | 'search-only';
+export type KnowledgeNoteEntryType = 'note' | 'entry' | 'overview';
+
+export interface KnowledgeNote {
   id: string;
   title: string;
-  content: string;
+  context: KnowledgeNoteContext;
+  body: string;
+  summary?: string;
   tags: string[];
-  importance: 'low' | 'medium' | 'high' | 'critical';
-  profileId?: string;
-  createdAt: number;
+  references?: string[];
+  createdAt?: number;
   updatedAt: number;
+  group?: string;
+  series?: string;
+  entryType?: KnowledgeNoteEntryType;
 }
 
-export interface MemoriesResponse {
-  memories: Memory[];
+export interface KnowledgeNotesResponse {
+  notes: KnowledgeNote[];
 }
 
 // Agent Profiles Types (renamed to Api* to avoid conflict with desktop's AgentProfile)

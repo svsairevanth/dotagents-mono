@@ -1,11 +1,11 @@
-import { configStore } from "./config"
+import { configStore, globalAgentsFolder, resolveWorkspaceAgentsFolder } from "./config"
 import {
   MCPTool,
   MCPToolCall,
   LLMToolCallResponse,
   MCPToolResult,
 } from "./mcp-service"
-import { AgentProgressStep, AgentProgressUpdate, SessionProfileSnapshot, AgentMemory } from "../shared/types"
+import { AgentProgressStep, AgentProgressUpdate, SessionProfileSnapshot } from "../shared/types"
 import { diagnosticsService } from "./diagnostics"
 
 import { makeLLMCallWithFetch, makeTextCompletionWithFetch, verifyCompletionWithFetch, RetryProgressCallback, makeLLMCallWithStreamingAndTools, StreamingCallback } from "./llm-fetch"
@@ -30,7 +30,7 @@ import {
   summarizationService,
   type SummarizationInput,
 } from "./summarization-service"
-import { memoryService } from "./memory-service"
+import { knowledgeNotesService } from "./knowledge-notes-service"
 import {
   getSessionUserResponse,
   getSessionRunUserResponseEvents,
@@ -41,7 +41,7 @@ import {
   MARK_WORK_COMPLETE_TOOL,
   RESPOND_TO_USER_TOOL,
   INTERNAL_COMPLETION_NUDGE_TEXT,
-} from "../shared/builtin-tool-names"
+} from "../shared/runtime-tool-names"
 import {
   appendAgentStopNote,
   resolveAgentIterationLimits,
@@ -60,6 +60,7 @@ import {
   resolveIterationLimitFinalContent,
 } from "./llm-continuation-guards"
 import { buildVerificationMessagesFromAgentState } from "./llm-verification-replay"
+import { loadWorkingKnowledgeNotesForPrompt } from "./working-notes-runtime"
 import {
   normalizeAgentConversationState,
   type AgentConversationState,
@@ -166,6 +167,9 @@ function extractSkillsIndexForMinimalPrompt(skillsInstructions?: string): string
   return cut.length > 1500 ? cut.slice(0, 1500).trimEnd() + "\n..." : cut
 }
 
+const NON_AGENT_WORKING_NOTES_LIMIT = 3
+const AGENT_WORKING_NOTES_LIMIT = 4
+
 /**
  * Analyze tool errors and categorize them
  */
@@ -253,19 +257,13 @@ export async function processTranscriptWithTools(
   const skillsInstructions = skillsService.getEnabledSkillsInstructionsForProfile(enabledSkillIds)
   const skillsIndex = extractSkillsIndexForMinimalPrompt(skillsInstructions)
 
-  // Load memories for context (global shared pool)
-  let relevantMemories: AgentMemory[] = []
-  {
-    const allMemories = await memoryService.getAllMemories()
-    const importanceOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 }
-    const sortedMemories = [...allMemories].sort((a, b) => {
-      const impDiff = importanceOrder[a.importance] - importanceOrder[b.importance]
-      if (impDiff !== 0) return impDiff
-      return b.createdAt - a.createdAt
-    })
-    relevantMemories = sortedMemories.slice(0, 10)
-    logLLM(`[processTranscriptWithLLM] Loaded ${relevantMemories.length} memories for context`)
-  }
+  const workspaceAgentsFolder = resolveWorkspaceAgentsFolder()
+  const workingNotes = loadWorkingKnowledgeNotesForPrompt({
+    globalAgentsDir: globalAgentsFolder,
+    workspaceAgentsDir: workspaceAgentsFolder,
+    maxNotes: NON_AGENT_WORKING_NOTES_LIMIT,
+  })
+  logLLM(`[processTranscriptWithLLM] Loaded ${workingNotes.length} working notes for prompt context`)
 
   const systemPrompt = constructSystemPrompt(
     uniqueAvailableTools,
@@ -275,7 +273,7 @@ export async function processTranscriptWithTools(
     mainAgent?.systemPrompt,
     skillsInstructions,
     undefined, // agentProperties - not used in non-agent mode
-    relevantMemories,
+    workingNotes,
   )
 
   const messages = [
@@ -778,9 +776,9 @@ export async function processTranscriptWithAgentMode(
       if (summary) {
         summarizationService.addSummary(summary)
 
-        // Auto-save all summaries as global memories
+        // Auto-save summary working notes directly under .agents/knowledge
         {
-          const memory = memoryService.createMemoryFromSummary(
+          const note = knowledgeNotesService.createNoteFromSummary(
             summary,
             undefined, // title
             undefined, // userNotes
@@ -788,8 +786,8 @@ export async function processTranscriptWithAgentMode(
             undefined, // conversationTitle
             currentConversationId,
           )
-          if (memory) {
-            memoryService.saveMemory(memory).catch(err => {
+          if (note) {
+            knowledgeNotesService.saveNote(note).catch(err => {
               if (isDebugLLM()) {
                 logLLM("[Dual-Model] Error auto-saving summary:", err)
               }
@@ -943,19 +941,13 @@ export async function processTranscriptWithAgentMode(
   const skillsInstructions = agentSkillsInstructions ?? profileSkillsInstructions
   const skillsIndex = extractSkillsIndexForMinimalPrompt(skillsInstructions)
 
-  // Load memories for agent context (global shared pool)
-  let relevantMemories: AgentMemory[] = []
-  {
-    const allMemories = await memoryService.getAllMemories()
-    const importanceOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 }
-    const sortedMemories = [...allMemories].sort((a, b) => {
-      const impDiff = importanceOrder[a.importance] - importanceOrder[b.importance]
-      if (impDiff !== 0) return impDiff
-      return b.createdAt - a.createdAt
-    })
-    relevantMemories = sortedMemories.slice(0, 30) // Cap at 30 for agent mode
-    logLLM(`[processTranscriptWithAgentMode] Loaded ${relevantMemories.length} memories for context (from ${allMemories.length} total)`)
-  }
+  const workspaceAgentsFolder = resolveWorkspaceAgentsFolder()
+  const workingNotes = loadWorkingKnowledgeNotesForPrompt({
+    globalAgentsDir: globalAgentsFolder,
+    workspaceAgentsDir: workspaceAgentsFolder,
+    maxNotes: AGENT_WORKING_NOTES_LIMIT,
+  })
+  logLLM(`[processTranscriptWithAgentMode] Loaded ${workingNotes.length} working notes for prompt context`)
 
   // The agent's profile ID is used to exclude itself from delegation targets in the system prompt
   const excludeAgentId = effectiveProfileSnapshot?.profileId
@@ -969,7 +961,7 @@ export async function processTranscriptWithAgentMode(
     customSystemPrompt, // custom base system prompt from profile snapshot or global config
     skillsInstructions, // agent skills instructions
     agentProperties, // dynamic agent properties
-    relevantMemories, // memories from previous sessions
+    workingNotes, // injected working notes
     excludeAgentId, // exclude this agent from delegation targets
   )
 
@@ -1204,7 +1196,7 @@ export async function processTranscriptWithAgentMode(
       customSystemPrompt, // Use session-bound custom system prompt
       skillsInstructions, // agent skills instructions
       agentProperties, // dynamic agent properties
-      relevantMemories, // memories from previous sessions
+      workingNotes, // injected working notes
       excludeAgentId, // exclude this agent from delegation targets
     )
 
@@ -1483,8 +1475,8 @@ export async function processTranscriptWithAgentMode(
         undefined, // relevantTools removed - let LLM decide tool relevance
         customSystemPrompt, // custom base system prompt from profile snapshot or global config
         skillsInstructions, // agent skills instructions
-        undefined, // agentProperties
-        undefined, // memories
+        agentProperties, // dynamic agent properties
+        workingNotes, // injected working notes
         excludeAgentId, // exclude this agent from delegation targets
       )
       logLLM(`[processTranscriptWithAgentMode] Rebuilt system prompt with ${activeTools.length} active tools (excluded ${excludedToolCount})`)
@@ -2704,7 +2696,7 @@ export async function processTranscriptWithAgentMode(
           customSystemPrompt, // Use session-bound custom system prompt
           skillsInstructions, // agent skills instructions
           agentProperties, // dynamic agent properties
-          relevantMemories, // memories from previous sessions
+          workingNotes, // injected working notes
           excludeAgentId, // exclude this agent from delegation targets
         )
 

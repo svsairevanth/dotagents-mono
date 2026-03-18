@@ -226,7 +226,7 @@ export function Component() {
           mcpServers: false,
           skills: true,
           repeatTasks: false,
-          memories: false,
+          knowledgeNotes: false,
         },
       })
     },
@@ -817,14 +817,14 @@ Write your skill instructions here.
             mcpServers: false,
             skills: true,
             repeatTasks: false,
-            memories: false,
+            knowledgeNotes: false,
           }}
           availableComponents={{
             agentProfiles: false,
             mcpServers: false,
             skills: true,
             repeatTasks: false,
-            memories: false,
+            knowledgeNotes: false,
           }}
         />
 

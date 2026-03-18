@@ -36,7 +36,9 @@ export {
 // Core domain types
 export type {
   Config,
-  AgentMemory,
+  KnowledgeNote,
+  KnowledgeNoteContext,
+  KnowledgeNoteEntryType,
   AgentSkill,
   LoopConfig,
   AgentProfile,
@@ -156,18 +158,20 @@ export {
 } from './agents-files/modular-config';
 export type { AgentsLayerPaths, SplitAgentsConfig } from './agents-files/modular-config';
 
-// Agents files — memories
+// Agents files — knowledge notes
 export {
-  AGENTS_MEMORIES_DIR,
-  getAgentsMemoriesDir,
-  getAgentsMemoriesBackupDir,
-  memoryIdToFilePath,
-  stringifyMemoryMarkdown,
-  parseMemoryMarkdown,
-  loadAgentsMemoriesLayer,
-  writeAgentsMemoryFile,
-} from './agents-files/memories';
-export type { AgentsMemoryOrigin, LoadedAgentsMemoriesLayer } from './agents-files/memories';
+  AGENTS_KNOWLEDGE_DIR,
+  getAgentsKnowledgeDir,
+  getAgentsKnowledgeBackupDir,
+  knowledgeNoteSlugToDirPath,
+  knowledgeNoteSlugToFilePath,
+  buildKnowledgeNoteStorageLocation,
+  stringifyKnowledgeNoteMarkdown,
+  parseKnowledgeNoteMarkdown,
+  loadAgentsKnowledgeNotesLayer,
+  writeKnowledgeNoteFile,
+} from './agents-files/knowledge-notes';
+export type { AgentsKnowledgeNoteOrigin, LoadedAgentsKnowledgeNotesLayer } from './agents-files/knowledge-notes';
 
 // Agents files — skills
 export {

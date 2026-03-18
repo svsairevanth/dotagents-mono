@@ -23,9 +23,9 @@ import { agentSessionTracker } from "./agent-session-tracker"
 import { emergencyStopAll } from "./emergency-stop"
 import { sendMessageNotification, isPushEnabled, clearBadgeCount } from "./push-notification-service"
 import { skillsService } from "./skills-service"
-import { memoryService } from "./memory-service"
+import { knowledgeNotesService } from "./knowledge-notes-service"
 import { sanitizeAgentProfileConnection, VALID_AGENT_PROFILE_CONNECTION_TYPES } from "./agent-profile-connection-sanitize"
-import { isBuiltinTool } from "./builtin-tools"
+import { isRuntimeTool } from "./runtime-tools"
 import { agentProfileService, createSessionSnapshotFromProfile, toolConfigToMcpServerConfig } from "./agent-profile-service"
 import { getRendererHandlers } from "@egoist/tipc/main"
 import {
@@ -35,6 +35,7 @@ import {
 } from "./acp-session-state"
 import { WINDOWS } from "./window"
 import type { RendererHandlers } from "./renderer-handlers"
+import { INJECTED_RUNTIME_TOOL_TRANSPORT_NAME } from "../shared/runtime-tool-names"
 
 let server: FastifyInstance | null = null
 let lastError: string | undefined
@@ -125,14 +126,14 @@ function getAcpMcpRequestContext(
   }
 }
 
-function getInjectedBuiltinToolsForAcpSession(
+function getInjectedRuntimeToolsForAcpSession(
   acpSessionToken: string | undefined,
 ): { requestContext: AcpMcpRequestContext; tools: Array<{ name: string; description: string; inputSchema: unknown }> } | undefined {
   const requestContext = getAcpMcpRequestContext(acpSessionToken)
   if (!requestContext) return undefined
 
   const tools = mcpService.getAvailableToolsForProfile(requestContext.profileSnapshot.mcpServerConfig)
-    .filter((tool) => isBuiltinTool(tool.name))
+    .filter((tool) => isRuntimeTool(tool.name))
     .map((tool) => ({
       name: tool.name,
       description: tool.description,
@@ -154,7 +155,7 @@ function getInjectedMcpTransportSessionMap(acpSessionToken: string): Map<string,
 function createInjectedMcpServer(acpSessionToken: string): MCPServer {
   const server = new MCPServer(
     {
-      name: "dotagents-injected-builtin-tools",
+      name: INJECTED_RUNTIME_TOOL_TRANSPORT_NAME,
       version: "1.0.0",
     },
     {
@@ -165,17 +166,17 @@ function createInjectedMcpServer(acpSessionToken: string): MCPServer {
   )
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    const injectedBuiltinTools = getInjectedBuiltinToolsForAcpSession(acpSessionToken)
-    if (!injectedBuiltinTools) {
+    const injectedRuntimeTools = getInjectedRuntimeToolsForAcpSession(acpSessionToken)
+    if (!injectedRuntimeTools) {
       throw new Error(INVALID_ACP_SESSION_CONTEXT_ERROR)
     }
 
-    return { tools: injectedBuiltinTools.tools }
+    return { tools: injectedRuntimeTools.tools }
   })
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const injectedBuiltinTools = getInjectedBuiltinToolsForAcpSession(acpSessionToken)
-    if (!injectedBuiltinTools) {
+    const injectedRuntimeTools = getInjectedRuntimeToolsForAcpSession(acpSessionToken)
+    if (!injectedRuntimeTools) {
       return {
         content: [{ type: "text", text: INVALID_ACP_SESSION_CONTEXT_ERROR }],
         isError: true,
@@ -190,9 +191,9 @@ function createInjectedMcpServer(acpSessionToken: string): MCPServer {
       }
     }
 
-    if (!injectedBuiltinTools.tools.some((tool) => tool.name === name)) {
+    if (!injectedRuntimeTools.tools.some((tool) => tool.name === name)) {
       return {
-        content: [{ type: "text", text: `Unknown builtin tool: ${name}` }],
+        content: [{ type: "text", text: `Unknown runtime tool: ${name}` }],
         isError: true,
       }
     }
@@ -201,8 +202,8 @@ function createInjectedMcpServer(acpSessionToken: string): MCPServer {
       { name, arguments: args || {} } as any,
       undefined,
       false,
-      injectedBuiltinTools.requestContext.appSessionId,
-      injectedBuiltinTools.requestContext.profileSnapshot.mcpServerConfig,
+      injectedRuntimeTools.requestContext.appSessionId,
+      injectedRuntimeTools.requestContext.profileSnapshot.mcpServerConfig,
     )
 
     return result
@@ -1122,7 +1123,7 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
         mcpServerConfig?.disabledTools,
         mcpServerConfig?.allServersDisabledByDefault,
         mcpServerConfig?.enabledServers,
-        mcpServerConfig?.enabledBuiltinTools,
+          mcpServerConfig?.enabledRuntimeTools,
       )
       diagnosticsService.logInfo("remote-server", `Switched to profile: ${profile.displayName}`)
       return reply.send({
@@ -1189,8 +1190,6 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
     try {
       const serverStatus = mcpService.getServerStatus()
       const servers = Object.entries(serverStatus)
-        // Filter out the built-in dotagents-internal pseudo-server as it's not user-toggleable
-        .filter(([name]) => name !== "dotagents-internal")
         .map(([name, status]) => ({
           name,
           connected: status.connected,
@@ -1331,7 +1330,7 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
         transcriptPostProcessingGeminiModel: cfg.transcriptPostProcessingGeminiModel || "",
         // ACP Agent settings
         mainAgentName: cfg.mainAgentName || "",
-        acpInjectBuiltinTools: cfg.acpInjectBuiltinTools !== false,
+        acpInjectRuntimeTools: cfg.acpInjectRuntimeTools !== false,
         // TTS voice/model per provider
         openaiTtsModel: cfg.openaiTtsModel || "gpt-4o-mini-tts",
         openaiTtsVoice: cfg.openaiTtsVoice || "alloy",
@@ -1527,8 +1526,8 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
       if (typeof body.mainAgentName === "string") {
         updates.mainAgentName = body.mainAgentName
       }
-      if (typeof body.acpInjectBuiltinTools === "boolean") {
-        updates.acpInjectBuiltinTools = body.acpInjectBuiltinTools
+      if (typeof body.acpInjectRuntimeTools === "boolean") {
+        updates.acpInjectRuntimeTools = body.acpInjectRuntimeTools
       }
       // OpenAI TTS settings
       if (typeof body.openaiTtsModel === "string") {
@@ -2041,7 +2040,7 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
     }
   })
 
-  // MCP Protocol Endpoints - Expose DotAgents builtin tools to external agents
+  // MCP Protocol Endpoints - Expose DotAgents runtime tools to external agents
   // Support both Streamable HTTP MCP at /mcp/:acpSessionToken and legacy /tools/list,/tools/call shims.
 
   const listInjectedMcpTools = async (
@@ -2049,13 +2048,13 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
     reply: any,
   ) => {
     try {
-      const injectedBuiltinTools = getInjectedBuiltinToolsForAcpSession(acpSessionToken)
-      if (!injectedBuiltinTools) {
+      const injectedRuntimeTools = getInjectedRuntimeToolsForAcpSession(acpSessionToken)
+      if (!injectedRuntimeTools) {
         diagnosticsService.logWarning("remote-server", "Denied injected MCP tools/list request without valid ACP session context")
         return reply.code(401).send({ error: INVALID_ACP_SESSION_CONTEXT_ERROR })
       }
 
-      return reply.send({ tools: injectedBuiltinTools.tools })
+      return reply.send({ tools: injectedRuntimeTools.tools })
     } catch (error: any) {
       diagnosticsService.logError("remote-server", "MCP tools/list error", error)
       return reply.code(500).send({ error: error?.message || "Failed to list tools" })
@@ -2068,8 +2067,8 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
     acpSessionToken: string | undefined,
   ) => {
     try {
-      const injectedBuiltinTools = getInjectedBuiltinToolsForAcpSession(acpSessionToken)
-      if (!injectedBuiltinTools) {
+      const injectedRuntimeTools = getInjectedRuntimeToolsForAcpSession(acpSessionToken)
+      if (!injectedRuntimeTools) {
         diagnosticsService.logWarning("remote-server", "Denied injected MCP tools/call request without valid ACP session context")
         return reply.code(401).send({ error: INVALID_ACP_SESSION_CONTEXT_ERROR })
       }
@@ -2081,16 +2080,16 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
         return reply.code(400).send({ error: "Missing or invalid 'name' parameter" })
       }
 
-      if (!injectedBuiltinTools.tools.some((tool) => tool.name === name)) {
-        return reply.code(400).send({ error: `Unknown builtin tool: ${name}` })
+      if (!injectedRuntimeTools.tools.some((tool) => tool.name === name)) {
+        return reply.code(400).send({ error: `Unknown runtime tool: ${name}` })
       }
 
       const result = await mcpService.executeToolCall(
         { name, arguments: args || {} } as any,
         undefined,
         false,
-        injectedBuiltinTools.requestContext.appSessionId,
-        injectedBuiltinTools.requestContext.profileSnapshot.mcpServerConfig,
+        injectedRuntimeTools.requestContext.appSessionId,
+        injectedRuntimeTools.requestContext.profileSnapshot.mcpServerConfig,
       )
 
       if (!result) {
@@ -2120,8 +2119,8 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
       return reply.code(400).send({ error: "Missing ACP session token" })
     }
 
-    const injectedBuiltinTools = getInjectedBuiltinToolsForAcpSession(token)
-    if (!injectedBuiltinTools) {
+    const injectedRuntimeTools = getInjectedRuntimeToolsForAcpSession(token)
+    if (!injectedRuntimeTools) {
       diagnosticsService.logWarning("remote-server", `Denied injected MCP ${req.method} request without valid ACP session context`)
       return reply.code(401).send({ error: INVALID_ACP_SESSION_CONTEXT_ERROR })
     }
@@ -2224,7 +2223,7 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
     return handleInjectedMcpProtocolRequest(req, reply, params?.acpSessionToken)
   })
 
-  // POST /mcp/tools/list - List all available builtin tools
+  // POST /mcp/tools/list - List all available injected runtime tools
   fastify.post("/mcp/tools/list", async (req, reply) => {
     const query = req.query as { acpSessionToken?: string } | undefined
     return listInjectedMcpTools(query?.acpSessionToken, reply)
@@ -2235,7 +2234,7 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
     return listInjectedMcpTools(params?.acpSessionToken, reply)
   })
 
-  // POST /mcp/tools/call - Execute a builtin tool
+  // POST /mcp/tools/call - Execute an injected runtime tool
   fastify.post("/mcp/tools/call", async (req, reply) => {
     const query = req.query as { acpSessionToken?: string } | undefined
     return callInjectedMcpTool(req, reply, query?.acpSessionToken)
@@ -2313,51 +2312,61 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
   })
 
   // ============================================
-  // Memories Management Endpoints (for mobile app)
+  // Knowledge Notes Management Endpoints (for mobile app)
   // ============================================
 
-  // GET /v1/memories - List all memories
-  fastify.get("/v1/memories", async (req, reply) => {
-    try {
-      const memories = await memoryService.getAllMemories()
+  const serializeKnowledgeNote = (note: import("../shared/types").KnowledgeNote) => ({
+    id: note.id,
+    title: note.title,
+    body: note.body,
+    summary: note.summary,
+    context: note.context,
+    tags: note.tags,
+    references: note.references,
+    createdAt: note.createdAt,
+    updatedAt: note.updatedAt,
+  })
 
-      return reply.send({
-        memories: memories.map(m => ({
-          id: m.id,
-          title: m.title,
-          content: m.content,
-          tags: m.tags,
-          importance: m.importance,
-          createdAt: m.createdAt,
-          updatedAt: m.updatedAt,
-        })),
-      })
+  // GET /v1/knowledge/notes - List all knowledge notes
+  fastify.get("/v1/knowledge/notes", async (_req, reply) => {
+    try {
+      const notes = await knowledgeNotesService.getAllNotes()
+      return reply.send({ notes: notes.map(serializeKnowledgeNote) })
     } catch (error: any) {
-      diagnosticsService.logError("remote-server", "Failed to get memories", error)
-      return reply.code(500).send({ error: "Failed to get memories" })
+      diagnosticsService.logError("remote-server", "Failed to get knowledge notes", error)
+      return reply.code(500).send({ error: "Failed to get knowledge notes" })
     }
   })
 
-  // DELETE /v1/memories/:id - Delete a memory
-  fastify.delete("/v1/memories/:id", async (req, reply) => {
+  // GET /v1/knowledge/notes/:id - Get one knowledge note
+  fastify.get("/v1/knowledge/notes/:id", async (req, reply) => {
     try {
       const params = req.params as { id: string }
+      const note = await knowledgeNotesService.getNote(params.id)
+      if (!note) return reply.code(404).send({ error: "Knowledge note not found" })
+      return reply.send({ note: serializeKnowledgeNote(note) })
+    } catch (error: any) {
+      diagnosticsService.logError("remote-server", "Failed to get knowledge note", error)
+      return reply.code(500).send({ error: error?.message || "Failed to get knowledge note" })
+    }
+  })
 
-      // Check if memory exists before attempting deletion
-      const memory = await memoryService.getMemory(params.id)
-      if (!memory) {
-        return reply.code(404).send({ error: "Memory not found" })
-      }
+  // DELETE /v1/knowledge/notes/:id - Delete a knowledge note
+  fastify.delete("/v1/knowledge/notes/:id", async (req, reply) => {
+    try {
+      const params = req.params as { id: string }
+      const note = await knowledgeNotesService.getNote(params.id)
+      if (!note) return reply.code(404).send({ error: "Knowledge note not found" })
 
-      const success = await memoryService.deleteMemory(params.id)
+      const success = await knowledgeNotesService.deleteNote(params.id)
       if (!success) {
-        return reply.code(500).send({ error: "Failed to persist memory deletion" })
+        return reply.code(500).send({ error: "Failed to persist knowledge note deletion" })
       }
 
       return reply.send({ success: true, id: params.id })
     } catch (error: any) {
-      diagnosticsService.logError("remote-server", "Failed to delete memory", error)
-      return reply.code(500).send({ error: error?.message || "Failed to delete memory" })
+      diagnosticsService.logError("remote-server", "Failed to delete knowledge note", error)
+      return reply.code(500).send({ error: error?.message || "Failed to delete knowledge note" })
     }
   })
 
@@ -2859,85 +2868,69 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
     }
   })
 
-  // POST /v1/memories - Create a new memory
-  fastify.post("/v1/memories", async (req, reply) => {
+  // POST /v1/knowledge/notes - Create a new knowledge note
+  fastify.post("/v1/knowledge/notes", async (req, reply) => {
     try {
       const body = req.body as {
+        id?: unknown
         title?: unknown
-        content?: unknown
-        importance?: unknown
+        body?: unknown
+        summary?: unknown
+        context?: unknown
         tags?: unknown
+        references?: unknown
       }
 
-      const title = typeof body.title === "string" ? body.title.trim() : ""
-      const content = typeof body.content === "string" ? body.content.trim() : ""
-      if (!title || !content) {
-        return reply.code(400).send({ error: "title and content are required and must be non-empty strings" })
+      const noteBody = typeof body.body === "string" ? body.body.trim() : ""
+      if (!noteBody) {
+        return reply.code(400).send({ error: "body is required and must be a non-empty string" })
       }
 
-      const validImportance = ["low", "medium", "high", "critical"]
-      const importance = typeof body.importance === "string" && validImportance.includes(body.importance)
-        ? (body.importance as "low" | "medium" | "high" | "critical")
-        : "medium"
-      const tags = Array.isArray(body.tags)
-        ? body.tags.filter((tag): tag is string => typeof tag === "string")
-        : []
-
-      const now = Date.now()
-      const id = `memory_${now}_${Math.random().toString(36).slice(2, 11)}`
-
-      const memory = {
-        id,
-        title,
-        content,
-        importance,
-        tags,
-        createdAt: now,
-        updatedAt: now,
-      }
-
-      const success = await memoryService.saveMemory(memory)
-      if (!success) {
-        return reply.code(500).send({ error: "Failed to save memory" })
-      }
-
-      const savedMemory = await memoryService.getMemory(id)
-      if (!savedMemory) {
-        return reply.code(500).send({ error: "Failed to load saved memory" })
-      }
-
-      return reply.send({
-        memory: {
-          id: savedMemory.id,
-          title: savedMemory.title,
-          content: savedMemory.content,
-          tags: savedMemory.tags,
-          importance: savedMemory.importance,
-          createdAt: savedMemory.createdAt,
-          updatedAt: savedMemory.updatedAt,
-        },
+      const note = knowledgeNotesService.createNote({
+        id: typeof body.id === "string" && body.id.trim() ? body.id.trim() : undefined,
+        title: typeof body.title === "string" && body.title.trim() ? body.title.trim() : undefined,
+        body: noteBody,
+        summary: typeof body.summary === "string" && body.summary.trim() ? body.summary.trim() : undefined,
+        context: body.context === "auto" || body.context === "search-only" ? body.context : "search-only",
+        tags: Array.isArray(body.tags) ? body.tags.filter((tag): tag is string => typeof tag === "string") : [],
+        references: Array.isArray(body.references)
+          ? body.references.filter((ref): ref is string => typeof ref === "string")
+          : [],
       })
+
+      const success = await knowledgeNotesService.saveNote(note)
+      if (!success) {
+        return reply.code(500).send({ error: "Failed to save knowledge note" })
+      }
+
+      const savedNote = await knowledgeNotesService.getNote(note.id)
+      if (!savedNote) {
+        return reply.code(500).send({ error: "Failed to load saved knowledge note" })
+      }
+
+      return reply.code(201).send({ note: serializeKnowledgeNote(savedNote) })
     } catch (error: any) {
-      diagnosticsService.logError("remote-server", "Failed to create memory", error)
-      return reply.code(500).send({ error: error?.message || "Failed to create memory" })
+      diagnosticsService.logError("remote-server", "Failed to create knowledge note", error)
+      return reply.code(500).send({ error: error?.message || "Failed to create knowledge note" })
     }
   })
 
-  // PATCH /v1/memories/:id - Update a memory
-  fastify.patch("/v1/memories/:id", async (req, reply) => {
+  // PATCH /v1/knowledge/notes/:id - Update a knowledge note
+  fastify.patch("/v1/knowledge/notes/:id", async (req, reply) => {
     try {
       const params = req.params as { id: string }
       const body = req.body as {
         title?: unknown
-        content?: unknown
-        importance?: unknown
+        body?: unknown
+        summary?: unknown
+        context?: unknown
         tags?: unknown
-        notes?: unknown
+        references?: unknown
       }
 
-      const existing = await memoryService.getMemory(params.id)
+      const existing = await knowledgeNotesService.getNote(params.id)
       if (!existing) {
-        return reply.code(404).send({ error: "Memory not found" })
+        return reply.code(404).send({ error: "Knowledge note not found" })
       }
 
       const updates: Record<string, unknown> = {}
@@ -2947,55 +2940,55 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
         }
         updates.title = body.title.trim()
       }
-      if (body.content !== undefined) {
-        if (typeof body.content !== "string" || body.content.trim() === "") {
-          return reply.code(400).send({ error: "content must be a non-empty string when provided" })
+      if (body.body !== undefined) {
+        if (typeof body.body !== "string" || body.body.trim() === "") {
+          return reply.code(400).send({ error: "body must be a non-empty string when provided" })
         }
-        updates.content = body.content.trim()
+        updates.body = body.body.trim()
       }
-      if (Array.isArray(body.tags) && body.tags.every((tag): tag is string => typeof tag === "string")) {
+      if (body.summary !== undefined) {
+        if (typeof body.summary !== "string") {
+          return reply.code(400).send({ error: "summary must be a string when provided" })
+        }
+        updates.summary = body.summary.trim() || undefined
+      }
+      if (body.context !== undefined) {
+        if (body.context === "auto" || body.context === "search-only") {
+          updates.context = body.context
+        } else {
+          return reply.code(400).send({ error: "context must be one of: auto, search-only" })
+        }
+      }
+      if (body.tags !== undefined) {
+        if (!Array.isArray(body.tags) || !body.tags.every((tag): tag is string => typeof tag === "string")) {
+          return reply.code(400).send({ error: "tags must be an array of strings when provided" })
+        }
         updates.tags = body.tags
       }
-      if (body.notes !== undefined) {
-        if (typeof body.notes !== "string") {
-          return reply.code(400).send({ error: "notes must be a string when provided" })
+      if (body.references !== undefined) {
+        if (!Array.isArray(body.references) || !body.references.every((ref): ref is string => typeof ref === "string")) {
+          return reply.code(400).send({ error: "references must be an array of strings when provided" })
         }
-        updates.userNotes = body.notes
-      }
-      if (body.importance !== undefined) {
-        const validImportance = ["low", "medium", "high", "critical"]
-        if (typeof body.importance === "string" && validImportance.includes(body.importance)) {
-          updates.importance = body.importance
-        } else {
-          return reply.code(400).send({ error: `importance must be one of: ${validImportance.join(", ")}` })
-        }
+        updates.references = body.references
       }
 
-      const success = await memoryService.updateMemory(params.id, updates)
+      const success = await knowledgeNotesService.updateNote(
+        params.id,
+        updates as Partial<Omit<import("../shared/types").KnowledgeNote, "id" | "createdAt">>,
+      )
       if (!success) {
-        return reply.code(500).send({ error: "Failed to update memory" })
+        return reply.code(500).send({ error: "Failed to update knowledge note" })
       }
 
-      const updated = await memoryService.getMemory(params.id)
+      const updated = await knowledgeNotesService.getNote(params.id)
       if (!updated) {
-        return reply.code(500).send({ error: "Failed to load updated memory" })
+        return reply.code(500).send({ error: "Failed to load updated knowledge note" })
       }
 
-      return reply.send({
-        success: true,
-        memory: {
-          id: updated.id,
-          title: updated.title,
-          content: updated.content,
-          tags: updated.tags,
-          importance: updated.importance,
-          createdAt: updated.createdAt,
-          updatedAt: updated.updatedAt,
-        },
-      })
+      return reply.send({ success: true, note: serializeKnowledgeNote(updated) })
     } catch (error: any) {
-      diagnosticsService.logError("remote-server", "Failed to update memory", error)
-      return reply.code(500).send({ error: error?.message || "Failed to update memory" })
+      diagnosticsService.logError("remote-server", "Failed to update knowledge note", error)
+      return reply.code(500).send({ error: error?.message || "Failed to update knowledge note" })
     }
   })
 

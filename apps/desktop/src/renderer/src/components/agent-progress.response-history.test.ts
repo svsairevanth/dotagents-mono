@@ -174,7 +174,7 @@ async function loadAgentProgress(runtime: ReturnType<typeof createHookRuntime>) 
   vi.doMock("react", () => runtime.reactMock)
   vi.doMock("react/jsx-runtime", () => runtime.jsxRuntimeMock)
   vi.doMock("react/jsx-dev-runtime", () => runtime.jsxRuntimeMock)
-  vi.doMock("../../../shared/builtin-tool-names", () => ({
+  vi.doMock("../../../shared/runtime-tool-names", () => ({
     INTERNAL_COMPLETION_NUDGE_TEXT: "__complete__",
     RESPOND_TO_USER_TOOL: "respond_to_user",
     MARK_WORK_COMPLETE_TOOL: "mark_work_complete",

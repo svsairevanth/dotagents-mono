@@ -14,7 +14,7 @@ export interface HubCatalogComponentCounts {
   mcpServers: number
   skills: number
   repeatTasks: number
-  memories: number
+  knowledgeNotes: number
 }
 
 export interface HubCatalogArtifact {
