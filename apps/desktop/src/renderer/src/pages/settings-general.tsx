@@ -400,11 +400,11 @@ export function Component() {
                 </div>
               )}
 
-              <Control label={<ControlLabel label="Inject DotAgents Tools" tooltip="When enabled, DotAgents's builtin tools (delegation, settings management) are injected into ACP agent sessions. This allows the ACP agent to delegate tasks to other agents. Requires Remote Server to be enabled." />} className="px-3">
+              <Control label={<ControlLabel label="Inject DotAgents Runtime Tools" tooltip="When enabled, DotAgents runtime tools (delegation, user communication, completion signaling, command execution, skill loading) are injected into ACP agent sessions. Requires Remote Server to be enabled." />} className="px-3">
                 <Switch
-                  checked={configQuery.data?.acpInjectBuiltinTools !== false}
+                  checked={configQuery.data?.acpInjectRuntimeTools !== false}
                   disabled={!configQuery.data?.remoteServerEnabled}
-                  onCheckedChange={(value) => saveConfig({ acpInjectBuiltinTools: value })}
+                  onCheckedChange={(value) => saveConfig({ acpInjectRuntimeTools: value })}
                 />
               </Control>
               {!configQuery.data?.remoteServerEnabled && (

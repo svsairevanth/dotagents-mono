@@ -6,7 +6,7 @@ import { agentSessionTracker } from '../agent-session-tracker'
 import type { ACPDelegationProgress } from '../../shared/types'
 import { logApp } from '../debug'
 import type { ACPSubAgentState } from './types'
-import { INTERNAL_COMPLETION_NUDGE_TEXT } from '../../shared/builtin-tool-names'
+import { INTERNAL_COMPLETION_NUDGE_TEXT } from '../../shared/runtime-tool-names'
 
 /**
  * Background polling and notification system for ACP delegations.

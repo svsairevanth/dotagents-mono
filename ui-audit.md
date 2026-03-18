@@ -966,7 +966,7 @@ None — all audited surfaces are already safe. No mechanical fixes to commit.
 ### Issues found
 
 **agent-capabilities-sidebar.tsx — micro-font badges and expand button**
-- `text-[9px]` on three capability count badges (Skills, MCP Servers, Built-in Tools, lines 183/206/252) — badges showing "3/5" style counts were 9px, barely readable at 100% zoom.
+- `text-[9px]` on three capability count badges (Skills, MCP Servers, DotAgents Runtime Tools, lines 183/206/252) — badges showing "3/5" style counts were 9px, barely readable at 100% zoom.
 - `text-[9px]` on the per-server tool-count expand button (line 221) — a button showing e.g. "4t ▸" was 9px absolute with no font scaling.
 - `text-[8px]` on the agent connection type badge (line 333) — this was the smallest text found in the codebase at 8px. At 100% zoom it renders at 8 CSS pixels; with common browser text scaling it still stays fixed at 8px.
 
@@ -979,7 +979,7 @@ None — all audited surfaces are already safe. No mechanical fixes to commit.
 ### Changes made
 
 **agent-capabilities-sidebar.tsx**
-- Changed `text-[9px]` → `text-[10px]` on the Skills, MCP Servers, and Built-in Tools capability count badges.
+- Changed `text-[9px]` → `text-[10px]` on the Skills, MCP Servers, and DotAgents Runtime Tools capability count badges.
 - Changed `text-[9px]` → `text-[10px]` on the per-server tool-count expand button.
 - Changed `text-[8px]` → `text-[10px]` and `h-3` → `h-3.5` on the agent connection type badge. Now consistent with all other micro-badges in the component.
 

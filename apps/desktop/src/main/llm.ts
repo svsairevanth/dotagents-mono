@@ -41,7 +41,7 @@ import {
   MARK_WORK_COMPLETE_TOOL,
   RESPOND_TO_USER_TOOL,
   INTERNAL_COMPLETION_NUDGE_TEXT,
-} from "../shared/builtin-tool-names"
+} from "../shared/runtime-tool-names"
 import {
   appendAgentStopNote,
   resolveAgentIterationLimits,

@@ -88,19 +88,42 @@ KNOWLEDGE NOTES (durable context):
 - Prefer direct file editing there over special-purpose note tools
 - Store notes at .agents/knowledge/<slug>/<slug>.md with human-readable slugs
 - Related assets may live in the same note folder
-- Default most notes to context: search-only; reserve context: auto for a tiny curated subset.`
+- Default most notes to context: search-only; reserve context: auto for a tiny curated subset
+
+DOTAGENTS CONFIG:
+- Treat ~/.agents/ and ./.agents/ as the canonical editable DotAgents configuration surface
+- Workspace ./.agents/ overrides global ~/.agents/ on conflicts
+- Prefer direct file editing for settings, models, prompts, agents, skills, tasks, and knowledge notes instead of narrow app-specific config tools
+- For exact file locations, merge rules, and safe edit recipes, call load_skill_instructions with skillId: "dotagents-config-admin" before changing unfamiliar DotAgents config.`
 
 /**
- * Group tools by server and generate a brief description for each server
+ * Split tools into external MCP tools and DotAgents runtime tools.
+ */
+function partitionPromptTools(
+  tools: Array<{ name: string; description?: string; inputSchema?: any }>,
+): {
+  externalTools: Array<{ name: string; description?: string; inputSchema?: any }>
+  runtimeTools: Array<{ name: string; description?: string; inputSchema?: any }>
+} {
+  return {
+    externalTools: tools.filter((tool) => tool.name.includes(":")),
+    runtimeTools: tools.filter((tool) => !tool.name.includes(":")),
+  }
+}
+
+/**
+ * Group external MCP tools by server and generate a brief description for each server.
  */
 function getServerSummaries(
-  tools: Array<{ name: string; description: string; inputSchema?: any }>,
+  tools: Array<{ name: string; description?: string; inputSchema?: any }>,
 ): Array<{ serverName: string; toolCount: number; toolNames: string[] }> {
   const serverMap = new Map<string, string[]>()
 
   for (const tool of tools) {
-    const serverName = tool.name.includes(":") ? tool.name.split(":")[0] : "unknown"
-    const toolName = tool.name.includes(":") ? tool.name.split(":")[1] : tool.name
+    const separatorIndex = tool.name.indexOf(":")
+    if (separatorIndex === -1) continue
+    const serverName = tool.name.slice(0, separatorIndex)
+    const toolName = tool.name.slice(separatorIndex + 1)
     if (!serverMap.has(serverName)) {
       serverMap.set(serverName, [])
     }
@@ -115,11 +138,10 @@ function getServerSummaries(
 }
 
 /**
- * Format tools in a lightweight, server-centric way
- * Shows server names with all tool names so the LLM knows what's available
+ * Format external MCP tools in a lightweight, server-centric way.
  */
-function formatLightweightToolInfo(
-  tools: Array<{ name: string; description: string; inputSchema?: any }>,
+function formatLightweightMcpToolInfo(
+  tools: Array<{ name: string; description?: string; inputSchema?: any }>,
 ): string {
   const serverSummaries = getServerSummaries(tools)
 
@@ -128,6 +150,17 @@ function formatLightweightToolInfo(
       const toolList = server.toolNames.join(", ")
       return `- ${server.serverName} (${server.toolCount} tools): ${toolList}`
     })
+    .join("\n")
+}
+
+/**
+ * Format DotAgents runtime tools as plain tools rather than as a fake MCP server.
+ */
+function formatRuntimeToolInfo(
+  tools: Array<{ name: string; description?: string; inputSchema?: any }>,
+): string {
+  return tools
+    .map((tool) => `- ${tool.name}${tool.description ? ` — ${tool.description}` : ""}`)
     .join("\n")
 }
 
@@ -295,10 +328,17 @@ export function constructSystemPrompt(
   }
 
   if (availableTools.length > 0) {
-    // Use lightweight format for ALL tools to reduce token usage
-    // Full schemas are still available via native function calling
-    prompt += `\n\nAVAILABLE MCP SERVERS (${availableTools.length} tools total):\n${formatLightweightToolInfo(availableTools)}`
-    prompt += `\n\nTo discover tools: use list_server_tools(serverName) to see all tools in a server, or get_tool_schema(toolName) for full parameter details.`
+    const { externalTools, runtimeTools } = partitionPromptTools(availableTools)
+
+    if (externalTools.length > 0) {
+      prompt += `\n\nAVAILABLE MCP TOOLS (${externalTools.length} tools total):\n${formatLightweightMcpToolInfo(externalTools)}`
+    }
+
+    if (runtimeTools.length > 0) {
+      prompt += `\n\nAVAILABLE DOTAGENTS RUNTIME TOOLS (${runtimeTools.length}):\n${formatRuntimeToolInfo(runtimeTools)}`
+    }
+
+    prompt += `\n\nTo discover tools: use list_server_tools(serverName) to inspect MCP tools from a real server, or get_tool_schema(toolName) for full parameter details on any tool.`
 
     // If relevant tools are identified, show them with full details
     if (
@@ -355,7 +395,7 @@ export function constructMinimalSystemPrompt(
     "You are an autonomous AI assistant that uses tools to complete tasks. Work iteratively until goals are fully achieved. " +
     "Use tools proactively - prefer tools over asking users for information you can gather yourself. " +
     "When calling tools, use exact tool names and parameter keys. Be concise. Batch independent tool calls when possible. " +
-    "Durable knowledge lives in ~/.agents/knowledge/ and ./.agents/knowledge/ as notes at .agents/knowledge/<slug>/<slug>.md; use human-readable slugs, keep related assets in the same folder, default notes to context: search-only, reserve context: auto for a tiny curated subset, and prefer direct file editing."
+    "Durable knowledge lives in ~/.agents/knowledge/ and ./.agents/knowledge/ as notes at .agents/knowledge/<slug>/<slug>.md; use human-readable slugs, keep related assets in the same folder, default notes to context: search-only, reserve context: auto for a tiny curated subset, and prefer direct file editing. DotAgents configuration lives in the layered ~/.agents/ and ./.agents/ filesystem; workspace overrides global on conflicts; prefer direct file editing for settings, models, prompts, agents, skills, tasks, and knowledge notes; and when available load the dotagents-config-admin skill before changing unfamiliar DotAgents config."
 
   if (isAgentMode) {
     prompt += " Agent mode: continue calling tools until the task is completely resolved. If a tool fails, try alternative approaches before giving up."
@@ -380,7 +420,15 @@ export function constructMinimalSystemPrompt(
       .join("\n")
 
   if (availableTools?.length) {
-    prompt += `\n\nAVAILABLE TOOLS:\n${list(availableTools)}`
+    const { externalTools, runtimeTools } = partitionPromptTools(availableTools)
+
+    if (externalTools.length > 0) {
+      prompt += `\n\nAVAILABLE MCP TOOLS:\n${list(externalTools)}`
+    }
+
+    if (runtimeTools.length > 0) {
+      prompt += `\n\nAVAILABLE DOTAGENTS RUNTIME TOOLS:\n${list(runtimeTools)}`
+    }
   } else {
     prompt += `\n\nNo tools are currently available.`
   }

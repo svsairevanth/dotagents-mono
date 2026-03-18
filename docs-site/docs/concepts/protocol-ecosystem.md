@@ -153,7 +153,7 @@ Agents have fine-grained tool access:
 - **enabledServers** — Whitelist of MCP servers
 - **disabledServers** — Blacklist of MCP servers
 - **disabledTools** — Specific tools to block
-- **enabledBuiltinTools** — Whitelist of built-in tools
+- **enabledRuntimeTools** — Whitelist of DotAgents runtime tools
 
 ---
 

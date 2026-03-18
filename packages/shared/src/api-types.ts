@@ -68,7 +68,7 @@ export interface Settings {
   mcpUnlimitedIterations?: boolean;
   mainAgentMode?: 'api' | 'acp';
   mainAgentName?: string;
-  acpInjectBuiltinTools?: boolean;
+  acpInjectRuntimeTools?: boolean;
   mcpVerifyCompletionEnabled?: boolean;
   mcpFinalSummaryEnabled?: boolean;
 
@@ -150,7 +150,7 @@ export interface SettingsUpdate {
   mcpUnlimitedIterations?: boolean;
   mainAgentMode?: 'api' | 'acp';
   mainAgentName?: string;
-  acpInjectBuiltinTools?: boolean;
+  acpInjectRuntimeTools?: boolean;
   mcpVerifyCompletionEnabled?: boolean;
   mcpFinalSummaryEnabled?: boolean;
 

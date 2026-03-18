@@ -11,7 +11,7 @@
 
 /**
  * Tool definitions for ACP router tools.
- * These are exposed as built-in tools for the main agent to use.
+ * These are exposed as runtime tools for the main agent to use.
  */
 export const acpRouterToolDefinitions = [
   {

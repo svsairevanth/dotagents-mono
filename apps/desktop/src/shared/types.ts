@@ -114,6 +114,20 @@ export interface ServerLogEntry {
   message: string
 }
 
+export type DetailedToolSourceKind = "mcp" | "runtime"
+
+export interface DetailedToolInfo {
+  name: string
+  description: string
+  sourceKind: DetailedToolSourceKind
+  sourceName: string
+  sourceLabel: string
+  serverName?: string
+  enabled: boolean
+  serverEnabled: boolean
+  inputSchema: any
+}
+
 // Agent Mode Progress Tracking Types — re-exported from @dotagents/shared (see above)
 
 // Dual-Model Agent Mode Configuration
@@ -232,9 +246,9 @@ export type ProfileMcpServerConfig = {
   // When allServersDisabledByDefault is true, this list contains servers that are explicitly ENABLED
   // (i.e., servers the user has opted-in to use for this profile)
   enabledServers?: string[]
-  // When set, only these builtin tools are enabled (whitelist approach for agents)
-  // If undefined, all builtin tools are available (default behavior)
-  enabledBuiltinTools?: string[]
+  // When set, only these runtime tools are enabled (whitelist approach for agents)
+  // If undefined, all runtime tools are available (default behavior)
+  enabledRuntimeTools?: string[]
 }
 
 export type ProfileModelConfig = {
@@ -317,8 +331,8 @@ export type PersonaMcpServerConfig = {
   enabledServers: string[]
   /** Specific tools disabled within enabled servers */
   disabledTools?: string[]
-  /** Builtin tools enabled for this agent */
-  enabledBuiltinTools?: string[]
+  /** Runtime tools enabled for this agent */
+  enabledRuntimeTools?: string[]
 }
 
 /**
@@ -491,8 +505,8 @@ export type AgentProfileToolConfig = {
   disabledServers?: string[]
   /** Specific tools disabled */
   disabledTools?: string[]
-  /** Builtin tools enabled (whitelist) - if undefined, all are available */
-  enabledBuiltinTools?: string[]
+  /** Runtime tools enabled (whitelist) - if undefined, all are available */
+  enabledRuntimeTools?: string[]
   /** When true, newly-added servers are disabled by default */
   allServersDisabledByDefault?: boolean
 }
@@ -626,7 +640,7 @@ export function profileToAgentProfile(profile: Profile): AgentProfile {
       disabledTools: profile.mcpServerConfig.disabledTools,
       allServersDisabledByDefault: profile.mcpServerConfig.allServersDisabledByDefault,
       enabledServers: profile.mcpServerConfig.enabledServers,
-      enabledBuiltinTools: profile.mcpServerConfig.enabledBuiltinTools,
+      enabledRuntimeTools: profile.mcpServerConfig.enabledRuntimeTools,
     } : undefined,
     skillsConfig: profile.skillsConfig,
     connection: { type: "internal" },
@@ -662,7 +676,7 @@ export function personaToAgentProfile(persona: Persona): AgentProfile {
     toolConfig: {
       enabledServers: persona.mcpServerConfig.enabledServers,
       disabledTools: persona.mcpServerConfig.disabledTools,
-      enabledBuiltinTools: persona.mcpServerConfig.enabledBuiltinTools,
+      enabledRuntimeTools: persona.mcpServerConfig.enabledRuntimeTools,
     },
     skillsConfig: { enabledSkillIds: persona.skillsConfig.enabledSkillIds },
     connection: {
@@ -1248,10 +1262,10 @@ export type Config = {
   // Name of the ACP agent to use when mainAgentMode is "acp"
   mainAgentName?: string
 
-  // ACP Tool Injection: When true (default), DotAgents' builtin tools are injected
-  // into ACP agent sessions so they can use delegation, settings management, etc.
+  // ACP Tool Injection: When true (default), DotAgents runtime tools are injected
+  // into ACP agent sessions so they can use delegation, user communication, completion signaling, etc.
   // Set to false for "pure" ACP mode where the agent only uses its own tools.
-  acpInjectBuiltinTools?: boolean
+  acpInjectRuntimeTools?: boolean
 
   // Streamer Mode Configuration
   // When enabled, hides sensitive information (phone numbers, QR codes, API keys) for screen sharing

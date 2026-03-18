@@ -7,11 +7,10 @@ import { cn } from "@renderer/lib/utils"
 import { Switch } from "@renderer/components/ui/switch"
 import { Badge } from "@renderer/components/ui/badge"
 import type {
-  AgentProfile, AgentProfileToolConfig, AgentSkill,
+  AgentProfile, AgentProfileToolConfig, AgentSkill, DetailedToolInfo,
 } from "../../../shared/types"
 
 type ServerInfo = { connected: boolean; toolCount: number; runtimeEnabled?: boolean; configDisabled?: boolean }
-type ToolInfo = { name: string; description: string; serverName: string }
 
 const STORAGE_KEY = "agent-capabilities-sidebar-expanded"
 
@@ -54,16 +53,16 @@ export function AgentCapabilitiesSidebar() {
     enabled: expandedAgentId !== null,
   })
 
-  const { data: allTools = [] } = useQuery<ToolInfo[]>({
+  const { data: allTools = [] } = useQuery<DetailedToolInfo[]>({
     queryKey: ["toolsSidebar"],
-    queryFn: () => tipcClient.getMcpDetailedToolList() as Promise<ToolInfo[]>,
+    queryFn: () => tipcClient.getMcpDetailedToolList() as Promise<DetailedToolInfo[]>,
     enabled: expandedAgentId !== null,
   })
 
   const enabledAgents = agents.filter(a => a.enabled)
-  const builtinTools = allTools.filter(t => t.serverName === "dotagents-internal")
-  const externalTools = allTools.filter(t => t.serverName !== "dotagents-internal")
-  const serverNames = Object.keys(serverStatus).filter(n => n !== "dotagents-internal")
+  const runtimeTools = allTools.filter(t => t.sourceKind === "runtime")
+  const externalTools = allTools.filter(t => t.sourceKind === "mcp")
+  const serverNames = Object.keys(serverStatus)
 
   const updateAgent = useCallback(async (id: string, updates: Partial<AgentProfile>) => {
     await tipcClient.updateAgentProfile({ id, updates })
@@ -129,29 +128,29 @@ export function AgentCapabilitiesSidebar() {
     updateAgent(agent.id, { toolConfig: { ...tc, disabledTools: disabled } })
   }
 
-  const isBuiltinToolEnabled = (agent: AgentProfile, toolName: string) => {
-    const list = agent.toolConfig?.enabledBuiltinTools
+  const isRuntimeToolEnabled = (agent: AgentProfile, toolName: string) => {
+    const list = agent.toolConfig?.enabledRuntimeTools
     if (!list || list.length === 0) return true
     return list.includes(toolName)
   }
 
-  const toggleBuiltinTool = (agent: AgentProfile, toolName: string) => {
+  const toggleRuntimeTool = (agent: AgentProfile, toolName: string) => {
     const tc = { ...(agent.toolConfig || {}) } as AgentProfileToolConfig
-    let currentList = [...(tc.enabledBuiltinTools || [])]
+    let currentList = [...(tc.enabledRuntimeTools || [])]
     if (currentList.length === 0) {
-      currentList = builtinTools.map(t => t.name).filter(n => n !== toolName)
+      currentList = runtimeTools.map(t => t.name).filter(n => n !== toolName)
     } else {
       const idx = currentList.indexOf(toolName)
       if (idx >= 0) currentList.splice(idx, 1)
       else {
         currentList.push(toolName)
-        if (currentList.length === builtinTools.length) currentList = []
+        if (currentList.length === runtimeTools.length) currentList = []
       }
     }
-    updateAgent(agent.id, { toolConfig: { ...tc, enabledBuiltinTools: currentList.length > 0 ? currentList : undefined } })
+    updateAgent(agent.id, { toolConfig: { ...tc, enabledRuntimeTools: currentList.length > 0 ? currentList : undefined } })
   }
 
-  const toolsByServer = (serverName: string) => externalTools.filter(t => t.serverName === serverName)
+  const toolsByServer = (serverName: string) => externalTools.filter(t => t.sourceName === serverName)
 
   const toggleExpandServer = (serverName: string) => {
     setExpandedServers(prev => {
@@ -168,7 +167,7 @@ export function AgentCapabilitiesSidebar() {
 
     const enabledSkillCount = skills.filter(s => isSkillEnabled(agent, s.id)).length
     const enabledServerCount = serverNames.filter(n => isServerEnabled(agent, n)).length
-    const enabledBuiltinCount = builtinTools.filter(t => isBuiltinToolEnabled(agent, t.name)).length
+    const enabledRuntimeCount = runtimeTools.filter(t => isRuntimeToolEnabled(agent, t.name)).length
 
     return (
       <div key={agent.id} className="space-y-0.5">
@@ -241,29 +240,29 @@ export function AgentCapabilitiesSidebar() {
           </div>
         )}
 
-        {/* ── Built-in Tools ── */}
+        {/* ── DotAgents Runtime Tools ── */}
         <button
-          onClick={() => toggleSectionOpen("builtin")}
+          onClick={() => toggleSectionOpen("runtime")}
           className="flex items-center gap-1.5 w-full px-1 py-0.5 text-xs text-muted-foreground hover:text-foreground rounded transition-colors"
         >
-          {isSectionOpen("builtin") ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
+          {isSectionOpen("runtime") ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
           <Wrench className="h-3 w-3 shrink-0" />
-          <span className="truncate">Built-in Tools</span>
-          <Badge variant="secondary" className="ml-auto text-[10px] px-1 py-0 h-3.5">{enabledBuiltinCount}/{builtinTools.length}</Badge>
+          <span className="truncate">DotAgents Runtime Tools</span>
+          <Badge variant="secondary" className="ml-auto text-[10px] px-1 py-0 h-3.5">{enabledRuntimeCount}/{runtimeTools.length}</Badge>
         </button>
-        {isSectionOpen("builtin") && (
+        {isSectionOpen("runtime") && (
           <div className="pl-5 space-y-0.5">
-            {builtinTools.length === 0 ? (
-              <p className="text-[10px] text-muted-foreground py-1">No built-in tools available</p>
-            ) : builtinTools.map(tool => {
+            {runtimeTools.length === 0 ? (
+              <p className="text-[10px] text-muted-foreground py-1">No DotAgents runtime tools available</p>
+            ) : runtimeTools.map(tool => {
               const isEssential = tool.name === "mark_work_complete"
               return (
                 <div key={tool.name} className="flex items-center gap-2 py-0.5">
                   <Switch
                     className="scale-[0.6]"
-                    checked={isEssential || isBuiltinToolEnabled(agent, tool.name)}
+                    checked={isEssential || isRuntimeToolEnabled(agent, tool.name)}
                     disabled={isEssential}
-                    onCheckedChange={() => toggleBuiltinTool(agent, tool.name)}
+                    onCheckedChange={() => toggleRuntimeTool(agent, tool.name)}
                   />
                   <span className="text-[10px] truncate" title={tool.description}>
                     {tool.name}

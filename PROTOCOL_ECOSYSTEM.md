@@ -46,7 +46,7 @@ interface MCPServerConfig {
 ### Tool Naming Convention
 - Tools are prefixed with server name: `{serverName}:{toolName}`
 - Example: `github:search_repositories`, `exa:search`
-- Built-in tools use special prefix: `speakmcp-settings:list_mcp_servers`
+- DotAgents runtime tools use plain tool names with no server prefix.
 
 ### Key Features
 - **OAuth 2.1 Support**: Automatic token refresh for protected servers
@@ -121,7 +121,7 @@ interface ACPAgentDefinition {
 - **Capability Negotiation**: Protocol version and feature handshake
 
 ### Agent Delegation Flow
-1. Main agent calls `speakmcp-builtin:delegate_to_agent` tool
+1. Main agent calls `delegate_to_agent`
 2. ACP router looks up agent in registry
 3. Agent is spawned (if not already running)
 4. Request is sent via JSON-RPC
@@ -166,7 +166,7 @@ Your detailed instructions here in markdown...
 
 ### Skill Usage
 1. Agent sees skill name/description in system prompt
-2. Agent calls `speakmcp-settings:load_skill_instructions` to get full instructions
+2. Agent calls `load_skill_instructions` to get full instructions
 3. Agent uses skill knowledge to complete tasks
 4. Skills can reference external files via `filePath` field
 
@@ -257,17 +257,17 @@ interface AgentProfileToolConfig {
   enabledServers?: string[]           // Whitelist of MCP servers
   disabledServers?: string[]          // Blacklist of MCP servers
   disabledTools?: string[]            // Specific tools to disable
-  enabledBuiltinTools?: string[]       // Whitelist of built-in tools
+  enabledRuntimeTools?: string[]       // Whitelist of DotAgents runtime tools
   allServersDisabledByDefault?: boolean
 }
 ```
 
-### Built-in Tool Control (Option B Semantics)
-- **Built-in tools** (`speakmcp-settings:*`, `speakmcp-builtin:*`): Controlled via `enabledBuiltinTools` **allowlist**
-  - `undefined` or `null` = allow all built-ins
-  - `[]` = unconfigured, allow all built-ins
+### Runtime Tool Control (Option B Semantics)
+- **DotAgents runtime tools**: Controlled via `enabledRuntimeTools` **allowlist**
+  - `undefined` or `null` = allow all runtime tools
+  - `[]` = unconfigured, allow all runtime tools
   - `["tool1", "tool2"]` = allow only these + essential tools
-  - `speakmcp-settings:mark_work_complete` is **always enabled**
+  - `mark_work_complete` is **always enabled**
 - **External MCP tools**: Controlled via `disabledTools` **denylist**
 
 ### Agent Roles
@@ -297,7 +297,7 @@ A **file-based, modular configuration system** that stores agent-related setting
 ### Directory Structure
 ```
 .agents/
-├── speakmcp-settings.json        # General settings (subset of Config)
+├── dotagents-settings.json       # General settings (subset of Config)
 ├── mcp.json                      # MCP servers + tool config
 ├── models.json                   # Model presets + provider keys
 ├── system-prompt.md              # Custom system prompt
@@ -343,7 +343,7 @@ Skills and knowledge notes merge by ID, with workspace content overriding global
 
 Markdown frontmatter in `.agents/` uses a simple `key: value` format. It is not full YAML.
 
-#### JSON Files (speakmcp-settings.json, mcp.json, models.json)
+#### JSON Files (dotagents-settings.json, mcp.json, models.json)
 ```json
 {
   "key": "value",
@@ -477,7 +477,7 @@ Note-local assets such as images or PDFs may live anywhere inside the same note 
 
 3. **Tool Execution**:
    - Agent calls tool: `{server}:{toolName}`
-   - If built-in tool → execute in `builtin-tools.ts`
+   - If runtime tool → execute in `runtime-tools.ts`
    - If MCP tool → route to appropriate MCP server
    - If ACP delegation tool → spawn/communicate with ACP agent
 
@@ -488,11 +488,11 @@ User Input
     ▼
 Main Agent (internal LLM)
     │
-    ├─ Sees available agents via speakmcp-builtin:list_available_agents
+    ├─ Sees available agents via list_available_agents
     │
     ├─ Decides to delegate to "code-agent"
     │
-    ├─ Calls speakmcp-builtin:delegate_to_agent
+    ├─ Calls delegate_to_agent
     │
     ▼
 ACP Router
@@ -526,7 +526,7 @@ Agent System Prompt includes:
 Agent decides to use document-processing skill
     │
     ▼
-Agent calls speakmcp-settings:load_skill_instructions
+Agent calls load_skill_instructions
     │
     ▼
 Load from .agents/skills/document-processing/skill.md
@@ -558,7 +558,7 @@ export const myService = MyService.getInstance()
 
 ### 2. Dependency-Free Definitions
 Tool definitions are kept in separate files without dependencies:
-- `builtin-tool-definitions.ts` (no imports from services)
+- `runtime-tool-definitions.ts` (no imports from services)
 - `acp-router-tool-definitions.ts` (no imports from services)
 - Handlers are in separate files that can import services
 
@@ -575,8 +575,7 @@ config.json (user settings)
 
 ### 4. Tool Naming Convention
 - External MCP: `{serverName}:{toolName}`
-- Built-in settings: `speakmcp-settings:{toolName}`
-- Built-in delegation: `speakmcp-builtin:{toolName}`
+- DotAgents runtime tools: `{toolName}`
 - Sanitization: `:` → `__COLON__` for LLM providers
 
 ### 5. Bidirectional Communication

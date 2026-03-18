@@ -57,6 +57,8 @@ describe("constructSystemPrompt", () => {
     expect(DEFAULT_SYSTEM_PROMPT).toContain("context: search-only")
     expect(DEFAULT_SYSTEM_PROMPT).toContain("context: auto")
     expect(DEFAULT_SYSTEM_PROMPT).toContain("direct file editing")
+    expect(DEFAULT_SYSTEM_PROMPT).toContain("layered ~/.agents/ and ./.agents/ filesystem")
+    expect(DEFAULT_SYSTEM_PROMPT).toContain("dotagents-config-admin")
   })
 
   it("replaces save_memory guidance with note-first durable knowledge guidance", async () => {
@@ -65,8 +67,10 @@ describe("constructSystemPrompt", () => {
     const prompt = constructSystemPrompt([], undefined, true)
 
     expect(prompt).toContain("KNOWLEDGE NOTES (durable context)")
+    expect(prompt).toContain("DOTAGENTS CONFIG")
     expect(prompt).toContain("Prefer direct file editing there over special-purpose note tools")
     expect(prompt).toContain(".agents/knowledge/<slug>/<slug>.md")
+    expect(prompt).toContain('load_skill_instructions with skillId: "dotagents-config-admin"')
     expect(prompt).not.toContain("Use save_memory")
   })
 
@@ -79,6 +83,41 @@ describe("constructSystemPrompt", () => {
     expect(prompt).toContain(".agents/knowledge/<slug>/<slug>.md")
     expect(prompt).toContain("context: search-only")
     expect(prompt).toContain("context: auto")
+    expect(prompt).toContain("layered ~/.agents/ and ./.agents/ filesystem")
+    expect(prompt).toContain("dotagents-config-admin")
+  })
+
+  it("separates MCP tools from DotAgents runtime tools in the full prompt", async () => {
+    const { constructSystemPrompt } = await import("./system-prompts")
+
+    const prompt = constructSystemPrompt([
+      { name: "github:search_issues", description: "Search GitHub issues", inputSchema: { type: "object", properties: {} } },
+      { name: "respond_to_user", description: "Send a user-facing response", inputSchema: { type: "object", properties: {} } },
+      { name: "load_skill_instructions", description: "Load a skill", inputSchema: { type: "object", properties: {} } },
+    ] as any, undefined, true)
+
+    expect(prompt).toContain("AVAILABLE MCP TOOLS (1 tools total)")
+    expect(prompt).toContain("- github (1 tools): search_issues")
+    expect(prompt).toContain("AVAILABLE DOTAGENTS RUNTIME TOOLS (2)")
+    expect(prompt).toContain("- respond_to_user — Send a user-facing response")
+    expect(prompt).toContain("- load_skill_instructions — Load a skill")
+    expect(prompt).not.toContain("AVAILABLE MCP SERVERS")
+    expect(prompt).not.toContain("unknown")
+  })
+
+  it("separates MCP tools from DotAgents runtime tools in the minimal prompt", async () => {
+    const { constructMinimalSystemPrompt } = await import("./system-prompts")
+
+    const prompt = constructMinimalSystemPrompt([
+      { name: "github:search_issues", inputSchema: { type: "object", properties: { query: { type: "string" } } } },
+      { name: "respond_to_user", inputSchema: { type: "object", properties: { content: { type: "string" } } } },
+    ] as any, true)
+
+    expect(prompt).toContain("AVAILABLE MCP TOOLS:")
+    expect(prompt).toContain("- github:search_issues(query)")
+    expect(prompt).toContain("AVAILABLE DOTAGENTS RUNTIME TOOLS:")
+    expect(prompt).toContain("- respond_to_user(content)")
+    expect(prompt).not.toContain("AVAILABLE TOOLS:")
   })
 
   it("formats injected working notes from knowledge notes", async () => {

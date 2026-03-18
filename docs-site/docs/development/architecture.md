@@ -25,7 +25,7 @@ dotagents-mono/
 │   │   │   │   ├── agent-profile-service.ts  # Agent CRUD (1200+ lines)
 │   │   │   │   ├── skills-service.ts         # Skill management (1600+ lines)
 │   │   │   │   ├── keyboard.ts               # Hotkeys via Rust (1400+ lines)
-│   │   │   │   ├── builtin-tools.ts          # Built-in tool handlers (1600+ lines)
+│   │   │   │   ├── runtime-tools.ts          # Runtime tool handlers (1600+ lines)
 │   │   │   │   ├── config.ts                 # Config persistence (700+ lines)
 │   │   │   │   ├── conversation-service.ts   # Conversation storage
 │   │   │   │   ├── knowledge-notes-service.ts # Knowledge note management
@@ -148,7 +148,7 @@ export const agentProfileService = AgentProfileService.getInstance()
 ### Separation of Definitions and Handlers
 
 Tool definitions are kept in dependency-free files:
-- `builtin-tool-definitions.ts` — No service imports
+- `runtime-tool-definitions.ts` — No service imports
 - `acp-router-tool-definitions.ts` — No service imports
 
 Handlers are in separate files that can import services. This prevents circular dependencies.
@@ -177,8 +177,7 @@ All configuration writes follow this pattern:
 
 ```
 External MCP:      {serverName}:{toolName}
-Built-in settings: speakmcp-settings:{toolName}
-Built-in builtin:  speakmcp-builtin:{toolName}
+DotAgents runtime: {toolName}
 ```
 
 For LLM providers that don't support `:` in tool names, it's sanitized to `__COLON__`.

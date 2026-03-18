@@ -81,7 +81,6 @@ import { fetchModelsDevData, getModelFromModelsDevByProviderId, findBestModelMat
 import * as parakeetStt from "./parakeet-stt"
 import { loopService } from "./loop-service"
 import { clearSessionUserResponse } from "./session-user-response-store"
-import { BUILTIN_SERVER_NAME } from "./builtin-tool-definitions"
 import { isMissingApiKeyErrorMessage } from "@dotagents/shared"
 
 /**
@@ -634,8 +633,6 @@ async function refreshRuntimeAfterBundleImport(): Promise<void> {
 
     // Stop servers that were removed/disabled by the imported bundle.
     for (const [serverName, status] of Object.entries(serverStatusBeforeRefresh)) {
-      if (serverName === BUILTIN_SERVER_NAME) continue
-
       const serverConfig = configuredServers[serverName]
       const shouldBeStopped = !serverConfig || !!(serverConfig as MCPServerConfig).disabled
       if (!shouldBeStopped) continue
@@ -654,7 +651,6 @@ async function refreshRuntimeAfterBundleImport(): Promise<void> {
 
     // Restart currently connected enabled servers so overwritten configs take effect immediately.
     for (const [serverName, serverConfig] of Object.entries(configuredServers)) {
-      if (serverName === BUILTIN_SERVER_NAME) continue
       if ((serverConfig as MCPServerConfig).disabled) continue
       const status = serverStatusAfterStops[serverName]
       if (status?.runtimeEnabled === false) continue
@@ -3547,7 +3543,7 @@ export const router = {
         mcpServerConfig?.allServersDisabledByDefault ?? false,
 
         mcpServerConfig?.enabledServers ?? [],
-        mcpServerConfig?.enabledBuiltinTools ?? [],
+        mcpServerConfig?.enabledRuntimeTools ?? [],
       )
 
       return agentProfileService.getProfileLegacy(profile.id)
@@ -3577,7 +3573,7 @@ export const router = {
         currentState.disabledTools,
 
         currentState.enabledServers,
-        currentState.enabledBuiltinTools,
+        currentState.enabledRuntimeTools,
       )
     }),
 
@@ -3589,14 +3585,14 @@ export const router = {
       disabledServers?: string[]
       disabledTools?: string[]
       enabledServers?: string[]
-      enabledBuiltinTools?: string[]
+      enabledRuntimeTools?: string[]
     }>()
     .action(async ({ input }) => {
       return agentProfileService.updateProfileMcpConfig(input.profileId, {
         disabledServers: input.disabledServers,
         disabledTools: input.disabledTools,
         enabledServers: input.enabledServers,
-        enabledBuiltinTools: input.enabledBuiltinTools,
+        enabledRuntimeTools: input.enabledRuntimeTools,
       })
     }),
 

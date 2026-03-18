@@ -35,7 +35,7 @@ AgentProfile
 │   ├── enabledServers      — Whitelist of MCP servers
 │   ├── disabledServers     — Blacklist of MCP servers
 │   ├── disabledTools       — Specific tools to block
-│   └── enabledBuiltinTools — Whitelist of built-in tools
+│   └── enabledRuntimeTools — Whitelist of DotAgents runtime tools
 │
 ├── Skills
 │   └── enabledSkills   — Which skills this agent can use
@@ -207,14 +207,14 @@ Disable specific tools within enabled servers:
 }
 ```
 
-### Built-in Tool Control
+### Runtime Tool Control
 
-Control access to DotAgents' built-in tools:
+Control access to DotAgents runtime tools:
 
 ```json
 {
   "toolConfig": {
-    "enabledBuiltinTools": [
+    "enabledRuntimeTools": [
       "mark_work_complete",
       "respond_to_user",
       "load_skill_instructions"
@@ -223,8 +223,8 @@ Control access to DotAgents' built-in tools:
 }
 ```
 
-- `undefined` or `null` → all built-in tools available
-- `[]` → all built-in tools available (unconfigured)
+- `undefined` or `null` → all runtime tools available
+- `[]` → all runtime tools available (unconfigured)
 - `["tool1", "tool2"]` → only listed tools + essential tools
 - `mark_work_complete` is always enabled regardless of configuration
 

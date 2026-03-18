@@ -106,12 +106,12 @@ In the agent's `config.json`, define how to run the agent:
 
 ### 3. Enable Delegation on the Main Agent
 
-Ensure the main agent has access to the delegation built-in tools:
+Ensure the main agent has access to the delegation runtime tools:
 
 ```json
 {
   "toolConfig": {
-    "enabledBuiltinTools": [
+    "enabledRuntimeTools": [
       "list_available_agents",
       "delegate_to_agent",
       "mark_work_complete",
@@ -159,7 +159,7 @@ Sub-agents can request things from the parent:
 
 ## Delegation Tools
 
-The main agent uses these built-in tools for delegation:
+The main agent uses these runtime tools for delegation:
 
 ### `list_available_agents`
 

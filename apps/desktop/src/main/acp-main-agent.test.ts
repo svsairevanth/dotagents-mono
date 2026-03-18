@@ -149,7 +149,7 @@ describe("acp-main-agent", () => {
     }))
   })
 
-  it("adds builtin response-tool instructions to ACP prompt context", async () => {
+  it("adds runtime-tool response instructions to ACP prompt context", async () => {
     const { processTranscriptWithACPAgent } = await import("./acp-main-agent")
 
     await processTranscriptWithACPAgent("hello", {
@@ -173,7 +173,7 @@ describe("acp-main-agent", () => {
     )
 
     const promptContext = mockSendPrompt.mock.calls[0]?.[3]
-    expect(promptContext).toContain('injected MCP server "dotagents-builtin"')
+    expect(promptContext).toContain("If injected DotAgents runtime tools are available")
     expect(promptContext).toContain('call "respond_to_user" first with the final user-facing answer')
     expect(promptContext).toContain('then call "mark_work_complete" with a concise completion summary')
     expect(promptContext).toContain("System Prompt: Be helpful")

@@ -71,7 +71,7 @@ export type ProfileMcpServerConfig = {
   disabledTools?: string[]
   allServersDisabledByDefault?: boolean
   enabledServers?: string[]
-  enabledBuiltinTools?: string[]
+  enabledRuntimeTools?: string[]
 }
 
 export type ProfileModelConfig = {
@@ -122,7 +122,7 @@ export type AgentProfileToolConfig = {
   enabledServers?: string[]
   disabledServers?: string[]
   disabledTools?: string[]
-  enabledBuiltinTools?: string[]
+  enabledRuntimeTools?: string[]
   allServersDisabledByDefault?: boolean
 }
 

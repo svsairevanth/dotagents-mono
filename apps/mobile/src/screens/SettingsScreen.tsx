@@ -2064,16 +2064,16 @@ export default function SettingsScreen({ navigation }: any) {
                     </Text>
 
                     <View style={styles.row}>
-                      <Text style={styles.label}>Inject Builtin Tools</Text>
+                      <Text style={styles.label}>Inject Runtime Tools</Text>
                       <Switch
-                        value={remoteSettings.acpInjectBuiltinTools ?? true}
-                        onValueChange={(v) => handleRemoteSettingToggle('acpInjectBuiltinTools', v)}
+                        value={remoteSettings.acpInjectRuntimeTools ?? true}
+                        onValueChange={(v) => handleRemoteSettingToggle('acpInjectRuntimeTools', v)}
                         trackColor={{ false: theme.colors.muted, true: theme.colors.primary }}
-                        thumbColor={remoteSettings.acpInjectBuiltinTools ? theme.colors.primaryForeground : theme.colors.background}
+                        thumbColor={remoteSettings.acpInjectRuntimeTools ? theme.colors.primaryForeground : theme.colors.background}
                       />
                     </View>
                     <Text style={styles.helperText}>
-                      Add DotAgents tools (delegation, settings) to ACP sessions
+                      Add DotAgents runtime tools to ACP sessions
                     </Text>
                   </>
                 )}

@@ -34,7 +34,7 @@ import { BundlePublishDialog } from "@renderer/components/bundle-publish-dialog"
 import { SandboxSlotSwitcher } from "@renderer/components/sandbox-slot-switcher"
 import {
   AgentProfile, AgentProfileConnectionType, AgentProfileConnection,
-  ProfileModelConfig, AgentProfileToolConfig, ProfileSkillsConfig, AgentSkill,
+  ProfileModelConfig, AgentProfileToolConfig, ProfileSkillsConfig, AgentSkill, DetailedToolInfo,
 } from "../../../shared/types"
 
 type ConnectionType = AgentProfileConnectionType
@@ -341,10 +341,11 @@ export function SettingsAgents() {
   const handleCancel = () => { setEditing(null); setIsCreating(false); setNewPropKey(""); setNewPropValue(""); setCommandVerification(null) }
 
   // Derived tool data
-  const builtinTools = allTools.filter(t => t.serverName === "dotagents-internal")
-  const externalTools = allTools.filter(t => t.serverName !== "dotagents-internal")
-  const serverNames = Object.keys(serverStatus).filter(n => n !== "dotagents-internal")
-  const toolsByServer = (serverName: string) => externalTools.filter(t => t.serverName === serverName)
+  const typedTools = allTools as DetailedToolInfo[]
+  const runtimeTools = typedTools.filter(t => t.sourceKind === "runtime")
+  const externalTools = typedTools.filter(t => t.sourceKind === "mcp")
+  const serverNames = Object.keys(serverStatus)
+  const toolsByServer = (serverName: string) => externalTools.filter(t => t.sourceName === serverName)
 
   // Tool config helpers
   const isServerEnabled = (serverName: string): boolean => {
@@ -359,8 +360,8 @@ export function SettingsAgents() {
     return (editing?.toolConfig?.disabledTools || []).includes(toolName)
   }
 
-  const isBuiltinToolEnabled = (toolName: string): boolean => {
-    const list = editing?.toolConfig?.enabledBuiltinTools
+  const isRuntimeToolEnabled = (toolName: string): boolean => {
+    const list = editing?.toolConfig?.enabledRuntimeTools
     if (!list || list.length === 0) return true
     return list.includes(toolName)
   }
@@ -396,21 +397,21 @@ export function SettingsAgents() {
     setEditing({ ...editing, toolConfig: { ...tc, disabledTools: disabled } })
   }
 
-  const toggleBuiltinTool = (toolName: string) => {
+  const toggleRuntimeTool = (toolName: string) => {
     if (!editing) return
     const tc = { ...(editing.toolConfig || {}) } as AgentProfileToolConfig
-    let currentList = [...(tc.enabledBuiltinTools || [])]
+    let currentList = [...(tc.enabledRuntimeTools || [])]
     if (currentList.length === 0) {
-      currentList = builtinTools.map(t => t.name).filter(n => n !== toolName)
+      currentList = runtimeTools.map(t => t.name).filter(n => n !== toolName)
     } else {
       const idx = currentList.indexOf(toolName)
       if (idx >= 0) currentList.splice(idx, 1)
       else {
         currentList.push(toolName)
-        if (currentList.length === builtinTools.length) currentList = []
+        if (currentList.length === runtimeTools.length) currentList = []
       }
     }
-    setEditing({ ...editing, toolConfig: { ...tc, enabledBuiltinTools: currentList.length > 0 ? currentList : undefined } })
+    setEditing({ ...editing, toolConfig: { ...tc, enabledRuntimeTools: currentList.length > 0 ? currentList : undefined } })
   }
 
   const toggleSkill = (skillId: string) => {
@@ -455,17 +456,17 @@ export function SettingsAgents() {
   const allServersEnabled = serverNames.length > 0 && serverNames.every(n => isServerEnabled(n))
   const allServersDisabled = serverNames.length > 0 && serverNames.every(n => !isServerEnabled(n))
 
-  const enableAllBuiltinTools = () => {
+  const enableAllRuntimeTools = () => {
     if (!editing) return
-    setEditing({ ...editing, toolConfig: { ...(editing.toolConfig || {}), enabledBuiltinTools: undefined } })
+    setEditing({ ...editing, toolConfig: { ...(editing.toolConfig || {}), enabledRuntimeTools: undefined } })
   }
-  const disableAllBuiltinTools = () => {
+  const disableAllRuntimeTools = () => {
     if (!editing) return
     // Keep only essential tools enabled
-    setEditing({ ...editing, toolConfig: { ...(editing.toolConfig || {}), enabledBuiltinTools: ["mark_work_complete"] } })
+    setEditing({ ...editing, toolConfig: { ...(editing.toolConfig || {}), enabledRuntimeTools: ["mark_work_complete"] } })
   }
-  const allBuiltinEnabled = !editing?.toolConfig?.enabledBuiltinTools || editing.toolConfig.enabledBuiltinTools.length === 0
-  const allBuiltinDisabled = (editing?.toolConfig?.enabledBuiltinTools?.length ?? 0) > 0 && editing?.toolConfig?.enabledBuiltinTools?.every(n => n === "mark_work_complete")
+  const allRuntimeEnabled = !editing?.toolConfig?.enabledRuntimeTools || editing.toolConfig.enabledRuntimeTools.length === 0
+  const allRuntimeDisabled = (editing?.toolConfig?.enabledRuntimeTools?.length ?? 0) > 0 && editing?.toolConfig?.enabledRuntimeTools?.every(n => n === "mark_work_complete")
 
   // Section collapse helpers
   const isSectionCollapsed = (section: string) => collapsedSections.has(section)
@@ -1061,34 +1062,34 @@ export function SettingsAgents() {
                 )}
               </div>
 
-              {/* ── Built-in Tools Section ── */}
+              {/* ── DotAgents Runtime Tools Section ── */}
               <div className="rounded-lg border">
                 <div className="flex items-center justify-between w-full px-4 py-3">
-                  <button type="button" className="flex items-center gap-2 hover:bg-muted/50 transition-colors rounded-md px-1 py-0.5 -mx-1" onClick={() => toggleSection("builtin-tools")}>
-                    {isSectionCollapsed("builtin-tools") ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  <button type="button" className="flex items-center gap-2 hover:bg-muted/50 transition-colors rounded-md px-1 py-0.5 -mx-1" onClick={() => toggleSection("runtime-tools")}>
+                    {isSectionCollapsed("runtime-tools") ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                     <Wrench className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-semibold text-sm">Built-in Tools</span>
+                    <span className="font-semibold text-sm">DotAgents Runtime Tools</span>
                   </button>
                   <div className="flex items-center gap-2">
-                    {builtinTools.length > 0 && (
+                    {runtimeTools.length > 0 && (
                       <div className="flex items-center gap-1">
-                        <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-[11px]" disabled={allBuiltinEnabled} onClick={(e) => { e.stopPropagation(); enableAllBuiltinTools() }}>Enable All</Button>
-                        <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-[11px]" disabled={allBuiltinDisabled} onClick={(e) => { e.stopPropagation(); disableAllBuiltinTools() }}>Disable All</Button>
+                        <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-[11px]" disabled={allRuntimeEnabled} onClick={(e) => { e.stopPropagation(); enableAllRuntimeTools() }}>Enable All</Button>
+                        <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-[11px]" disabled={allRuntimeDisabled} onClick={(e) => { e.stopPropagation(); disableAllRuntimeTools() }}>Disable All</Button>
                       </div>
                     )}
-                    <Badge variant="secondary" className="text-xs">{builtinTools.filter(t => isBuiltinToolEnabled(t.name)).length} of {builtinTools.length} enabled</Badge>
+                    <Badge variant="secondary" className="text-xs">{runtimeTools.filter(t => isRuntimeToolEnabled(t.name)).length} of {runtimeTools.length} enabled</Badge>
                   </div>
                 </div>
-                {!isSectionCollapsed("builtin-tools") && (
+                {!isSectionCollapsed("runtime-tools") && (
                   <div className="border-t px-2 py-2 space-y-0.5">
-                    {builtinTools.length === 0 ? (
-                      <p className="text-sm text-muted-foreground py-3 text-center">No built-in tools available.</p>
-                    ) : builtinTools.map(tool => {
+                    {runtimeTools.length === 0 ? (
+                      <p className="text-sm text-muted-foreground py-3 text-center">No DotAgents runtime tools available.</p>
+                    ) : runtimeTools.map(tool => {
                       const isEssential = tool.name === "mark_work_complete"
-                      const enabled = isEssential || isBuiltinToolEnabled(tool.name)
+                      const enabled = isEssential || isRuntimeToolEnabled(tool.name)
                       return (
                         <div key={tool.name} className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-muted/30">
-                          <Switch checked={enabled} disabled={isEssential} onCheckedChange={() => toggleBuiltinTool(tool.name)} />
+                          <Switch checked={enabled} disabled={isEssential} onCheckedChange={() => toggleRuntimeTool(tool.name)} />
                           <div className="min-w-0">
                             <span className={`text-sm truncate flex items-center gap-2 ${!enabled ? "text-muted-foreground" : ""}`}>
                               {tool.name}

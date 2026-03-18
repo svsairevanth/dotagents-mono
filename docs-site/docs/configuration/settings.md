@@ -122,7 +122,7 @@ See [Agent Profiles](/agents/profiles) for details.
 | File | Content |
 |------|---------|
 | `config.json` | Main application settings |
-| `.agents/speakmcp-settings.json` | General settings subset |
+| `.agents/dotagents-settings.json` | General settings subset |
 | `.agents/mcp.json` | MCP server configuration |
 | `.agents/models.json` | Model presets and provider keys |
 | `.agents/system-prompt.md` | Custom system prompt |

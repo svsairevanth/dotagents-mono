@@ -23,6 +23,7 @@ import {
   ServerLogEntry,
   ProfilesData,
   ProfileMcpServerConfig,
+  DetailedToolInfo,
 } from "../shared/types"
 import { requestElicitation, handleElicitationComplete, cancelAllElicitations } from "./mcp-elicitation"
 import { requestSampling, cancelAllSamplingRequests } from "./mcp-sampling"
@@ -39,7 +40,7 @@ import { oauthStorage } from "./oauth-storage"
 import { isDebugTools, logTools, logMCP } from "./debug"
 import { agentProfileService } from "./agent-profile-service"
 import { app, dialog } from "electron"
-import { builtinTools, executeBuiltinTool, isBuiltinTool, BUILTIN_SERVER_NAME } from "./builtin-tools"
+import { runtimeTools, executeRuntimeTool, isRuntimeTool } from "./runtime-tools"
 import { randomUUID } from "crypto"
 import {
   createToolSpan,
@@ -68,12 +69,13 @@ export const WHATSAPP_DEFAULT_ENABLED_TOOLS = [
   "whatsapp_send_typing",
 ]
 
-const ESSENTIAL_BUILTIN_TOOL_NAMES = new Set<string>([
-  `${BUILTIN_SERVER_NAME}:mark_work_complete`,
-])
+const RUNTIME_BUILTIN_TOOL_SOURCE_NAME = "dotagents-runtime-tools"
+const RUNTIME_BUILTIN_TOOL_SOURCE_LABEL = "DotAgents Runtime Tools"
 
-function isEssentialBuiltinTool(toolName: string): boolean {
-  return ESSENTIAL_BUILTIN_TOOL_NAMES.has(toolName)
+const ESSENTIAL_RUNTIME_TOOL_NAMES = new Set<string>(["mark_work_complete"])
+
+function isEssentialRuntimeTool(toolName: string): boolean {
+  return ESSENTIAL_RUNTIME_TOOL_NAMES.has(toolName)
 }
 
 /**
@@ -150,10 +152,10 @@ export class MCPService {
   private oauthClients: Map<string, OAuthClient> = new Map()
   private availableTools: MCPTool[] = []
   private disabledTools: Set<string> = new Set()
-  // Option B: built-in tools are controlled ONLY via enabledBuiltinTools allowlist.
-  // - null => no allowlist configured (allow all built-ins)
-  // - Set => allow essential built-ins + names present in the set
-  private enabledBuiltinToolsWhitelist: Set<string> | null = null
+  // Option B: DotAgents runtime tools are controlled via enabledRuntimeTools allowlist.
+  // - null => no allowlist configured (allow all runtime tools)
+  // - Set => allow essential runtime tools + names present in the set
+  private enabledRuntimeToolsWhitelist: Set<string> | null = null
   private isInitializing = false
   private initializationPromise: Promise<void> | null = null
   private initializationProgress: {
@@ -201,9 +203,9 @@ export class MCPService {
       const persistedTools = config?.mcpDisabledTools
       if (Array.isArray(persistedTools)) {
         for (const toolName of persistedTools) {
-          // Built-in tools are never controlled via the disabledTools set.
-          // Ignore any persisted built-in entries to avoid drift with Option B.
-          if (!isEssentialBuiltinTool(toolName) && !isBuiltinTool(toolName)) {
+          // Runtime tools are never controlled via the disabledTools set.
+          // Ignore any persisted runtime-tool entries to avoid drift with Option B.
+          if (!isEssentialRuntimeTool(toolName) && !isRuntimeTool(toolName)) {
             this.disabledTools.add(toolName)
           }
         }
@@ -239,7 +241,7 @@ export class MCPService {
           }
 
           // Persist the derived runtimeDisabledServers to configStore
-          // This ensures status/reporting paths (e.g., list_mcp_servers, getDetailedToolList)
+          // This ensures status/reporting paths (e.g., getDetailedToolList)
           // that read from configStore stay in sync with actual runtime state
           const updatedConfig: Config = {
             ...config,
@@ -256,57 +258,57 @@ export class MCPService {
       }
     } catch (e) {}
 
-    // Best-effort: initialize built-in tool allowlist from the current profile.
+    // Best-effort: initialize runtime-tool allowlist from the current profile.
     // This keeps getAvailableTools()/getDetailedToolList() consistent across restarts.
-    this.refreshEnabledBuiltinToolsFromCurrentProfile()
+    this.refreshEnabledRuntimeToolsFromCurrentProfile()
   }
 
-  private setEnabledBuiltinToolsWhitelist(enabledBuiltinTools?: string[]): void {
-    if (Array.isArray(enabledBuiltinTools) && enabledBuiltinTools.length > 0) {
-      this.enabledBuiltinToolsWhitelist = new Set(enabledBuiltinTools)
+  private setEnabledRuntimeToolsWhitelist(enabledRuntimeTools?: string[]): void {
+    if (Array.isArray(enabledRuntimeTools) && enabledRuntimeTools.length > 0) {
+      this.enabledRuntimeToolsWhitelist = new Set(enabledRuntimeTools)
     } else {
       // Empty array is treated as "not configured" (allow all).
-      this.enabledBuiltinToolsWhitelist = null
+      this.enabledRuntimeToolsWhitelist = null
     }
   }
 
-  private refreshEnabledBuiltinToolsFromCurrentProfile(): void {
+  private refreshEnabledRuntimeToolsFromCurrentProfile(): void {
 
     try {
-      const enabledBuiltinTools =
-        agentProfileService.getCurrentProfile()?.toolConfig?.enabledBuiltinTools
-      this.setEnabledBuiltinToolsWhitelist(enabledBuiltinTools)
+      const enabledRuntimeTools =
+        agentProfileService.getCurrentProfile()?.toolConfig?.enabledRuntimeTools
+      this.setEnabledRuntimeToolsWhitelist(enabledRuntimeTools)
     } catch {
       // Ignore errors; default is allow-all.
     }
   }
 
-  private getEnabledBuiltinToolsForPersistence(): string[] {
-    if (!this.enabledBuiltinToolsWhitelist) return []
-    return Array.from(this.enabledBuiltinToolsWhitelist).sort()
+  private getEnabledRuntimeToolsForPersistence(): string[] {
+    if (!this.enabledRuntimeToolsWhitelist) return []
+    return Array.from(this.enabledRuntimeToolsWhitelist).sort()
   }
 
-  private isBuiltinToolEnabledForCurrentProfile(toolName: string): boolean {
-    if (isEssentialBuiltinTool(toolName)) return true
-    if (!this.enabledBuiltinToolsWhitelist) return true
-    return this.enabledBuiltinToolsWhitelist.has(toolName)
+  private isRuntimeToolEnabledForCurrentProfile(toolName: string): boolean {
+    if (isEssentialRuntimeTool(toolName)) return true
+    if (!this.enabledRuntimeToolsWhitelist) return true
+    return this.enabledRuntimeToolsWhitelist.has(toolName)
   }
 
-  private isBuiltinToolEnabledForProfile(toolName: string, profileMcpConfig?: ProfileMcpServerConfig): boolean {
-    if (!profileMcpConfig) return this.isBuiltinToolEnabledForCurrentProfile(toolName)
-    if (isEssentialBuiltinTool(toolName)) return true
+  private isRuntimeToolEnabledForProfile(toolName: string, profileMcpConfig?: ProfileMcpServerConfig): boolean {
+    if (!profileMcpConfig) return this.isRuntimeToolEnabledForCurrentProfile(toolName)
+    if (isEssentialRuntimeTool(toolName)) return true
 
-    const enabledBuiltinTools = profileMcpConfig.enabledBuiltinTools
-    const hasWhitelist = Array.isArray(enabledBuiltinTools) && enabledBuiltinTools.length > 0
+    const enabledRuntimeTools = profileMcpConfig.enabledRuntimeTools
+    const hasWhitelist = Array.isArray(enabledRuntimeTools) && enabledRuntimeTools.length > 0
     if (!hasWhitelist) return true
-    return enabledBuiltinTools!.includes(toolName)
+    return enabledRuntimeTools!.includes(toolName)
   }
 
-  private getAvailableBuiltinToolsForCurrentProfile(): MCPTool[] {
-    if (!this.enabledBuiltinToolsWhitelist) return builtinTools
-    const whitelist = this.enabledBuiltinToolsWhitelist
-    return builtinTools.filter(
-      (tool) => isEssentialBuiltinTool(tool.name) || whitelist.has(tool.name),
+  private getAvailableRuntimeToolsForCurrentProfile(): MCPTool[] {
+    if (!this.enabledRuntimeToolsWhitelist) return runtimeTools
+    const whitelist = this.enabledRuntimeToolsWhitelist
+    return runtimeTools.filter(
+      (tool) => isEssentialRuntimeTool(tool.name) || whitelist.has(tool.name),
     )
   }
 
@@ -1018,14 +1020,14 @@ export class MCPService {
     disabledTools?: string[],
     allServersDisabledByDefault?: boolean,
     enabledServers?: string[],
-    enabledBuiltinTools?: string[],
+    enabledRuntimeTools?: string[],
   ): void {
     const config = configStore.get()
     const mcpConfig = config.mcpConfig
     const allServerNames = Object.keys(mcpConfig?.mcpServers || {})
 
-    // Apply built-in tool allowlist (Option B)
-    this.setEnabledBuiltinToolsWhitelist(enabledBuiltinTools)
+    // Apply runtime-tool allowlist (Option B)
+    this.setEnabledRuntimeToolsWhitelist(enabledRuntimeTools)
 
     // Reset runtime disabled servers based on profile config
     // Enable all servers first, then disable those specified in the profile
@@ -1063,9 +1065,9 @@ export class MCPService {
 
     if (disabledTools && disabledTools.length > 0) {
       for (const toolName of disabledTools) {
-        // disabledTools applies ONLY to external MCP tools. Built-ins are controlled
-        // by enabledBuiltinTools allowlist.
-        if (!isEssentialBuiltinTool(toolName) && !isBuiltinTool(toolName)) {
+        // disabledTools applies ONLY to external MCP tools. Runtime tools are controlled
+        // by enabledRuntimeTools allowlist.
+        if (!isEssentialRuntimeTool(toolName) && !isRuntimeTool(toolName)) {
           this.disabledTools.add(toolName)
         }
       }
@@ -1109,7 +1111,7 @@ export class MCPService {
   /**
    * Get current MCP configuration state (for saving to profile)
    */
-  getCurrentMcpConfigState(): { disabledServers: string[], disabledTools: string[], enabledServers: string[], enabledBuiltinTools: string[] } {
+  getCurrentMcpConfigState(): { disabledServers: string[], disabledTools: string[], enabledServers: string[], enabledRuntimeTools: string[] } {
     // Calculate enabled servers as all servers minus disabled servers
     const config = configStore.get()
     const mcpConfig = config.mcpConfig
@@ -1120,7 +1122,7 @@ export class MCPService {
       disabledServers: Array.from(this.runtimeDisabledServers),
       disabledTools: Array.from(this.disabledTools),
       enabledServers,
-      enabledBuiltinTools: this.getEnabledBuiltinToolsForPersistence(),
+      enabledRuntimeTools: this.getEnabledRuntimeToolsForPersistence(),
     }
   }
 
@@ -1140,7 +1142,7 @@ export class MCPService {
         state.disabledServers,
         state.disabledTools,
         state.enabledServers,
-        state.enabledBuiltinTools,
+        state.enabledRuntimeTools,
       )
 
       if (isDebugTools()) {
@@ -1171,9 +1173,9 @@ export class MCPService {
     })
 
     // Also clean up disabled tools for non-existent servers.
-    // Option B: built-ins should never be stored in disabledTools.
+    // Option B: runtime tools should never be stored in disabledTools.
     const orphanedDisabledTools = Array.from(this.disabledTools).filter((toolName) => {
-      if (isBuiltinTool(toolName)) return true
+      if (isRuntimeTool(toolName)) return true
       const serverName = toolName.includes(":") ? toolName.split(":")[0] : "unknown"
       return configuredServers[serverName] === undefined
     })
@@ -1723,15 +1725,15 @@ export class MCPService {
       return !this.runtimeDisabledServers.has(serverName)
     })
 
-    // Filter external tools by global disabledTools, but keep ALL builtin tools.
+    // Filter external tools by global disabledTools, but keep all runtime tools.
     // this.disabledTools is a persistence artifact from profile switching (config.mcpDisabledTools).
-    // When no profile config is provided (e.g. the default agent), all builtin tools
+    // When no profile config is provided (e.g. the default agent), all runtime tools
     // should be available — only external MCP tools respect the global disabled set.
     const enabledExternal = enabledExternalTools.filter(
       (tool) => !this.disabledTools.has(tool.name),
     )
 
-    return [...enabledExternal, ...this.getAvailableBuiltinToolsForCurrentProfile()]
+    return [...enabledExternal, ...this.getAvailableRuntimeToolsForCurrentProfile()]
   }
 
   /**
@@ -1744,15 +1746,15 @@ export class MCPService {
    */
   getAvailableToolsForProfile(profileMcpConfig?: ProfileMcpServerConfig): MCPTool[] {
     // If no profile config, return all available tools.
-    // All builtin tools are included; only external tools respect the global disabledTools set.
+    // All runtime tools are included; only external tools respect the global disabledTools set.
     if (!profileMcpConfig) {
       const enabledExternal = this.availableTools.filter(
         (tool) => !this.disabledTools.has(tool.name),
       )
-      return [...enabledExternal, ...this.getAvailableBuiltinToolsForCurrentProfile()]
+      return [...enabledExternal, ...this.getAvailableRuntimeToolsForCurrentProfile()]
     }
 
-    const { allServersDisabledByDefault, enabledServers, disabledServers, disabledTools, enabledBuiltinTools } = profileMcpConfig
+    const { allServersDisabledByDefault, enabledServers, disabledServers, disabledTools, enabledRuntimeTools } = profileMcpConfig
 
     // Determine which servers are enabled for this profile
     const config = configStore.get()
@@ -1785,36 +1787,28 @@ export class MCPService {
       return !profileDisabledServers.has(serverName)
     })
 
-    // Filter builtin tools based on enabledBuiltinTools whitelist (if specified and non-empty).
-    // Essential builtins are always available regardless of whitelist/disabled settings.
-    // An empty array is treated as "not configured" (same as undefined) — allow all builtins.
-    // Legacy profiles may have enabledBuiltinTools: [] which should NOT disable all builtins.
-    const hasBuiltinWhitelist = enabledBuiltinTools && enabledBuiltinTools.length > 0
-    const filteredBuiltinTools = builtinTools.filter((tool) =>
-      isEssentialBuiltinTool(tool.name) ||
-      !hasBuiltinWhitelist ||
-      enabledBuiltinTools!.includes(tool.name),
+    // Filter runtime tools based on enabledRuntimeTools whitelist (if specified and non-empty).
+    // Essential runtime tools are always available regardless of whitelist/disabled settings.
+    // An empty array is treated as "not configured" (same as undefined) — allow all runtime tools.
+    const hasRuntimeWhitelist = enabledRuntimeTools && enabledRuntimeTools.length > 0
+    const filteredRuntimeTools = runtimeTools.filter((tool) =>
+      isEssentialRuntimeTool(tool.name) ||
+      !hasRuntimeWhitelist ||
+      enabledRuntimeTools!.includes(tool.name),
     )
 
-    // Apply disabledTools ONLY to external tools, not builtins.
-    // Builtin tool availability is controlled exclusively by the enabledBuiltinTools
-    // whitelist above. Legacy profiles may have all builtin names in disabledTools
+    // Apply disabledTools ONLY to external tools, not runtime tools.
+    // Runtime tool availability is controlled exclusively by the enabledRuntimeTools
+    // whitelist above. Legacy profiles may have all runtime-tool names in disabledTools
     // (from profile-service initialization), which would incorrectly filter them out.
     const enabledExternalToolsFiltered = enabledExternalTools.filter(
       (tool) => !profileDisabledTools.has(tool.name),
     )
 
-    return [...enabledExternalToolsFiltered, ...filteredBuiltinTools]
+    return [...enabledExternalToolsFiltered, ...filteredRuntimeTools]
   }
 
-  getDetailedToolList(): Array<{
-    name: string
-    description: string
-    serverName: string
-    enabled: boolean
-    serverEnabled: boolean
-    inputSchema: any
-  }> {
+  getDetailedToolList(): DetailedToolInfo[] {
     // Clean up orphaned tools from deleted servers
     this.cleanupOrphanedTools()
 
@@ -1833,24 +1827,26 @@ export class MCPService {
     }
 
     // Get external MCP tools (filter out tools from servers that no longer exist)
-    const externalTools = this.availableTools
+    const externalTools: DetailedToolInfo[] = this.availableTools
       .filter((tool) => {
-        const serverName = tool.name.includes(":")
-          ? tool.name.split(":")[0]
-          : "unknown"
+        const separatorIndex = tool.name.indexOf(":")
+        if (separatorIndex === -1) return false
+        const serverName = tool.name.slice(0, separatorIndex)
         // Only include tools from servers that still exist in config
         return configuredServers[serverName] !== undefined
       })
       .map((tool) => {
-        const serverName = tool.name.includes(":")
-          ? tool.name.split(":")[0]
-          : "unknown"
+        const separatorIndex = tool.name.indexOf(":")
+        const serverName = separatorIndex === -1 ? "" : tool.name.slice(0, separatorIndex)
         // Tool is enabled only if: tool itself is not disabled AND server is not disabled
         const toolDisabled = this.disabledTools.has(tool.name)
         const serverDisabled = isServerDisabled(serverName)
         return {
           name: tool.name,
           description: tool.description,
+          sourceKind: "mcp",
+          sourceName: serverName,
+          sourceLabel: serverName,
           serverName,
           enabled: !toolDisabled && !serverDisabled,
           serverEnabled: !serverDisabled,
@@ -1858,17 +1854,19 @@ export class MCPService {
         }
       })
 
-    // Add built-in tools (built-in server is always enabled)
-    const builtinToolsList = builtinTools.map((tool) => ({
+    // Add runtime tools (always enabled as a source)
+    const runtimeToolsList: DetailedToolInfo[] = runtimeTools.map((tool) => ({
       name: tool.name,
       description: tool.description,
-      serverName: BUILTIN_SERVER_NAME,
-      enabled: this.isBuiltinToolEnabledForCurrentProfile(tool.name),
+      sourceKind: "runtime",
+      sourceName: RUNTIME_BUILTIN_TOOL_SOURCE_NAME,
+      sourceLabel: RUNTIME_BUILTIN_TOOL_SOURCE_LABEL,
+      enabled: this.isRuntimeToolEnabledForCurrentProfile(tool.name),
       serverEnabled: true,
       inputSchema: tool.inputSchema,
     }))
 
-    return [...externalTools, ...builtinToolsList]
+    return [...externalTools, ...runtimeToolsList]
   }
 
   getServerStatus(): Record<
@@ -1931,14 +1929,6 @@ export class MCPService {
       }
     }
 
-    // Add built-in settings server (always connected, always enabled)
-    status[BUILTIN_SERVER_NAME] = {
-      connected: true,
-      toolCount: builtinTools.length,
-      runtimeEnabled: true,
-      configDisabled: false,
-    }
-
     return status
   }
 
@@ -1953,28 +1943,28 @@ export class MCPService {
   }
 
   setToolEnabled(toolName: string, enabled: boolean): boolean {
-    // Check both external tools and built-in tools
+    // Check both external tools and runtime tools
     const toolExistsExternal = this.availableTools.some(
       (tool) => tool.name === toolName,
     )
-    const toolExistsBuiltin = builtinTools.some(
+    const toolExistsRuntime = runtimeTools.some(
       (tool) => tool.name === toolName,
     )
-    if (!toolExistsExternal && !toolExistsBuiltin) {
+    if (!toolExistsExternal && !toolExistsRuntime) {
       return false
     }
 
-    if (!enabled && isEssentialBuiltinTool(toolName)) {
+    if (!enabled && isEssentialRuntimeTool(toolName)) {
       // Essential tools cannot be disabled; return false so the UI
       // knows the toggle was not applied (prevents UI/backend mismatch).
       return false
     }
 
-    // Built-in tools are controlled ONLY via enabledBuiltinTools allowlist.
-    if (toolExistsBuiltin) {
-      const allBuiltinNames = builtinTools.map((t) => t.name)
+    // Runtime tools are controlled via enabledRuntimeTools allowlist.
+    if (toolExistsRuntime) {
+      const allRuntimeNames = runtimeTools.map((t) => t.name)
       const nextWhitelist = new Set<string>(
-        this.enabledBuiltinToolsWhitelist ? Array.from(this.enabledBuiltinToolsWhitelist) : allBuiltinNames,
+        this.enabledRuntimeToolsWhitelist ? Array.from(this.enabledRuntimeToolsWhitelist) : allRuntimeNames,
       )
 
       if (enabled) {
@@ -1984,18 +1974,18 @@ export class MCPService {
       }
 
       // Never persist an empty allowlist, because [] is treated as "allow all".
-      // Use essential built-ins as an always-legal non-empty sentinel.
+      // Use essential runtime tools as an always-legal non-empty sentinel.
       if (nextWhitelist.size === 0) {
-        for (const essentialName of ESSENTIAL_BUILTIN_TOOL_NAMES) {
+        for (const essentialName of ESSENTIAL_RUNTIME_TOOL_NAMES) {
           nextWhitelist.add(essentialName)
         }
       }
 
-      const coversAllBuiltins = builtinTools.every(
-        (t) => isEssentialBuiltinTool(t.name) || nextWhitelist.has(t.name),
+      const coversAllRuntimeTools = runtimeTools.every(
+        (t) => isEssentialRuntimeTool(t.name) || nextWhitelist.has(t.name),
       )
 
-      this.enabledBuiltinToolsWhitelist = coversAllBuiltins ? null : nextWhitelist
+      this.enabledRuntimeToolsWhitelist = coversAllRuntimeTools ? null : nextWhitelist
 
       // Auto-save to current profile so switching profiles restores this state
       this.saveCurrentStateToProfile()
@@ -2657,11 +2647,11 @@ export class MCPService {
           })
         }
       }
-      // Check if this is a built-in tool first
-      if (isBuiltinTool(toolCall.name)) {
-        // Guard against executing built-in tools that are not enabled for this session/profile.
-        // Option B: built-ins are controlled ONLY by enabledBuiltinTools allowlist.
-        if (!this.isBuiltinToolEnabledForProfile(toolCall.name, profileMcpConfig)) {
+      // Check if this is a runtime tool first
+      if (isRuntimeTool(toolCall.name)) {
+        // Guard against executing runtime tools that are not enabled for this session/profile.
+        // Option B: runtime tools are controlled by enabledRuntimeTools allowlist.
+        if (!this.isRuntimeToolEnabledForProfile(toolCall.name, profileMcpConfig)) {
           return endSpanAndReturn({
             content: [
               {
@@ -2674,12 +2664,12 @@ export class MCPService {
         }
 
         if (isDebugTools()) {
-          logTools("Executing built-in tool", { name: toolCall.name, arguments: toolCall.arguments })
+          logTools("Executing runtime tool", { name: toolCall.name, arguments: toolCall.arguments })
         }
-        const result = await executeBuiltinTool(toolCall.name, toolCall.arguments || {}, sessionId)
+        const result = await executeRuntimeTool(toolCall.name, toolCall.arguments || {}, sessionId)
         if (result) {
           if (isDebugTools()) {
-            logTools("Built-in tool result", { name: toolCall.name, result })
+            logTools("Runtime tool result", { name: toolCall.name, result })
           }
           return endSpanAndReturn(result)
         }
@@ -2722,7 +2712,7 @@ export class MCPService {
 
         // Guard against executing tools that are disabled in the profile config
         // This ensures "disabled" consistently means non-executable, not just hidden from the tool list
-        if (profileMcpConfig?.disabledTools?.includes(toolCall.name) && !isEssentialBuiltinTool(toolCall.name)) {
+        if (profileMcpConfig?.disabledTools?.includes(toolCall.name) && !isEssentialRuntimeTool(toolCall.name)) {
           return endSpanAndReturn({
             content: [
               {
@@ -2748,7 +2738,7 @@ export class MCPService {
       }
 
       // Try to find a matching tool without prefix (fallback for LLM inconsistencies)
-      // Include both external and built-in tools in the search
+      // Include both external and runtime tools in the search
       // Filter out tools from disabled servers (session-aware when profileMcpConfig provided)
       const enabledExternalTools = this.availableTools.filter((tool) => {
         const sName = tool.name.includes(":") ? tool.name.split(":")[0] : "unknown"
@@ -2762,7 +2752,7 @@ export class MCPService {
         }
         return !this.runtimeDisabledServers.has(sName)
       })
-      const allTools = [...enabledExternalTools, ...builtinTools]
+      const allTools = [...enabledExternalTools, ...runtimeTools]
       const matchingTool = allTools.find((tool) => {
         if (tool.name.includes(":")) {
           const [, toolName] = tool.name.split(":", 2)
@@ -2773,9 +2763,9 @@ export class MCPService {
 
       if (matchingTool && matchingTool.name.includes(":")) {
         // Guard against executing tools that are disabled for this session/profile.
-        // External tools use disabledTools; built-ins use enabledBuiltinTools allowlist.
-        if (isBuiltinTool(matchingTool.name)) {
-          if (!this.isBuiltinToolEnabledForProfile(matchingTool.name, profileMcpConfig)) {
+        // External tools use disabledTools; runtime tools use enabledRuntimeTools allowlist.
+        if (isRuntimeTool(matchingTool.name)) {
+          if (!this.isRuntimeToolEnabledForProfile(matchingTool.name, profileMcpConfig)) {
             return endSpanAndReturn({
               content: [
                 {
@@ -2787,7 +2777,7 @@ export class MCPService {
             })
           }
 
-          const result = await executeBuiltinTool(matchingTool.name, toolCall.arguments || {}, sessionId)
+          const result = await executeRuntimeTool(matchingTool.name, toolCall.arguments || {}, sessionId)
           if (result) {
             return endSpanAndReturn(result)
           }

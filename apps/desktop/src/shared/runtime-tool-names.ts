@@ -1,14 +1,18 @@
-// Constants for built-in tool names that may be referenced by both main and renderer code.
+// Constants for runtime tool names that may be referenced by both main and renderer code.
 
 import { RESPOND_TO_USER_TOOL } from "@dotagents/shared"
 
 // Re-export RESPOND_TO_USER_TOOL from shared — single source of truth
 export { RESPOND_TO_USER_TOOL } from "@dotagents/shared"
 
-// The virtual server name for built-in tools (single source of truth; imported by main + renderer)
-// Built-in tools no longer use a prefix — they are registered as plain tool names.
-// This constant is kept for backward compatibility (e.g., UI grouping, reserved name checks).
-export const BUILTIN_SERVER_NAME = "dotagents-internal"
+// Name advertised to ACP agents when DotAgents runtime tools are injected over MCP.
+export const RUNTIME_TOOLS_SERVER_NAME = "dotagents-runtime-tools"
+
+// Reserved internal server names that should not be user-configurable as normal MCP servers.
+export const RESERVED_RUNTIME_TOOL_SERVER_NAMES = [RUNTIME_TOOLS_SERVER_NAME] as const
+
+// Internal MCP server identifier used by the embedded injected transport implementation.
+export const INJECTED_RUNTIME_TOOL_TRANSPORT_NAME = "dotagents-injected-runtime-tools"
 
 export const MARK_WORK_COMPLETE_TOOL = "mark_work_complete"
 

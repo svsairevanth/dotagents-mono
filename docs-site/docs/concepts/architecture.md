@@ -148,7 +148,7 @@ LLM Response
     │   │
     │   ├── MCP Tool → execute via MCP server → return result
     │   ├── ACP Delegation → spawn agent → get result
-    │   └── Built-in Tool → execute internally → return result
+    │   └── Runtime Tool → execute internally → return result
     │
     └── Continue agent loop until complete
 ```
@@ -181,8 +181,7 @@ Defaults → config.json → ~/.agents/ (global) → ./.agents/ (workspace)
 
 Tools are namespaced by their source:
 - External MCP: `{serverName}:{toolName}` (e.g., `github:search_repositories`)
-- Built-in settings: `speakmcp-settings:{toolName}`
-- Built-in delegation: `speakmcp-builtin:{toolName}`
+- DotAgents runtime: `{toolName}`
 
 ### Session State Management
 

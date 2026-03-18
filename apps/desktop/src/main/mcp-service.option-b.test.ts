@@ -1,16 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 
 let currentConfig: any
-let currentProfileEnabledBuiltinTools: string[] | undefined
+let currentProfileEnabledRuntimeTools: string[] | undefined
 
 const mockConfigSave = vi.fn()
 const mockSaveCurrentMcpStateToProfile = vi.fn()
-const mockExecuteBuiltinTool = vi.fn(async (name: string) => ({ content: [{ type: "text", text: `ran ${name}` }], isError: false }))
+const mockExecuteRuntimeTool = vi.fn(async (name: string) => ({ content: [{ type: "text", text: `ran ${name}` }], isError: false }))
 
-const builtinTools = [
-  { name: "dotagents-builtin:mark_work_complete", description: "essential", inputSchema: {} },
-  { name: "dotagents-builtin:save_note", description: "save", inputSchema: {} },
-  { name: "dotagents-builtin:list_notes", description: "list", inputSchema: {} },
+const runtimeTools = [
+  { name: "mark_work_complete", description: "essential", inputSchema: {} },
+  { name: "execute_command", description: "command", inputSchema: {} },
+  { name: "load_skill_instructions", description: "skill", inputSchema: {} },
 ]
 
 vi.mock("electron", () => ({ app: { getPath: vi.fn(() => "/tmp"), getAppPath: vi.fn(() => "/tmp/app") }, dialog: { showMessageBox: vi.fn(async () => ({ response: 0 })) } }))
@@ -23,21 +23,21 @@ vi.mock("./oauth-storage", () => ({ oauthStorage: {} }))
 vi.mock("./mcp-elicitation", () => ({ requestElicitation: vi.fn(), handleElicitationComplete: vi.fn(), cancelAllElicitations: vi.fn() }))
 vi.mock("./mcp-sampling", () => ({ requestSampling: vi.fn(), cancelAllSamplingRequests: vi.fn() }))
 vi.mock("./langfuse-service", () => ({ isLangfuseEnabled: vi.fn(() => false), createToolSpan: vi.fn(), endToolSpan: vi.fn(), getAgentTrace: vi.fn(() => null) }))
-vi.mock("./agent-profile-service", () => ({ agentProfileService: { getCurrentProfile: () => ({ id: "profile_1", toolConfig: { enabledBuiltinTools: currentProfileEnabledBuiltinTools } }), saveCurrentMcpStateToProfile: mockSaveCurrentMcpStateToProfile } }))
-vi.mock("./builtin-tools", () => ({ BUILTIN_SERVER_NAME: "dotagents-builtin", builtinTools, isBuiltinTool: (n: string) => n.startsWith("dotagents-builtin:"), executeBuiltinTool: mockExecuteBuiltinTool }))
+vi.mock("./agent-profile-service", () => ({ agentProfileService: { getCurrentProfile: () => ({ id: "profile_1", toolConfig: { enabledRuntimeTools: currentProfileEnabledRuntimeTools } }), saveCurrentMcpStateToProfile: mockSaveCurrentMcpStateToProfile } }))
+vi.mock("./runtime-tools", () => ({ runtimeTools, isRuntimeTool: (n: string) => runtimeTools.some((tool) => tool.name === n), executeRuntimeTool: mockExecuteRuntimeTool }))
 
 const flushPromises = async (): Promise<void> => {
   await Promise.resolve(); await Promise.resolve()
 }
 
-describe("MCPService Option B (builtin allowlist)", () => {
+describe("MCPService Option B (runtime tool allowlist)", () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.resetModules()
 
     vi.clearAllMocks()
 
-    currentProfileEnabledBuiltinTools = undefined
+    currentProfileEnabledRuntimeTools = undefined
     currentConfig = {
       mcpRequireApprovalBeforeToolCall: false,
       mcpConfig: { mcpServers: {} },
@@ -50,17 +50,17 @@ describe("MCPService Option B (builtin allowlist)", () => {
     vi.clearAllTimers(); vi.useRealTimers()
   })
 
-  it("ignores built-in entries in persisted mcpDisabledTools", async () => {
-    currentConfig.mcpDisabledTools = ["dotagents-builtin:save_note", "server:external_tool"]
+  it("ignores runtime-tool entries in persisted mcpDisabledTools", async () => {
+    currentConfig.mcpDisabledTools = ["execute_command", "server:external_tool"]
     const { mcpService } = await import("./mcp-service")
     expect(mcpService.getDisabledTools()).toEqual(["server:external_tool"])
   })
 
-  it("applyProfileMcpConfig ignores builtins in disabledTools and persists only external", async () => {
+  it("applyProfileMcpConfig ignores runtime tools in disabledTools and persists only external", async () => {
     const { mcpService } = await import("./mcp-service")
     mockConfigSave.mockClear()
 
-    mcpService.applyProfileMcpConfig(undefined, ["dotagents-builtin:list_notes", "server:external_tool"], false, undefined, undefined)
+    mcpService.applyProfileMcpConfig(undefined, ["load_skill_instructions", "server:external_tool"], false, undefined, undefined)
 
     expect(mcpService.getDisabledTools()).toEqual(["server:external_tool"])
     expect(mockConfigSave).toHaveBeenCalledWith(
@@ -68,60 +68,63 @@ describe("MCPService Option B (builtin allowlist)", () => {
     )
   })
 
-  it("getAvailableTools filters builtin tools by enabledBuiltinTools allowlist (essential always included)", async () => {
+  it("getAvailableTools filters runtime tools by enabledRuntimeTools allowlist (essential always included)", async () => {
     const { mcpService } = await import("./mcp-service")
 
-    mcpService.applyProfileMcpConfig(undefined, undefined, false, undefined, ["dotagents-builtin:save_note"])
+    mcpService.applyProfileMcpConfig(undefined, undefined, false, undefined, ["execute_command"])
 
     expect(mcpService.getAvailableTools().map((t) => t.name)).toEqual([
-      "dotagents-builtin:mark_work_complete",
-      "dotagents-builtin:save_note",
+      "mark_work_complete",
+      "execute_command",
     ])
 
     const detailed = mcpService.getDetailedToolList()
-    expect(detailed.find((t) => t.name === "dotagents-builtin:mark_work_complete")?.enabled).toBe(true)
-    expect(detailed.find((t) => t.name === "dotagents-builtin:save_note")?.enabled).toBe(true)
-    expect(detailed.find((t) => t.name === "dotagents-builtin:list_notes")?.enabled).toBe(false)
+    expect(detailed.find((t) => t.name === "mark_work_complete")?.enabled).toBe(true)
+    expect(detailed.find((t) => t.name === "execute_command")?.enabled).toBe(true)
+    expect(detailed.find((t) => t.name === "load_skill_instructions")?.enabled).toBe(false)
+    expect(detailed.find((t) => t.name === "execute_command")?.sourceKind).toBe("runtime")
+    expect(detailed.find((t) => t.name === "execute_command")?.sourceLabel).toBe("DotAgents Runtime Tools")
+    expect(detailed.find((t) => t.name === "execute_command")?.serverName).toBeUndefined()
   })
 
-  it("setToolEnabled(builtin) updates allowlist and auto-saves to profile without touching mcpDisabledTools", async () => {
+  it("setToolEnabled(runtime tool) updates allowlist and auto-saves to profile without touching mcpDisabledTools", async () => {
     const { mcpService } = await import("./mcp-service")
     mockConfigSave.mockClear()
     mockSaveCurrentMcpStateToProfile.mockClear()
 
-    expect(mcpService.setToolEnabled("dotagents-builtin:list_notes", false)).toBe(true)
+    expect(mcpService.setToolEnabled("load_skill_instructions", false)).toBe(true)
     expect(mockConfigSave).not.toHaveBeenCalled()
 
     await flushPromises()
     expect(mockSaveCurrentMcpStateToProfile).toHaveBeenCalledTimes(1)
-    const enabledBuiltinTools = mockSaveCurrentMcpStateToProfile.mock.calls[0][4] as string[]
-    expect(enabledBuiltinTools).toEqual([
-      "dotagents-builtin:mark_work_complete",
-      "dotagents-builtin:save_note",
+    const enabledRuntimeTools = mockSaveCurrentMcpStateToProfile.mock.calls[0][4] as string[]
+    expect(enabledRuntimeTools.slice().sort()).toEqual([
+      "execute_command",
+      "mark_work_complete",
     ])
   })
 
-  it("executeToolCall rejects disabled builtins but allows essential builtins", async () => {
+  it("executeToolCall rejects disabled runtime tools but allows essential runtime tools", async () => {
     const { mcpService } = await import("./mcp-service")
-    mockExecuteBuiltinTool.mockClear()
+    mockExecuteRuntimeTool.mockClear()
 
-    mcpService.applyProfileMcpConfig(undefined, undefined, false, undefined, ["dotagents-builtin:save_note"])
+    mcpService.applyProfileMcpConfig(undefined, undefined, false, undefined, ["execute_command"])
 
     const denied = await mcpService.executeToolCall(
-      { name: "dotagents-builtin:list_notes", arguments: {} } as any,
+      { name: "load_skill_instructions", arguments: {} } as any,
       undefined,
       true,
     )
     expect(denied.isError).toBe(true)
-    expect(mockExecuteBuiltinTool).not.toHaveBeenCalled()
+    expect(mockExecuteRuntimeTool).not.toHaveBeenCalled()
 
     const ok = await mcpService.executeToolCall(
-      { name: "dotagents-builtin:mark_work_complete", arguments: {} } as any,
+      { name: "mark_work_complete", arguments: {} } as any,
       undefined,
       true,
     )
     expect(ok.isError).toBe(false)
-    expect(mockExecuteBuiltinTool).toHaveBeenCalledTimes(1)
+    expect(mockExecuteRuntimeTool).toHaveBeenCalledTimes(1)
   })
 })
 

@@ -25,7 +25,7 @@ import { sendMessageNotification, isPushEnabled, clearBadgeCount } from "./push-
 import { skillsService } from "./skills-service"
 import { knowledgeNotesService } from "./knowledge-notes-service"
 import { sanitizeAgentProfileConnection, VALID_AGENT_PROFILE_CONNECTION_TYPES } from "./agent-profile-connection-sanitize"
-import { isBuiltinTool } from "./builtin-tools"
+import { isRuntimeTool } from "./runtime-tools"
 import { agentProfileService, createSessionSnapshotFromProfile, toolConfigToMcpServerConfig } from "./agent-profile-service"
 import { getRendererHandlers } from "@egoist/tipc/main"
 import {
@@ -35,6 +35,7 @@ import {
 } from "./acp-session-state"
 import { WINDOWS } from "./window"
 import type { RendererHandlers } from "./renderer-handlers"
+import { INJECTED_RUNTIME_TOOL_TRANSPORT_NAME } from "../shared/runtime-tool-names"
 
 let server: FastifyInstance | null = null
 let lastError: string | undefined
@@ -125,14 +126,14 @@ function getAcpMcpRequestContext(
   }
 }
 
-function getInjectedBuiltinToolsForAcpSession(
+function getInjectedRuntimeToolsForAcpSession(
   acpSessionToken: string | undefined,
 ): { requestContext: AcpMcpRequestContext; tools: Array<{ name: string; description: string; inputSchema: unknown }> } | undefined {
   const requestContext = getAcpMcpRequestContext(acpSessionToken)
   if (!requestContext) return undefined
 
   const tools = mcpService.getAvailableToolsForProfile(requestContext.profileSnapshot.mcpServerConfig)
-    .filter((tool) => isBuiltinTool(tool.name))
+    .filter((tool) => isRuntimeTool(tool.name))
     .map((tool) => ({
       name: tool.name,
       description: tool.description,
@@ -154,7 +155,7 @@ function getInjectedMcpTransportSessionMap(acpSessionToken: string): Map<string,
 function createInjectedMcpServer(acpSessionToken: string): MCPServer {
   const server = new MCPServer(
     {
-      name: "dotagents-injected-builtin-tools",
+      name: INJECTED_RUNTIME_TOOL_TRANSPORT_NAME,
       version: "1.0.0",
     },
     {
@@ -165,17 +166,17 @@ function createInjectedMcpServer(acpSessionToken: string): MCPServer {
   )
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    const injectedBuiltinTools = getInjectedBuiltinToolsForAcpSession(acpSessionToken)
-    if (!injectedBuiltinTools) {
+    const injectedRuntimeTools = getInjectedRuntimeToolsForAcpSession(acpSessionToken)
+    if (!injectedRuntimeTools) {
       throw new Error(INVALID_ACP_SESSION_CONTEXT_ERROR)
     }
 
-    return { tools: injectedBuiltinTools.tools }
+    return { tools: injectedRuntimeTools.tools }
   })
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const injectedBuiltinTools = getInjectedBuiltinToolsForAcpSession(acpSessionToken)
-    if (!injectedBuiltinTools) {
+    const injectedRuntimeTools = getInjectedRuntimeToolsForAcpSession(acpSessionToken)
+    if (!injectedRuntimeTools) {
       return {
         content: [{ type: "text", text: INVALID_ACP_SESSION_CONTEXT_ERROR }],
         isError: true,
@@ -190,9 +191,9 @@ function createInjectedMcpServer(acpSessionToken: string): MCPServer {
       }
     }
 
-    if (!injectedBuiltinTools.tools.some((tool) => tool.name === name)) {
+    if (!injectedRuntimeTools.tools.some((tool) => tool.name === name)) {
       return {
-        content: [{ type: "text", text: `Unknown builtin tool: ${name}` }],
+        content: [{ type: "text", text: `Unknown runtime tool: ${name}` }],
         isError: true,
       }
     }
@@ -201,8 +202,8 @@ function createInjectedMcpServer(acpSessionToken: string): MCPServer {
       { name, arguments: args || {} } as any,
       undefined,
       false,
-      injectedBuiltinTools.requestContext.appSessionId,
-      injectedBuiltinTools.requestContext.profileSnapshot.mcpServerConfig,
+      injectedRuntimeTools.requestContext.appSessionId,
+      injectedRuntimeTools.requestContext.profileSnapshot.mcpServerConfig,
     )
 
     return result
@@ -1122,7 +1123,7 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
         mcpServerConfig?.disabledTools,
         mcpServerConfig?.allServersDisabledByDefault,
         mcpServerConfig?.enabledServers,
-        mcpServerConfig?.enabledBuiltinTools,
+          mcpServerConfig?.enabledRuntimeTools,
       )
       diagnosticsService.logInfo("remote-server", `Switched to profile: ${profile.displayName}`)
       return reply.send({
@@ -1189,8 +1190,6 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
     try {
       const serverStatus = mcpService.getServerStatus()
       const servers = Object.entries(serverStatus)
-        // Filter out the built-in dotagents-internal pseudo-server as it's not user-toggleable
-        .filter(([name]) => name !== "dotagents-internal")
         .map(([name, status]) => ({
           name,
           connected: status.connected,
@@ -1331,7 +1330,7 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
         transcriptPostProcessingGeminiModel: cfg.transcriptPostProcessingGeminiModel || "",
         // ACP Agent settings
         mainAgentName: cfg.mainAgentName || "",
-        acpInjectBuiltinTools: cfg.acpInjectBuiltinTools !== false,
+        acpInjectRuntimeTools: cfg.acpInjectRuntimeTools !== false,
         // TTS voice/model per provider
         openaiTtsModel: cfg.openaiTtsModel || "gpt-4o-mini-tts",
         openaiTtsVoice: cfg.openaiTtsVoice || "alloy",
@@ -1527,8 +1526,8 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
       if (typeof body.mainAgentName === "string") {
         updates.mainAgentName = body.mainAgentName
       }
-      if (typeof body.acpInjectBuiltinTools === "boolean") {
-        updates.acpInjectBuiltinTools = body.acpInjectBuiltinTools
+      if (typeof body.acpInjectRuntimeTools === "boolean") {
+        updates.acpInjectRuntimeTools = body.acpInjectRuntimeTools
       }
       // OpenAI TTS settings
       if (typeof body.openaiTtsModel === "string") {
@@ -2041,7 +2040,7 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
     }
   })
 
-  // MCP Protocol Endpoints - Expose DotAgents builtin tools to external agents
+  // MCP Protocol Endpoints - Expose DotAgents runtime tools to external agents
   // Support both Streamable HTTP MCP at /mcp/:acpSessionToken and legacy /tools/list,/tools/call shims.
 
   const listInjectedMcpTools = async (
@@ -2049,13 +2048,13 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
     reply: any,
   ) => {
     try {
-      const injectedBuiltinTools = getInjectedBuiltinToolsForAcpSession(acpSessionToken)
-      if (!injectedBuiltinTools) {
+      const injectedRuntimeTools = getInjectedRuntimeToolsForAcpSession(acpSessionToken)
+      if (!injectedRuntimeTools) {
         diagnosticsService.logWarning("remote-server", "Denied injected MCP tools/list request without valid ACP session context")
         return reply.code(401).send({ error: INVALID_ACP_SESSION_CONTEXT_ERROR })
       }
 
-      return reply.send({ tools: injectedBuiltinTools.tools })
+      return reply.send({ tools: injectedRuntimeTools.tools })
     } catch (error: any) {
       diagnosticsService.logError("remote-server", "MCP tools/list error", error)
       return reply.code(500).send({ error: error?.message || "Failed to list tools" })
@@ -2068,8 +2067,8 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
     acpSessionToken: string | undefined,
   ) => {
     try {
-      const injectedBuiltinTools = getInjectedBuiltinToolsForAcpSession(acpSessionToken)
-      if (!injectedBuiltinTools) {
+      const injectedRuntimeTools = getInjectedRuntimeToolsForAcpSession(acpSessionToken)
+      if (!injectedRuntimeTools) {
         diagnosticsService.logWarning("remote-server", "Denied injected MCP tools/call request without valid ACP session context")
         return reply.code(401).send({ error: INVALID_ACP_SESSION_CONTEXT_ERROR })
       }
@@ -2081,16 +2080,16 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
         return reply.code(400).send({ error: "Missing or invalid 'name' parameter" })
       }
 
-      if (!injectedBuiltinTools.tools.some((tool) => tool.name === name)) {
-        return reply.code(400).send({ error: `Unknown builtin tool: ${name}` })
+      if (!injectedRuntimeTools.tools.some((tool) => tool.name === name)) {
+        return reply.code(400).send({ error: `Unknown runtime tool: ${name}` })
       }
 
       const result = await mcpService.executeToolCall(
         { name, arguments: args || {} } as any,
         undefined,
         false,
-        injectedBuiltinTools.requestContext.appSessionId,
-        injectedBuiltinTools.requestContext.profileSnapshot.mcpServerConfig,
+        injectedRuntimeTools.requestContext.appSessionId,
+        injectedRuntimeTools.requestContext.profileSnapshot.mcpServerConfig,
       )
 
       if (!result) {
@@ -2120,8 +2119,8 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
       return reply.code(400).send({ error: "Missing ACP session token" })
     }
 
-    const injectedBuiltinTools = getInjectedBuiltinToolsForAcpSession(token)
-    if (!injectedBuiltinTools) {
+    const injectedRuntimeTools = getInjectedRuntimeToolsForAcpSession(token)
+    if (!injectedRuntimeTools) {
       diagnosticsService.logWarning("remote-server", `Denied injected MCP ${req.method} request without valid ACP session context`)
       return reply.code(401).send({ error: INVALID_ACP_SESSION_CONTEXT_ERROR })
     }
@@ -2224,7 +2223,7 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
     return handleInjectedMcpProtocolRequest(req, reply, params?.acpSessionToken)
   })
 
-  // POST /mcp/tools/list - List all available builtin tools
+  // POST /mcp/tools/list - List all available injected runtime tools
   fastify.post("/mcp/tools/list", async (req, reply) => {
     const query = req.query as { acpSessionToken?: string } | undefined
     return listInjectedMcpTools(query?.acpSessionToken, reply)
@@ -2235,7 +2234,7 @@ async function startRemoteServerInternal(options: StartRemoteServerOptions = {})
     return listInjectedMcpTools(params?.acpSessionToken, reply)
   })
 
-  // POST /mcp/tools/call - Execute a builtin tool
+  // POST /mcp/tools/call - Execute an injected runtime tool
   fastify.post("/mcp/tools/call", async (req, reply) => {
     const query = req.query as { acpSessionToken?: string } | undefined
     return callInjectedMcpTool(req, reply, query?.acpSessionToken)

@@ -21,7 +21,7 @@ Your skills, knowledge notes, and agent profiles become **portable assets** that
 
 ```
 .agents/
-├── speakmcp-settings.json   # General settings
+├── dotagents-settings.json  # General settings
 ├── mcp.json                 # MCP server configuration
 ├── models.json              # Model presets and provider keys
 ├── system-prompt.md         # Custom system prompt

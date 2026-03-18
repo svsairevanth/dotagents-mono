@@ -158,18 +158,17 @@ Examples:
 - `filesystem:read_file`
 - `exa:web_search`
 
-### Built-in Tools
+### DotAgents Runtime Tools
 
-DotAgents also provides built-in tools with special prefixes:
+DotAgents also provides runtime tools with plain names:
 
 | Tool | Description |
 |------|-------------|
-| `speakmcp-settings:list_mcp_servers` | List configured MCP servers |
-| `speakmcp-settings:load_skill_instructions` | Load a skill's full instructions |
-| `speakmcp-settings:mark_work_complete` | Signal task completion |
-| `speakmcp-builtin:respond_to_user` | Send a response (supports images) |
-| `speakmcp-builtin:delegate_to_agent` | Delegate to a sub-agent |
-| `speakmcp-builtin:list_available_agents` | List delegation targets |
+| `load_skill_instructions` | Load a skill's full instructions |
+| `mark_work_complete` | Signal task completion |
+| `respond_to_user` | Send a response (supports images) |
+| `delegate_to_agent` | Delegate to a sub-agent |
+| `list_available_agents` | List delegation targets |
 
 ## Tool Discovery
 

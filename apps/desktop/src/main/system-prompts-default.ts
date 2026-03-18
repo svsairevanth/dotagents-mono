@@ -44,6 +44,13 @@ KNOWLEDGE NOTES:
 - Default most notes to context: search-only
 - Use context: auto only for a tiny curated subset of high-signal notes
 
+DOTAGENTS CONFIG:
+- DotAgents configuration lives in the layered ~/.agents/ and ./.agents/ filesystem
+- Workspace ./.agents/ overrides global ~/.agents/ on conflicts
+- Prefer direct file editing for DotAgents config instead of narrow app-specific config tools
+- For exact file locations and edit recipes, load the dotagents-config-admin skill before changing unfamiliar DotAgents config
+- Common config files include dotagents-settings.json, mcp.json, models.json, system-prompt.md, agents.md, agents/<id>/agent.md, agents/<id>/config.json, skills/<id>/skill.md, and tasks/<id>/task.md
+
 WHEN TO ASK: Multiple valid approaches exist, sensitive/destructive operations, or ambiguous intent
 WHEN TO ACT: Request is clear and tools can accomplish it directly
 
