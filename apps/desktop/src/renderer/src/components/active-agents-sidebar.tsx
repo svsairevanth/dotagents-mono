@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react"
-import { useQuery } from "@tanstack/react-query"
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { tipcClient, rendererHandlers } from "@renderer/lib/tipc-client"
 import {
   Archive,
@@ -86,7 +86,11 @@ export function ActiveAgentsSidebar({
   const archivedSessionIds = useAgentStore((s) => s.archivedSessionIds)
   const toggleArchiveSession = useAgentStore((s) => s.toggleArchiveSession)
   const [visiblePastSessionCount, setVisiblePastSessionCount] = useState(0)
+  const [editingConversationId, setEditingConversationId] = useState<string | null>(null)
+  const [editingTitle, setEditingTitle] = useState("")
+  const skipTitleSaveOnBlurRef = useRef(false)
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
 
   const { data, refetch } = useQuery<AgentSessionsResponse>({
     queryKey: ["agentSessions"],
@@ -359,6 +363,102 @@ export function ActiveAgentsSidebar({
     setIsExpanded(newState)
   }
 
+  const clearTitleEditing = useCallback(() => {
+    setEditingConversationId(null)
+    setEditingTitle("")
+  }, [])
+
+  const startTitleEditing = useCallback((conversationId?: string, title?: string) => {
+    if (!conversationId) return
+    setEditingConversationId(conversationId)
+    setEditingTitle(title || "Untitled session")
+  }, [])
+
+  const saveTitleEdit = useCallback(async (conversationId?: string, currentTitle?: string) => {
+    if (!conversationId) {
+      clearTitleEditing()
+      return
+    }
+
+    const nextTitle = editingTitle.trim()
+    const previousTitle = (currentTitle || "Untitled session").trim()
+
+    if (!nextTitle || nextTitle === previousTitle) {
+      clearTitleEditing()
+      return
+    }
+
+    try {
+      await tipcClient.renameConversationTitle({ conversationId, title: nextTitle })
+      clearTitleEditing()
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["agentSessions"] }),
+        queryClient.invalidateQueries({ queryKey: ["conversation-history"] }),
+        queryClient.invalidateQueries({ queryKey: ["conversation", conversationId] }),
+      ])
+    } catch (error) {
+      console.error("Failed to rename session title:", error)
+    }
+  }, [clearTitleEditing, editingTitle, queryClient])
+
+  const renderEditableTitle = useCallback(
+    (session: AgentSession, className: string, prefix?: string) => {
+      const conversationId = session.conversationId
+      const title = session.conversationTitle || "Untitled session"
+
+      if (conversationId && editingConversationId === conversationId) {
+        return (
+          <input
+            value={editingTitle}
+            onChange={(event) => setEditingTitle(event.target.value)}
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+              event.stopPropagation()
+              if (event.key === "Enter") {
+                event.preventDefault()
+                void saveTitleEdit(conversationId, title)
+              } else if (event.key === "Escape") {
+                event.preventDefault()
+                skipTitleSaveOnBlurRef.current = true
+                clearTitleEditing()
+              }
+            }}
+            onBlur={() => {
+              if (skipTitleSaveOnBlurRef.current) {
+                skipTitleSaveOnBlurRef.current = false
+                return
+              }
+              void saveTitleEdit(conversationId, title)
+            }}
+            autoFocus
+            className={cn(
+              "h-6 w-full rounded border border-input bg-background px-1.5 text-xs text-foreground shadow-sm outline-none ring-0 focus-visible:border-ring",
+              className,
+            )}
+            aria-label="Rename session title"
+          />
+        )
+      }
+
+      return (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation()
+            startTitleEditing(conversationId, title)
+          }}
+          className={cn("min-w-0 truncate text-left", className)}
+          title={conversationId ? "Rename session title" : title}
+          disabled={!conversationId}
+        >
+          {prefix ? `${prefix}${title}` : title}
+        </button>
+      )
+    },
+    [clearTitleEditing, editingConversationId, editingTitle, saveTitleEdit, startTitleEditing],
+  )
+
   const handleHeaderClick = () => {
     // Navigate to sessions view
     logUI("[ActiveAgentsSidebar] Header clicked, navigating to sessions")
@@ -495,9 +595,7 @@ export function ActiveAgentsSidebar({
                     "h-1.5 w-1.5 shrink-0 rounded-full",
                     session.status === "error" ? "bg-red-500" : "bg-green-500",
                   )} />
-                  <p className="flex-1 truncate">
-                    {session.conversationTitle || "Untitled session"}
-                  </p>
+                  {renderEditableTitle(session, "flex-1")}
                   {session.conversationId && (
                     <div className="hidden shrink-0 items-center gap-0.5 group-hover:flex group-focus-within:flex">
                       <button
@@ -573,20 +671,17 @@ export function ActiveAgentsSidebar({
                   )}
                 />
                 <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-                  <p
-                    className={cn(
-                      "truncate",
+                  {renderEditableTitle(
+                    session,
+                    cn(
                       hasPendingApproval
                         ? "text-amber-700 dark:text-amber-300"
                         : isSnoozed
                           ? "text-muted-foreground"
                           : "text-foreground",
-                    )}
-                  >
-                    {hasPendingApproval
-                      ? `⚠ ${session.conversationTitle}`
-                      : session.conversationTitle}
-                  </p>
+                    ),
+                    hasPendingApproval ? "⚠ " : undefined,
+                  )}
                   {/* Agent name indicator */}
                   {agentName && (
                     <span

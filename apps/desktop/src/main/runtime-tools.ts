@@ -15,6 +15,7 @@ import { emergencyStopAll } from "./emergency-stop"
 import { executeACPRouterTool, isACPRouterTool } from "./acp/acp-router-tools"
 import { messageQueueService } from "./message-queue-service"
 import { appendSessionUserResponse } from "./session-user-response-store"
+import { conversationService } from "./conversation-service"
 import { promises as fs } from "fs"
 import { exec } from "child_process"
 import { promisify } from "util"
@@ -494,6 +495,51 @@ const toolHandlers: Record<string, ToolHandler> = {
           }, null, 2),
         },
       ],
+      isError: false,
+    }
+  },
+
+  set_session_title: async (args: Record<string, unknown>, context: BuiltinToolContext): Promise<MCPToolResult> => {
+    if (!context.sessionId) {
+      return {
+        content: [{ type: "text", text: JSON.stringify({ success: false, error: "set_session_title requires an active agent session" }) }],
+        isError: true,
+      }
+    }
+
+    if (typeof args.title !== "string" || args.title.trim() === "") {
+      return {
+        content: [{ type: "text", text: JSON.stringify({ success: false, error: "title must be a non-empty string" }) }],
+        isError: true,
+      }
+    }
+
+    const session = agentSessionTracker.getSession(context.sessionId)
+    if (!session?.conversationId) {
+      return {
+        content: [{ type: "text", text: JSON.stringify({ success: false, error: "Current session is not linked to a conversation" }) }],
+        isError: true,
+      }
+    }
+
+    const updatedConversation = await conversationService.renameConversationTitle(
+      session.conversationId,
+      args.title,
+    )
+
+    if (!updatedConversation) {
+      return {
+        content: [{ type: "text", text: JSON.stringify({ success: false, error: "Failed to update session title" }) }],
+        isError: true,
+      }
+    }
+
+    agentSessionTracker.updateSession(context.sessionId, {
+      conversationTitle: updatedConversation.title,
+    })
+
+    return {
+      content: [{ type: "text", text: JSON.stringify({ success: true, title: updatedConversation.title }, null, 2) }],
       isError: false,
     }
   },

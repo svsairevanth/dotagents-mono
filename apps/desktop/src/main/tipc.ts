@@ -3313,6 +3313,29 @@ export const router = {
       )
     }),
 
+  renameConversationTitle: t.procedure
+    .input<{ conversationId: string; title: string }>()
+    .action(async ({ input }) => {
+      const conversation = await conversationService.renameConversationTitle(
+        input.conversationId,
+        input.title,
+      )
+
+      if (conversation) {
+        const activeSession = agentSessionTracker
+          .getActiveSessions()
+          .find((session) => session.conversationId === input.conversationId)
+
+        if (activeSession) {
+          agentSessionTracker.updateSession(activeSession.id, {
+            conversationTitle: conversation.title,
+          })
+        }
+      }
+
+      return conversation
+    }),
+
   deleteConversation: t.procedure
     .input<{ conversationId: string }>()
     .action(async ({ input }) => {
