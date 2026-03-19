@@ -56,10 +56,12 @@ describe('shrinkMessagesForLLM replacement policy', () => {
     clearArchiveFrontier('session-batch')
     clearArchiveFrontier('session-archive')
     clearArchiveFrontier('session-live-tail')
+    clearArchiveFrontier('session-protected-tail')
     clearContextRefs('session-truncate')
     clearContextRefs('session-batch')
     clearContextRefs('session-archive')
     clearContextRefs('session-live-tail')
+    clearContextRefs('session-protected-tail')
     Object.assign(mockConfig, {
       mcpContextReductionEnabled: true,
       mcpContextTargetRatio: 0.5,
@@ -222,5 +224,50 @@ describe('shrinkMessagesForLLM replacement policy', () => {
     expect(secondPass.appliedStrategies).toContain('archive_frontier')
     expect(secondPass.messages.some((msg) => msg.content.includes('live-marker-15'))).toBe(true)
     expect(secondPass.messages.some((msg) => msg.content.startsWith('[Session Progress Summary]'))).toBe(true)
+  })
+
+  it('keeps truncated payload messages protected after archive frontier reorders messages', async () => {
+    const prompts: string[] = []
+    makeTextCompletionWithFetchMock.mockImplementation(async (prompt: string) => {
+      prompts.push(prompt)
+      if (prompt.includes('Summarize these AI agent conversation messages that are being archived')) {
+        return 'archived work summary'
+      }
+
+      return 'condensed remaining conversation'
+    })
+
+    Object.assign(mockConfig, {
+      mcpContextTargetRatio: 0.95,
+      mcpMaxContextTokensOverride: 4000,
+      mcpContextSummarizeCharThreshold: 600,
+    })
+
+    const oversizedPayload = JSON.stringify({
+      kind: 'payload',
+      body: 'p'.repeat(6000),
+    })
+
+    const result = await shrinkMessagesForLLM({
+      sessionId: 'session-protected-tail',
+      lastNMessages: 1,
+      messages: [
+        { role: 'system', content: 'system prompt' },
+        { role: 'user', content: 'Original user request' },
+        ...Array.from({ length: 13 }, (_, index) => ({
+          role: index % 2 === 0 ? 'assistant' : 'user',
+          content: `archivable-${index} ${'r'.repeat(750)}`,
+        })),
+        { role: 'assistant', content: oversizedPayload },
+        { role: 'assistant', content: `remaining-summary-target ${'s'.repeat(2200)}` },
+        { role: 'user', content: 'latest follow up' },
+      ],
+    })
+
+    const batchSummaryPrompts = prompts.filter((prompt) => prompt.startsWith('Compress these earlier conversation messages'))
+    expect(batchSummaryPrompts.length).toBeGreaterThan(0)
+    expect(batchSummaryPrompts.some((prompt) => prompt.includes('Payload truncated for context management'))).toBe(false)
+
+    expect(result.messages.some((msg) => msg.content.includes('condensed remaining conversation'))).toBe(true)
   })
 })

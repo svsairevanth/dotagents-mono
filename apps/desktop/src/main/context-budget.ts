@@ -872,6 +872,21 @@ function truncateWithMarker(content: string, keepChars: number, marker: string):
   return `${head}\n\n${marker} (${removedChars} chars omitted)`
 }
 
+function isTruncationProtectedMessage(message: LLMMessage): boolean {
+  const content = message.content || ""
+  return content.includes(TOOL_TRUNCATE_MARKER) || content.includes(PAYLOAD_TRUNCATE_MARKER)
+}
+
+function collectTruncationProtectedIndices(messages: LLMMessage[]): Set<number> {
+  const protectedIndices = new Set<number>()
+  messages.forEach((message, index) => {
+    if (isTruncationProtectedMessage(message)) {
+      protectedIndices.add(index)
+    }
+  })
+  return protectedIndices
+}
+
 function formatBatchSummaryInput(items: SummaryCandidate[]): string {
   return items.map((item, idx) => (
     `[Message ${idx + 1} | role=${item.role} | original_index=${item.i} | chars=${item.len}]\n${item.contentForSummary}`
@@ -980,7 +995,6 @@ ${source}`
 
 function buildArchiveEligibleIndices(messages: LLMMessage[], systemIdx: number, firstUserIdx: number): number[] {
   const indices: number[] = []
-  const truncationProtectedIndices = new Set<number>()
   for (let i = 0; i < messages.length; i++) {
     if (i === systemIdx || i === firstUserIdx) continue
     indices.push(i)
@@ -1307,7 +1321,6 @@ export async function shrinkMessagesForLLM(opts: ShrinkOptions): Promise<ShrinkR
 
   // Tier 0b: Truncate large payload-like messages before any LLM summarization.
   // This keeps bulky tool outputs from triggering expensive per-message summaries.
-  const truncationProtectedIndices = new Set<number>()
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i]
     if (msg.role === "system" || !msg.content) continue
@@ -1337,7 +1350,6 @@ export async function shrinkMessagesForLLM(opts: ShrinkOptions): Promise<ShrinkR
         ...msg,
         content: truncatedContent,
       }
-      truncationProtectedIndices.add(i)
       applied.push("aggressive_truncate")
       tokens = estimateTokensFromMessages(messages)
       if (tokens <= targetTokens && !shouldApplyArchiveFrontier(messages, opts.sessionId, tokens, targetTokens, lastN)) {
@@ -1414,6 +1426,7 @@ export async function shrinkMessagesForLLM(opts: ShrinkOptions): Promise<ShrinkR
   // Tool/payload blobs are truncated above and protected from LLM summarization here.
   const firstTierOneProtectedUserIdx = messages.findIndex((m) => m.role === "user")
   const recentTierOneProtectedIndices = new Set<number>()
+  const truncationProtectedIndices = collectTruncationProtectedIndices(messages)
   for (let k = messages.length - lastN; k < messages.length; k++) {
     if (k >= 0) recentTierOneProtectedIndices.add(k)
   }
