@@ -27,6 +27,11 @@ describe("floating panel recovery affordances", () => {
     expect(windowSource).toContain('if (mode === "textInput" || mode === "agent")')
   })
 
+  it("does not promote app-switcher presence from floating panel show/hide events", () => {
+    expect(windowSource).not.toContain('ensureAppSwitcherPresence("panel.hide")')
+    expect(windowSource).not.toContain('ensureAppSwitcherPresence("panel.show")')
+  })
+
   it("exposes recovery actions through TIPC and tray controls", () => {
     expect(tipcSource).toContain("resetFloatingPanel: t.procedure.action(async () => {")
     expect(tipcSource).toContain("hideFloatingPanelWindow()")

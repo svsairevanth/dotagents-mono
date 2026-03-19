@@ -829,13 +829,11 @@ export function createPanelWindow(): BrowserWindow | undefined {
 
   win.on("hide", () => {
     getRendererHandlers<RendererHandlers>(win.webContents).stopRecording.send()
-    ensureAppSwitcherPresence("panel.hide")
   })
 
   // Reassert z-order on lifecycle changes and reset stale focus-hide flag
   win.on("show", () => {
     ensurePanelZOrder(win)
-    ensureAppSwitcherPresence("panel.show")
     // Clear the flag when panel becomes visible through any means.
     // This prevents stale state if user manually shows panel while main is focused.
     clearPanelHiddenByMainFocus()
