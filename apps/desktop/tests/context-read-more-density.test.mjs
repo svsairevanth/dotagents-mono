@@ -25,3 +25,10 @@ test('agent prompts teach the model to use Context refs', () => {
   assert.match(prompts, /Context ref: ctx_/)
   assert.match(prompts, /read_more_context/)
 })
+
+test('batch summary context refs snapshot source messages before splicing', () => {
+  const contextBudget = read('apps/desktop/src/main/context-budget.ts')
+
+  assert.match(contextBudget, /const originalMessagesForBatchRefs = \[\.\.\.messages\]/)
+  assert.match(contextBudget, /formatBatchSourceMessages\(batch\.items, originalMessagesForBatchRefs\)/)
+})

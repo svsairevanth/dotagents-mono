@@ -1419,6 +1419,7 @@ export async function shrinkMessagesForLLM(opts: ShrinkOptions): Promise<ShrinkR
     .filter((x) => !recentTierOneProtectedIndices.has(x.i))
 
   const summaryBatches = buildSummaryBatches(summaryCandidates)
+  const originalMessagesForBatchRefs = [...messages]
   const totalToSummarize = summaryBatches.length
   let summarizedCount = 0
   let indexOffset = 0
