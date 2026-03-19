@@ -552,6 +552,145 @@ ${src}`
   return combined
 }
 
+interface SummaryCandidate {
+  i: number
+  len: number
+  role: string
+  contentForSummary: string
+}
+
+interface SummaryBatch {
+  startIndex: number
+  endIndex: number
+  items: SummaryCandidate[]
+}
+
+const TOOL_TRUNCATE_MARKER = "[Large tool result truncated for context management. If more detail is needed, re-run the tool with narrower input or inspect the source directly.]"
+const PAYLOAD_TRUNCATE_MARKER = "[Large payload truncated for context management. Keep only the most relevant leading content here and fetch narrower details if needed.]"
+const AGGRESSIVE_TRUNCATE_THRESHOLD = 5000
+const AGGRESSIVE_TRUNCATE_KEEP_CHARS = 4000
+const TOOL_RESULT_TRUNCATE_THRESHOLD = 3000
+const TOOL_RESULT_KEEP_CHARS = 1800
+const BATCH_SUMMARY_MAX_INPUT_CHARS = 12000
+const BATCH_SUMMARY_MAX_MESSAGES = 8
+
+function isLikelyPayloadLikeMessage(message: LLMMessage): boolean {
+  const content = message.content || ""
+  return message.role === "tool"
+    || content.includes('"url":')
+    || content.includes('"id":')
+    || content.includes("```json")
+    || content.trim().startsWith("{")
+    || content.trim().startsWith("[")
+}
+
+function truncateWithMarker(content: string, keepChars: number, marker: string): string {
+  if (content.length <= keepChars) return content
+  const head = content.slice(0, keepChars).trimEnd()
+  const removedChars = content.length - keepChars
+  return `${head}\n\n${marker} (${removedChars} chars omitted)`
+}
+
+function formatBatchSummaryInput(items: SummaryCandidate[]): string {
+  return items.map((item, idx) => (
+    `[Message ${idx + 1} | role=${item.role} | original_index=${item.i} | chars=${item.len}]\n${item.contentForSummary}`
+  )).join("\n\n---\n\n")
+}
+
+function estimateBatchInputLength(items: SummaryCandidate[]): number {
+  return formatBatchSummaryInput(items).length
+}
+
+function buildSummaryBatches(candidates: SummaryCandidate[]): SummaryBatch[] {
+  if (candidates.length === 0) return []
+
+  const ordered = [...candidates].sort((a, b) => a.i - b.i)
+  const batches: SummaryBatch[] = []
+  let current: SummaryCandidate[] = []
+
+  const flush = () => {
+    if (current.length === 0) return
+    batches.push({
+      startIndex: current[0].i,
+      endIndex: current[current.length - 1].i,
+      items: current,
+    })
+    current = []
+  }
+
+  for (const candidate of ordered) {
+    if (current.length === 0) {
+      current = [candidate]
+      continue
+    }
+
+    const last = current[current.length - 1]
+    const nextItems = [...current, candidate]
+    const wouldExceedAdjacency = candidate.i !== last.i + 1
+    const wouldExceedSize = estimateBatchInputLength(nextItems) > BATCH_SUMMARY_MAX_INPUT_CHARS
+    const wouldExceedCount = nextItems.length > BATCH_SUMMARY_MAX_MESSAGES
+
+    if (wouldExceedAdjacency || wouldExceedSize || wouldExceedCount) {
+      flush()
+      current = [candidate]
+      continue
+    }
+
+    current = nextItems
+  }
+
+  flush()
+  return batches
+}
+
+function buildSummaryMessage(batch: SummaryBatch, summary: string): LLMMessage {
+  const count = batch.items.length
+  const label = count === 1 ? "message" : "messages"
+  return {
+    role: "assistant",
+    content: `[Earlier Context Summary: ${count} ${label}]\n${summary.trim()}`,
+  }
+}
+
+function buildBatchSummaryFallback(items: SummaryCandidate[]): string {
+  return items
+    .map((item) => `${item.role}: ${item.contentForSummary.split("\n")[0].trim().slice(0, 120)}`)
+    .join("\n")
+    .slice(0, 800)
+}
+
+async function summarizeMessageBatch(items: SummaryCandidate[], sessionId?: string): Promise<string> {
+  const { providerId } = getProviderAndModel()
+  const source = formatBatchSummaryInput(items)
+  const fallback = buildBatchSummaryFallback(items)
+  const prompt = `Compress these earlier conversation messages into one concise context block.
+
+KEEP:
+- decisions, findings, errors, constraints, unresolved questions, next steps
+- file paths, tool names, IDs, URLs only when important
+- chronological relationships when they matter
+
+DO NOT:
+- reproduce raw logs, large payloads, full code blocks, or bulky JSON unless tiny and essential
+- reproduce secrets, API keys, tokens, passwords, or full credentials
+- waste space narrating every message separately
+
+Target: <=250 tokens.
+
+MESSAGES:
+${source}`
+
+  try {
+    if (sessionId && agentSessionStateManager.shouldStopSession(sessionId)) {
+      return fallback
+    }
+    const summary = await makeTextCompletionWithFetch(prompt, providerId, sessionId)
+    return summary?.trim() || fallback
+  } catch {
+    return fallback
+  }
+}
+
 /**
  * Build a context summary from stored session summaries
  * This allows the LLM to know what work was accomplished even if messages were dropped
@@ -770,27 +909,34 @@ export async function shrinkMessagesForLLM(opts: ShrinkOptions): Promise<ShrinkR
     return { messages, appliedStrategies: applied, estTokensBefore: tokens, estTokensAfter: tokens, maxTokens }
   }
 
-  // Tier 0b: ALWAYS truncate very large individual messages regardless of budget
-  // This prevents sending massive payloads to the LLM even if total tokens seem OK
-  const AGGRESSIVE_TRUNCATE_THRESHOLD = 5000
+  // Tier 0b: Truncate large payload-like messages before any LLM summarization.
+  // This keeps bulky tool outputs from triggering expensive per-message summaries.
+  const truncationProtectedIndices = new Set<number>()
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i]
-    if (msg.role !== "system" && msg.content && msg.content.length > AGGRESSIVE_TRUNCATE_THRESHOLD) {
-      // Truncate tool results and large user messages (tool results, JSON payloads, etc.)
-      const isToolOrLargePayload = msg.role === "tool" || msg.content.includes('"url":') || msg.content.includes('"id":')
-      if (isToolOrLargePayload) {
-        messages[i] = {
-          ...msg,
-          content: msg.content.substring(0, AGGRESSIVE_TRUNCATE_THRESHOLD) +
-                   '\n\n... (truncated ' + (msg.content.length - AGGRESSIVE_TRUNCATE_THRESHOLD) +
-                   ' characters for context management. Key information preserved above.)'
-        }
-        applied.push("aggressive_truncate")
-        tokens = estimateTokensFromMessages(messages)
-        if (tokens <= targetTokens) {
-          if (isDebugLLM()) logLLM("ContextBudget: after aggressive_truncate", { estTokens: tokens })
-          return { messages, appliedStrategies: applied, estTokensBefore: tokens, estTokensAfter: tokens, maxTokens }
-        }
+    if (msg.role === "system" || !msg.content) continue
+
+    const isPayloadLike = isLikelyPayloadLikeMessage(msg)
+    const shouldTruncateToolResult = msg.role === "tool" && msg.content.length > TOOL_RESULT_TRUNCATE_THRESHOLD
+    const shouldAggressivelyTruncatePayload = isPayloadLike && msg.content.length > AGGRESSIVE_TRUNCATE_THRESHOLD
+
+    if (!shouldTruncateToolResult && !shouldAggressivelyTruncatePayload) continue
+
+    const marker = msg.role === "tool" ? TOOL_TRUNCATE_MARKER : PAYLOAD_TRUNCATE_MARKER
+    const keepChars = msg.role === "tool" ? TOOL_RESULT_KEEP_CHARS : AGGRESSIVE_TRUNCATE_KEEP_CHARS
+    const truncatedContent = truncateWithMarker(msg.content, keepChars, marker)
+
+    if (truncatedContent !== msg.content) {
+      messages[i] = {
+        ...msg,
+        content: truncatedContent,
+      }
+      truncationProtectedIndices.add(i)
+      applied.push("aggressive_truncate")
+      tokens = estimateTokensFromMessages(messages)
+      if (tokens <= targetTokens) {
+        if (isDebugLLM()) logLLM("ContextBudget: after aggressive_truncate", { estTokens: tokens })
+        return { messages, appliedStrategies: applied, estTokensBefore: tokens, estTokensAfter: tokens, maxTokens }
       }
     }
   }
@@ -802,8 +948,15 @@ export async function shrinkMessagesForLLM(opts: ShrinkOptions): Promise<ShrinkR
     return { messages, appliedStrategies: applied, estTokensBefore: tokens, estTokensAfter: tokens, maxTokens }
   }
 
-  // Tier 1: Summarize large messages (prefer tool outputs or very long entries)
-  const indicesByLength = messages
+  // Tier 1: Batch-summarize oversized conversational messages.
+  // Tool/payload blobs are truncated above and protected from LLM summarization here.
+  const firstTierOneProtectedUserIdx = messages.findIndex((m) => m.role === "user")
+  const recentTierOneProtectedIndices = new Set<number>()
+  for (let k = messages.length - lastN; k < messages.length; k++) {
+    if (k >= 0) recentTierOneProtectedIndices.add(k)
+  }
+
+  const summaryCandidates = messages
     .map((m, i) => {
       const originalContent = m.content || ""
       const budgetContent = sanitizeMessageContentForDisplay(originalContent)
@@ -815,12 +968,17 @@ export async function shrinkMessagesForLLM(opts: ShrinkOptions): Promise<ShrinkR
       }
     })
     .filter((x) => x.len > summarizeThreshold && x.role !== "system")
-    .sort((a, b) => b.len - a.len)
+    .filter((x) => x.role !== "tool")
+    .filter((x) => !truncationProtectedIndices.has(x.i))
+    .filter((x) => x.i !== firstTierOneProtectedUserIdx)
+    .filter((x) => !recentTierOneProtectedIndices.has(x.i))
 
-  const totalToSummarize = indicesByLength.length
+  const summaryBatches = buildSummaryBatches(summaryCandidates)
+  const totalToSummarize = summaryBatches.length
   let summarizedCount = 0
+  let indexOffset = 0
 
-  for (const item of indicesByLength) {
+  for (const batch of summaryBatches) {
     // Check if session should stop before summarizing
     if (opts.sessionId && agentSessionStateManager.shouldStopSession(opts.sessionId)) {
       break
@@ -829,24 +987,29 @@ export async function shrinkMessagesForLLM(opts: ShrinkOptions): Promise<ShrinkR
     // Emit progress update before summarization
     summarizedCount++
     if (opts.onSummarizationProgress) {
-      const messagePreview = item.contentForSummary.substring(0, 100).replace(/\n/g, " ")
+      const messagePreview = batch.items
+        .map((item) => item.contentForSummary.substring(0, 40).replace(/\n/g, " "))
+        .join(" | ")
       opts.onSummarizationProgress(
         summarizedCount,
         totalToSummarize,
-        `Summarizing large message ${summarizedCount}/${totalToSummarize} (${item.len} chars): ${messagePreview}...`
+        `Summarizing context batch ${summarizedCount}/${totalToSummarize} (${batch.items.length} messages): ${messagePreview}...`
       )
     }
 
-    const summarized = await summarizeContent(item.contentForSummary, opts.sessionId)
-    messages[item.i] = { ...messages[item.i], content: summarized }
+    const summarized = await summarizeMessageBatch(batch.items, opts.sessionId)
+    const startIndex = batch.startIndex + indexOffset
+    const deleteCount = batch.endIndex - batch.startIndex + 1
+    messages.splice(startIndex, deleteCount, buildSummaryMessage(batch, summarized))
+    indexOffset -= deleteCount - 1
 
-    applied.push("summarize")
+    applied.push("batch_summarize")
     tokens = estimateTokensFromMessages(messages)
     if (tokens <= targetTokens) break
   }
 
   if (tokens <= targetTokens) {
-    if (isDebugLLM()) logLLM("ContextBudget: after summarize", { estTokens: tokens })
+    if (isDebugLLM()) logLLM("ContextBudget: after batch_summarize", { estTokens: tokens })
     return { messages, appliedStrategies: applied, estTokensBefore: tokens, estTokensAfter: tokens, maxTokens }
   }
 
