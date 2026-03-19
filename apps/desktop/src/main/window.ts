@@ -621,13 +621,16 @@ function ensurePanelZOrder(win: BrowserWindow) {
 }
 
 
-// Adjust focusability based on panel mode to play nice with tiling WMs (e.g., Aerospace)
+// Adjust focusability based on panel mode.
+// Agent mode should remain non-stealing when shown via showInactive(), but it still
+// needs to be focusable so users can click and interact with the floating panel
+// without the main window immediately reclaiming focus and hiding it.
 function setPanelFocusableForMode(win: BrowserWindow, mode: "normal"|"agent"|"textInput") {
   try {
-    if (mode === "textInput") {
+    if (mode === "textInput" || mode === "agent") {
       win.setFocusable(true)
     } else {
-      // Avoid stealing focus so tiling WMs treat it like a floating overlay
+      // Keep passive overlay modes non-focusable unless interaction is required.
       win.setFocusable(false)
     }
   } catch (e) {
@@ -1188,9 +1191,9 @@ export function resizePanelForWaveformPreview(showPreview: boolean) {
 
 /**
  * Set the focusability of the panel window.
- * This is used to enable input interaction in agent mode when the agent has completed.
- * When agent is still running, the panel should be non-focusable to avoid stealing focus.
- * When agent is complete, the panel should be focusable so user can interact with the continue input.
+ * This is used when a flow needs to override the default per-mode focusability.
+ * Agent mode is normally focusable so users can interact with the floating panel,
+ * while showInactive() still prevents it from stealing focus on open.
  *
  * @param focusable - Whether the panel should be focusable
  * @param andFocus - If true and focusable is true, also focus the window. This is needed on macOS

@@ -23,6 +23,10 @@ describe("floating panel recovery affordances", () => {
     expect(windowSource).toContain('panelProgressSize: undefined')
   })
 
+  it("keeps agent mode focusable so clicks interact with the floating panel", () => {
+    expect(windowSource).toContain('if (mode === "textInput" || mode === "agent")')
+  })
+
   it("exposes recovery actions through TIPC and tray controls", () => {
     expect(tipcSource).toContain("resetFloatingPanel: t.procedure.action(async () => {")
     expect(tipcSource).toContain("hideFloatingPanelWindow()")
