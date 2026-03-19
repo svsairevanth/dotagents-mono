@@ -162,4 +162,30 @@ describe('shrinkMessagesForLLM replacement policy', () => {
     }))
     expect(Number(readResult.messageCount)).toBeGreaterThan(0)
   })
+
+  it('keeps search-mode excerpts within maxChars even for long queries', async () => {
+    const toolPayload = `[server:search] prefix ${'abc'.repeat(1400)} suffix`
+
+    const result = await shrinkMessagesForLLM({
+      sessionId: 'session-truncate',
+      messages: [
+        { role: 'system', content: 'system prompt' },
+        { role: 'user', content: 'inspect this result' },
+        { role: 'tool', content: toolPayload },
+      ],
+    })
+
+    const truncatedMessage = result.messages.find((msg) => msg.content.includes('Large tool result truncated for context management'))
+    const contextRef = truncatedMessage?.content.match(/Context ref: (ctx_[a-z0-9]+)/)?.[1]
+    expect(contextRef).toBeTruthy()
+
+    const longQuery = 'abc'.repeat(40)
+    const readResult = readMoreContext('session-truncate', contextRef!, { mode: 'search', query: longQuery, maxChars: 200 })
+    expect(readResult).toEqual(expect.objectContaining({ success: true, contextRef }))
+    expect(Number(readResult.matchCount)).toBeGreaterThan(0)
+
+    const firstMatch = (readResult.matches as Array<{ excerpt: string }>)[0]
+    expect(firstMatch.excerpt.length).toBeLessThanOrEqual(200)
+    expect(firstMatch.excerpt).toContain(longQuery)
+  })
 })

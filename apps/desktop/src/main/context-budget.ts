@@ -665,8 +665,24 @@ export function readMoreContext(
     while (cursor < haystack.length && matches.length < 5) {
       const foundAt = haystack.indexOf(needle, cursor)
       if (foundAt === -1) break
-      const start = Math.max(0, foundAt - Math.floor(maxChars / 4))
-      const end = Math.min(totalChars, foundAt + needle.length + Math.floor(maxChars / 2))
+      const desiredBefore = Math.floor(maxChars / 4)
+      const desiredAfter = Math.floor(maxChars / 2)
+      let start = foundAt
+      let end = Math.min(totalChars, foundAt + maxChars)
+
+      if (needle.length < maxChars) {
+        const totalDesiredContext = desiredBefore + desiredAfter
+        const availableContextChars = maxChars - needle.length
+        const contextBefore = Math.min(
+          desiredBefore,
+          Math.floor((availableContextChars * desiredBefore) / Math.max(1, totalDesiredContext)),
+        )
+        const contextAfter = availableContextChars - contextBefore
+
+        start = Math.max(0, foundAt - contextBefore)
+        end = Math.min(totalChars, foundAt + needle.length + contextAfter)
+      }
+
       matches.push({
         start,
         end,
@@ -1447,7 +1463,7 @@ export async function shrinkMessagesForLLM(opts: ShrinkOptions): Promise<ShrinkR
     const contextRef = registerContextRef(opts.sessionId, {
       kind: "batch_summary",
       role: "assistant",
-      content: formatBatchSourceMessages(batch.items, messages),
+      content: formatBatchSourceMessages(batch.items, originalMessagesForBatchRefs),
       messageCount: batch.items.length,
     })
     const startIndex = batch.startIndex + indexOffset
