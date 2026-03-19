@@ -113,6 +113,21 @@ export const runtimeToolDefinitions: RuntimeToolDefinition[] = [
     },
   },
   {
+    name: "set_session_title",
+    description:
+      "Set or update the current session title. Use this after the first substantive reply to replace a raw first-prompt title, or later if the conversation topic shifts. Keep the title short, specific, and ideally under 10 words.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: {
+          type: "string",
+          description: "Short session title, ideally under 10 words and without quotes.",
+        },
+      },
+      required: ["title"],
+    },
+  },
+  {
     name: "mark_work_complete",
     description: "Signal explicit completion for the current task. Call this only when all requested work is actually finished and ready for final delivery.",
     inputSchema: {

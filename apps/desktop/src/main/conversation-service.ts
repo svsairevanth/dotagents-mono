@@ -12,6 +12,7 @@ import {
 import { summarizeContent } from "./context-budget"
 import { assertSafeConversationId, validateAndSanitizeConversationId } from "./conversation-id"
 import { sanitizeMessageContentForDisplay } from "@dotagents/shared"
+import { makeTextCompletionWithFetch } from "./llm-fetch"
 
 // Threshold for compacting conversations on load
 // When a conversation exceeds this many messages, older ones are summarized
@@ -27,6 +28,8 @@ const CONVERSATION_REPAIR_MAX_PARSE_ATTEMPTS = 50
 // Skip repair entirely for files larger than this (bytes). Large corrupted files would
 // cause too many JSON.parse calls scanning for '}' characters (including inside strings).
 const CONVERSATION_REPAIR_MAX_FILE_SIZE = 5 * 1024 * 1024 // 5 MB
+const MAX_SESSION_TITLE_CHARS = 80
+const MAX_AGENT_SESSION_TITLE_WORDS = 10
 
 export class ConversationService {
   private static instance: ConversationService | null = null
@@ -96,6 +99,75 @@ export class ConversationService {
     // Generate a title from the first message (first 50 characters)
     const title = source.slice(0, 50)
     return title.length < source.length ? `${title}...` : title
+  }
+
+  private normalizeConversationTitle(title: string, maxWords?: number): string {
+    const cleaned = sanitizeMessageContentForDisplay(title)
+      .replace(/\s+/g, " ")
+      .replace(/^["'“”‘’\s]+|["'“”‘’\s]+$/g, "")
+      .trim()
+
+    if (!cleaned) {
+      return ""
+    }
+
+    const wordLimited = maxWords
+      ? cleaned.split(" ").filter(Boolean).slice(0, maxWords).join(" ")
+      : cleaned
+
+    const normalized = wordLimited.slice(0, MAX_SESSION_TITLE_CHARS).trim()
+    return normalized
+  }
+
+  private getAutoTitleSeed(conversation: Conversation): {
+    fallbackTitle: string
+    firstUserMessage: string
+    firstAssistantMessage: string
+  } | null {
+    const messages = this.getStoredRawMessages(conversation)
+    const firstUserMessage = messages.find((message) => message.role === "user" && message.content?.trim())?.content?.trim()
+    const firstAssistantMessage = messages.find((message) => message.role === "assistant" && message.content?.trim())?.content?.trim()
+
+    if (!firstUserMessage || !firstAssistantMessage) {
+      return null
+    }
+
+    const fallbackTitle = this.generateConversationTitle(firstUserMessage)
+    const currentTitle = this.normalizeConversationTitle(conversation.title)
+    if (currentTitle !== this.normalizeConversationTitle(fallbackTitle)) {
+      return null
+    }
+
+    return {
+      fallbackTitle,
+      firstUserMessage,
+      firstAssistantMessage,
+    }
+  }
+
+  private async generateAgentSessionTitle(
+    firstUserMessage: string,
+    firstAssistantMessage: string,
+    sessionId?: string,
+  ): Promise<string | null> {
+    const prompt = [
+      "Generate a short session title for this conversation.",
+      `Requirements: maximum ${MAX_AGENT_SESSION_TITLE_WORDS} words, no quotes, no markdown, plain text only.`,
+      "Prefer a specific topic label over a generic sentence fragment.",
+      "",
+      `User: ${firstUserMessage.slice(0, 400)}`,
+      `Assistant: ${firstAssistantMessage.slice(0, 600)}`,
+      "",
+      "Return only the title.",
+    ].join("\n")
+
+    try {
+      const completion = await makeTextCompletionWithFetch(prompt, undefined, sessionId)
+      return this.normalizeConversationTitle(completion, MAX_AGENT_SESSION_TITLE_WORDS) || null
+    } catch (error) {
+      logApp("[ConversationService] Failed to auto-generate session title:", error)
+      return null
+    }
   }
 
   /**
@@ -715,6 +787,66 @@ export class ConversationService {
       } catch (error) {
         return null
       }
+    })
+  }
+
+  async renameConversationTitle(conversationId: string, title: string): Promise<Conversation | null> {
+    const normalizedTitle = this.normalizeConversationTitle(title)
+    if (!normalizedTitle) {
+      return null
+    }
+
+    return this.enqueueConversationMutation(conversationId, async () => {
+      const conversation = await this.loadConversationFromDisk(conversationId)
+      if (!conversation) {
+        return null
+      }
+
+      if (this.normalizeConversationTitle(conversation.title) === normalizedTitle) {
+        return conversation
+      }
+
+      conversation.title = normalizedTitle
+      await this.saveConversationUnlocked(conversation)
+      return conversation
+    })
+  }
+
+  async maybeAutoGenerateConversationTitle(conversationId: string, sessionId?: string): Promise<Conversation | null> {
+    const conversation = await this.loadConversation(conversationId)
+    if (!conversation) {
+      return null
+    }
+
+    const seed = this.getAutoTitleSeed(conversation)
+    if (!seed) {
+      return null
+    }
+
+    const generatedTitle = await this.generateAgentSessionTitle(
+      seed.firstUserMessage,
+      seed.firstAssistantMessage,
+      sessionId,
+    )
+
+    if (!generatedTitle || generatedTitle === this.normalizeConversationTitle(seed.fallbackTitle)) {
+      return null
+    }
+
+    return this.enqueueConversationMutation(conversationId, async () => {
+      const latestConversation = await this.loadConversationFromDisk(conversationId)
+      if (!latestConversation) {
+        return null
+      }
+
+      const latestSeed = this.getAutoTitleSeed(latestConversation)
+      if (!latestSeed || latestSeed.fallbackTitle !== seed.fallbackTitle) {
+        return latestConversation
+      }
+
+      latestConversation.title = generatedTitle
+      await this.saveConversationUnlocked(latestConversation)
+      return latestConversation
     })
   }
 

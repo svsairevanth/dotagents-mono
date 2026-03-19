@@ -705,13 +705,39 @@ export async function processTranscriptWithAgentMode(
           : undefined
       }))
 
-      await conversationService.addMessageToConversation(
+      const updatedConversation = await conversationService.addMessageToConversation(
         currentConversationId,
         content,
         role,
         toolCalls,
         convertedToolResults
       )
+
+      if (role === "assistant" && currentConversationId && sessionId) {
+        void conversationService.maybeAutoGenerateConversationTitle(currentConversationId, sessionId)
+          .then((retitledConversation) => {
+            if (!retitledConversation?.title) {
+              return
+            }
+
+            const trackedSession = agentSessionTracker.getSession(sessionId)
+            if (trackedSession?.conversationTitle !== retitledConversation.title) {
+              agentSessionTracker.updateSession(sessionId, {
+                conversationTitle: retitledConversation.title,
+              })
+            }
+          })
+          .catch((error) => {
+            logLLM("[saveMessageIncremental] Failed to auto-generate session title:", error)
+          })
+      } else if (updatedConversation?.title && sessionId) {
+        const trackedSession = agentSessionTracker.getSession(sessionId)
+        if (trackedSession?.conversationTitle !== updatedConversation.title) {
+          agentSessionTracker.updateSession(sessionId, {
+            conversationTitle: updatedConversation.title,
+          })
+        }
+      }
 
       if (isDebugLLM()) {
         logLLM("💾 Saved message incrementally", {

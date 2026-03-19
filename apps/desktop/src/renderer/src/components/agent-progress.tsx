@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { cn } from "@renderer/lib/utils"
 import { AgentProgressUpdate, ACPDelegationProgress, ACPSubAgentMessage } from "../../../shared/types"
 import { INTERNAL_COMPLETION_NUDGE_TEXT, RESPOND_TO_USER_TOOL, MARK_WORK_COMPLETE_TOOL } from "../../../shared/runtime-tool-names"
-import { ChevronDown, ChevronUp, ChevronRight, X, AlertTriangle, Minimize2, Shield, Check, XCircle, Loader2, Clock, Copy, CheckCheck, GripHorizontal, Activity, Moon, Maximize2, LayoutGrid, Bot, OctagonX, MessageSquare, Brain, Volume2, Wrench } from "lucide-react"
+import { ChevronDown, ChevronUp, ChevronRight, X, AlertTriangle, Minimize2, Shield, Check, XCircle, Loader2, Clock, Copy, CheckCheck, GripHorizontal, Activity, Moon, Maximize2, LayoutGrid, Bot, OctagonX, MessageSquare, Brain, Volume2, Wrench, Play, Pause } from "lucide-react"
 import { MarkdownRenderer } from "@renderer/components/markdown-renderer"
 import { Button } from "./ui/button"
 import { Badge } from "./ui/badge"
@@ -2203,7 +2203,8 @@ const PastResponseItem: React.FC<{
   response: string
   index: number
   sessionId?: string
-}> = ({ response, index, sessionId }) => {
+  isHighlighted?: boolean
+}> = ({ response, index, sessionId, isHighlighted = false }) => {
   const [audioData, setAudioData] = useState<ArrayBuffer | null>(null)
   const [audioMimeType, setAudioMimeType] = useState<string | null>(null)
   const [isExpanded, setIsExpanded] = useState(false)
@@ -2226,7 +2227,10 @@ const PastResponseItem: React.FC<{
   const preview = response.length > 80 ? response.slice(0, 80) + "…" : response
 
   return (
-    <div className="min-w-0 max-w-full overflow-hidden rounded-md border border-green-200/60 dark:border-green-800/40">
+    <div className={cn(
+      "min-w-0 max-w-full overflow-hidden rounded-md border border-green-200/60 dark:border-green-800/40",
+      isHighlighted && "bg-green-100/70 ring-1 ring-inset ring-green-300 dark:bg-green-900/30 dark:ring-green-700",
+    )}>
       <div
         className="flex min-w-0 items-start gap-2 cursor-pointer px-2.5 py-1.5 transition-colors hover:bg-green-50/50 dark:hover:bg-green-900/20"
         onClick={() => setIsExpanded(!isExpanded)}
@@ -2393,6 +2397,14 @@ const ResponseHistoryPanel: React.FC<{
   pastResponses?: string[]
 }> = ({ currentResponse, pastResponses }) => {
   const [displayState, setDisplayState] = useState<ResponsePanelState>("expanded")
+  const [sequentialPlaybackState, setSequentialPlaybackState] = useState<"idle" | "generating" | "playing">("idle")
+  const [activePlaybackKey, setActivePlaybackKey] = useState<string | null>(null)
+  const configQuery = useConfigQuery()
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const audioUrlRef = useRef<string | null>(null)
+  const playbackGenerationIdRef = useRef(0)
+  const playbackIndexRef = useRef(-1)
+  const entryRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   const responseEntries = useMemo(() => {
     const fingerprint = (response: string) => `${response.slice(0, 64).replace(/\W/g, "")}-${response.length}`
@@ -2420,6 +2432,13 @@ const ResponseHistoryPanel: React.FC<{
 
     return entries
   }, [currentResponse, pastResponses])
+  const responseEntriesRef = useRef(responseEntries)
+  responseEntriesRef.current = responseEntries
+  const responseEntriesSignature = useMemo(
+    () => responseEntries.map((entry) => entry.key).join("|"),
+    [responseEntries],
+  )
+  const previousResponseEntriesSignatureRef = useRef(responseEntriesSignature)
 
   const cycleState = useCallback(() => {
     setDisplayState(prev => {
@@ -2429,9 +2448,137 @@ const ResponseHistoryPanel: React.FC<{
     })
   }, [])
 
+  const stopSequentialPlayback = useCallback((resetAudio: boolean = true) => {
+    playbackGenerationIdRef.current += 1
+    playbackIndexRef.current = -1
+    setSequentialPlaybackState("idle")
+    setActivePlaybackKey(null)
+
+    if (resetAudio && audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.currentTime = 0
+    }
+  }, [])
+
+  const scrollToResponse = useCallback((key: string) => {
+    entryRefs.current[key]?.scrollIntoView?.({ block: "nearest", behavior: "smooth" })
+  }, [])
+
+  const playSequentialEntry = useCallback(async (entryIndex: number) => {
+    const audio = audioRef.current
+    const entry = responseEntriesRef.current[entryIndex]
+
+    if (!audio || !entry) {
+      stopSequentialPlayback(false)
+      return
+    }
+
+    const ttsSource = sanitizeMessageContentForSpeech(entry.text)
+    if (!ttsSource) {
+      stopSequentialPlayback(false)
+      return
+    }
+
+    playbackIndexRef.current = entryIndex
+    setActivePlaybackKey(entry.key)
+    scrollToResponse(entry.key)
+
+    const generationId = ++playbackGenerationIdRef.current
+    setSequentialPlaybackState("generating")
+
+    try {
+      const result = await tipcClient.generateSpeech({ text: ttsSource })
+      if (playbackGenerationIdRef.current !== generationId) {
+        return
+      }
+
+      if (audioUrlRef.current) {
+        URL.revokeObjectURL(audioUrlRef.current)
+      }
+
+      const blob = new Blob([result.audio], { type: result.mimeType || "audio/wav" })
+      audioUrlRef.current = URL.createObjectURL(blob)
+      audio.src = audioUrlRef.current
+      await ttsManager.playExclusive(audio, {
+        source: "response-history-sequence",
+        autoPlay: false,
+        textPreview: ttsSource.slice(0, 80),
+      })
+    } catch {
+      if (playbackGenerationIdRef.current === generationId) {
+        stopSequentialPlayback(false)
+      }
+    }
+  }, [scrollToResponse, stopSequentialPlayback])
+
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return undefined
+
+    const unregisterAudio = ttsManager.registerAudio(audio)
+    const unregisterStop = ttsManager.registerStopCallback(() => {
+      playbackGenerationIdRef.current += 1
+      playbackIndexRef.current = -1
+      setSequentialPlaybackState("idle")
+      setActivePlaybackKey(null)
+    }, audio)
+    const onEnded = () => {
+      const nextIndex = playbackIndexRef.current + 1
+      if (nextIndex >= responseEntriesRef.current.length) {
+        stopSequentialPlayback(false)
+        return
+      }
+      void playSequentialEntry(nextIndex)
+    }
+    const onPlay = () => setSequentialPlaybackState("playing")
+    const onPause = () => {
+      setSequentialPlaybackState((state) => (state === "playing" ? "idle" : state))
+    }
+
+    audio.addEventListener("ended", onEnded)
+    audio.addEventListener("play", onPlay)
+    audio.addEventListener("pause", onPause)
+
+    return () => {
+      unregisterAudio()
+      unregisterStop()
+      audio.removeEventListener("ended", onEnded)
+      audio.removeEventListener("play", onPlay)
+      audio.removeEventListener("pause", onPause)
+    }
+  }, [playSequentialEntry, stopSequentialPlayback])
+
+  useEffect(() => () => {
+    playbackGenerationIdRef.current += 1
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (previousResponseEntriesSignatureRef.current !== responseEntriesSignature) {
+      previousResponseEntriesSignatureRef.current = responseEntriesSignature
+      if (sequentialPlaybackState !== "idle") {
+        stopSequentialPlayback(true)
+      }
+    }
+  }, [responseEntriesSignature, sequentialPlaybackState, stopSequentialPlayback])
+
   if (responseEntries.length === 0) return null
 
   const stateLabel = displayState === "collapsed" ? "Expand" : displayState === "expanded" ? "Full height" : "Collapse"
+  const canPlaySequentialResponses = !!configQuery.data?.ttsEnabled
+
+  const handleSequentialPlaybackClick = useCallback(async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation()
+
+    if (sequentialPlaybackState === "playing" || sequentialPlaybackState === "generating") {
+      stopSequentialPlayback(true)
+      return
+    }
+
+    await playSequentialEntry(0)
+  }, [playSequentialEntry, sequentialPlaybackState, stopSequentialPlayback])
 
   return (
     <div className={cn(
@@ -2440,28 +2587,41 @@ const ResponseHistoryPanel: React.FC<{
         : "flex-shrink-0 border-t bg-green-50/50 dark:bg-green-950/30",
     )}>
       {/* Header */}
-      <button
-        type="button"
-        onClick={cycleState}
-        className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-left transition-colors hover:bg-green-100/50 dark:hover:bg-green-900/30 flex-shrink-0"
-        title={stateLabel}
-      >
-        <MessageSquare className="h-3.5 w-3.5 shrink-0 text-green-600 dark:text-green-400" />
-        <span className="text-xs font-medium text-green-800 dark:text-green-200">
-          Agent Responses
-        </span>
-        <Badge variant="secondary" className="ml-0.5 h-4 shrink-0 px-1 py-0 text-[10px] bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-200">
-          {responseEntries.length}
-        </Badge>
-        <div className="flex-1" />
-        {displayState === "collapsed" ? (
-          <ChevronUp className="h-3 w-3 text-green-600 dark:text-green-400" />
-        ) : displayState === "expanded" ? (
-          <Maximize2 className="h-3 w-3 text-green-600 dark:text-green-400" />
-        ) : (
-          <ChevronDown className="h-3 w-3 text-green-600 dark:text-green-400" />
+      <div className="flex items-center gap-1 pr-1.5">
+        <button
+          type="button"
+          onClick={cycleState}
+          className="flex min-w-0 flex-1 items-center gap-1.5 px-2.5 py-1.5 text-left transition-colors hover:bg-green-100/50 dark:hover:bg-green-900/30 flex-shrink-0"
+          title={stateLabel}
+        >
+          <MessageSquare className="h-3.5 w-3.5 shrink-0 text-green-600 dark:text-green-400" />
+          <span className="text-xs font-medium text-green-800 dark:text-green-200">
+            Agent Responses
+          </span>
+          <Badge variant="secondary" className="ml-0.5 h-4 shrink-0 px-1 py-0 text-[10px] bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-200">
+            {responseEntries.length}
+          </Badge>
+          <div className="flex-1" />
+          {displayState === "collapsed" ? (
+            <ChevronUp className="h-3 w-3 text-green-600 dark:text-green-400" />
+          ) : displayState === "expanded" ? (
+            <Maximize2 className="h-3 w-3 text-green-600 dark:text-green-400" />
+          ) : (
+            <ChevronDown className="h-3 w-3 text-green-600 dark:text-green-400" />
+          )}
+        </button>
+        {canPlaySequentialResponses && (
+          <button
+            type="button"
+            onClick={handleSequentialPlaybackClick}
+            disabled={sequentialPlaybackState === "generating"}
+            className="rounded p-1 text-green-700 transition-colors hover:bg-green-100/70 hover:text-green-900 disabled:cursor-wait disabled:opacity-70 dark:text-green-200 dark:hover:bg-green-900/40 dark:hover:text-green-50"
+            title={sequentialPlaybackState === "idle" ? "Play newest to oldest" : "Stop playback"}
+          >
+            {sequentialPlaybackState === "idle" ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
+          </button>
         )}
-      </button>
+      </div>
       {/* Response list */}
       {displayState !== "collapsed" && (
         <div className={cn(
@@ -2473,10 +2633,14 @@ const ResponseHistoryPanel: React.FC<{
             return (
             <div
               key={key}
+              ref={(node) => {
+                entryRefs.current[key] = node
+              }}
               className={cn(
                 "px-3 py-2 text-xs text-green-900 dark:text-green-100",
                 !isCurrent && "border-t border-green-200/40 dark:border-green-800/40",
                 isCurrent && "bg-green-100/30 dark:bg-green-900/20",
+                activePlaybackKey === key && "bg-green-100/80 ring-1 ring-inset ring-green-300 dark:bg-green-900/40 dark:ring-green-700",
               )}
             >
               <div className="flex items-start gap-1">
@@ -2496,6 +2660,7 @@ const ResponseHistoryPanel: React.FC<{
           )})}
         </div>
       )}
+      <audio ref={audioRef} className="hidden" />
     </div>
   )
 }
@@ -2531,9 +2696,15 @@ const MidTurnUserResponseBubble: React.FC<{
   const [ttsError, setTtsError] = useState<string | null>(null)
   const [isTTSPlaying, setIsTTSPlaying] = useState(false)
   const [isPastResponsesExpanded, setIsPastResponsesExpanded] = useState(false)
+  const [sequentialPlaybackState, setSequentialPlaybackState] = useState<"idle" | "generating" | "playing">("idle")
+  const [activeSequentialKey, setActiveSequentialKey] = useState<string | null>(null)
   const inFlightTtsKeyRef = useRef<string | null>(null)
   const inFlightCompletionTTSKeysRef = useRef<string[]>([])
   const maximizeTriggeredOnPointerDownRef = useRef(false)
+  const sequenceAudioRef = useRef<HTMLAudioElement | null>(null)
+  const sequenceAudioUrlRef = useRef<string | null>(null)
+  const sequenceGenerationIdRef = useRef(0)
+  const sequenceIndexRef = useRef(-1)
   const configQuery = useConfigQuery()
   const ttsGenerationIdRef = useRef(0)
   const ttsSource = sanitizeMessageContentForSpeech(userResponse)
@@ -2671,10 +2842,27 @@ const MidTurnUserResponseBubble: React.FC<{
   )
   const pastResponseCount = pastResponses?.length ?? 0
   const hasPastResponses = pastResponseCount > 0
+  const sequentialResponses = useMemo(
+    () => [
+      { key: `current-${currentResponse.id}`, text: userResponse },
+      ...[...(pastResponses ?? [])]
+        .reverse()
+        .map((response) => ({ key: `past-${response.id}`, text: response.text })),
+    ],
+    [currentResponse.id, pastResponses, userResponse],
+  )
+  const sequentialResponsesRef = useRef(sequentialResponses)
+  sequentialResponsesRef.current = sequentialResponses
+  const sequentialResponsesSignature = useMemo(
+    () => sequentialResponses.map((response) => response.key).join("|"),
+    [sequentialResponses],
+  )
+  const previousSequentialResponsesSignatureRef = useRef(sequentialResponsesSignature)
 
   const shouldKeepAudioPlayerMounted =
     shouldShowTTSButton &&
     (isExpanded || (variant === "overlay" && (configQuery.data?.ttsAutoPlay ?? true)))
+  const isCurrentSequentialResponseHighlighted = activeSequentialKey === `current-${currentResponse.id}`
 
   const handleHeaderClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement | null
@@ -2707,8 +2895,130 @@ const MidTurnUserResponseBubble: React.FC<{
     maximizeTriggeredOnPointerDownRef.current = false
   }, [])
 
+  const resetSequentialPlayback = useCallback((pauseAudio: boolean = true) => {
+    sequenceGenerationIdRef.current += 1
+    sequenceIndexRef.current = -1
+    setSequentialPlaybackState("idle")
+    setActiveSequentialKey(null)
+
+    if (pauseAudio && sequenceAudioRef.current) {
+      sequenceAudioRef.current.pause()
+      sequenceAudioRef.current.currentTime = 0
+    }
+  }, [])
+
+  const playSequentialResponse = useCallback(async (responseIndex: number) => {
+    const audio = sequenceAudioRef.current
+    const response = sequentialResponsesRef.current[responseIndex]
+    if (!audio || !response) {
+      resetSequentialPlayback(false)
+      return
+    }
+
+    const ttsText = sanitizeMessageContentForSpeech(response.text)
+    if (!ttsText) {
+      resetSequentialPlayback(false)
+      return
+    }
+
+    sequenceIndexRef.current = responseIndex
+    setActiveSequentialKey(response.key)
+    setSequentialPlaybackState("generating")
+    const generationId = ++sequenceGenerationIdRef.current
+
+    try {
+      const result = await tipcClient.generateSpeech({ text: ttsText })
+
+      if (!sequenceAudioRef.current || sequenceGenerationIdRef.current !== generationId) {
+        return
+      }
+
+      if (sequenceAudioUrlRef.current) {
+        URL.revokeObjectURL(sequenceAudioUrlRef.current)
+      }
+
+      const blob = new Blob([result.audio], { type: result.mimeType || "audio/wav" })
+      sequenceAudioUrlRef.current = URL.createObjectURL(blob)
+      audio.src = sequenceAudioUrlRef.current
+
+      await ttsManager.playExclusive(audio, {
+        source: "latest-response-sequence",
+        autoPlay: false,
+        textPreview: ttsText.slice(0, 80),
+      })
+
+      if (sequenceGenerationIdRef.current === generationId) {
+        setSequentialPlaybackState("playing")
+      }
+    } catch {
+      resetSequentialPlayback(false)
+    }
+  }, [resetSequentialPlayback])
+
+  const handleSequentialPlaybackClick = useCallback(async (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation()
+
+    if (sequentialPlaybackState !== "idle") {
+      ttsManager.stopAll("latest-response-sequence-stop")
+      return
+    }
+
+    if (hasPastResponses) {
+      setIsPastResponsesExpanded(true)
+    }
+
+    await playSequentialResponse(0)
+  }, [hasPastResponses, playSequentialResponse, sequentialPlaybackState])
+
+  useEffect(() => {
+    const audio = sequenceAudioRef.current
+    if (!audio) return undefined
+
+    const unregisterAudio = ttsManager.registerAudio(audio)
+    const unregisterStop = ttsManager.registerStopCallback(() => {
+      resetSequentialPlayback(false)
+    }, audio)
+    const onEnded = () => {
+      const nextIndex = sequenceIndexRef.current + 1
+      if (nextIndex >= sequentialResponsesRef.current.length) {
+        resetSequentialPlayback(false)
+        return
+      }
+      void playSequentialResponse(nextIndex)
+    }
+    const onPlay = () => setSequentialPlaybackState("playing")
+
+    audio.addEventListener("ended", onEnded)
+    audio.addEventListener("play", onPlay)
+
+    return () => {
+      unregisterAudio()
+      unregisterStop()
+      audio.removeEventListener("ended", onEnded)
+      audio.removeEventListener("play", onPlay)
+    }
+  }, [playSequentialResponse, resetSequentialPlayback])
+
+  useEffect(() => {
+    if (previousSequentialResponsesSignatureRef.current !== sequentialResponsesSignature) {
+      previousSequentialResponsesSignatureRef.current = sequentialResponsesSignature
+      if (sequentialPlaybackState !== "idle") {
+        resetSequentialPlayback(true)
+      }
+    }
+  }, [resetSequentialPlayback, sequentialPlaybackState, sequentialResponsesSignature])
+
+  useEffect(() => () => {
+    if (sequenceAudioUrlRef.current) {
+      URL.revokeObjectURL(sequenceAudioUrlRef.current)
+    }
+  }, [])
+
   return (
-    <div className="min-w-0 max-w-full overflow-hidden rounded-lg border-2 border-green-400 bg-green-50/50 dark:bg-green-950/30">
+    <div className={cn(
+      "min-w-0 max-w-full overflow-hidden rounded-lg border-2 border-green-400 bg-green-50/50 dark:bg-green-950/30",
+      isCurrentSequentialResponseHighlighted && "ring-2 ring-green-300 dark:ring-green-700",
+    )}>
       {/* Header */}
       <div
         className={cn(
@@ -2750,6 +3060,24 @@ const MidTurnUserResponseBubble: React.FC<{
                 <Loader2 className="h-3 w-3 animate-spin text-green-600 dark:text-green-400" />
               ) : (
                 <Volume2 className="h-3 w-3 text-green-600 dark:text-green-400" />
+              )}
+            </button>
+          )}
+          {shouldShowTTSButton && (
+            <button
+              onClick={handleSequentialPlaybackClick}
+              className={cn(
+                "shrink-0 rounded p-1 transition-colors hover:bg-green-200/50 dark:hover:bg-green-800/50",
+                sequentialPlaybackState !== "idle" && "animate-pulse",
+              )}
+              title={sequentialPlaybackState === "idle" ? "Play newest to oldest" : "Stop playback"}
+            >
+              {sequentialPlaybackState === "idle" ? (
+                <Play className="h-3 w-3 text-green-600 dark:text-green-400" />
+              ) : sequentialPlaybackState === "generating" ? (
+                <Loader2 className="h-3 w-3 animate-spin text-green-600 dark:text-green-400" />
+              ) : (
+                <Pause className="h-3 w-3 text-green-600 dark:text-green-400" />
               )}
             </button>
           )}
@@ -2831,6 +3159,7 @@ const MidTurnUserResponseBubble: React.FC<{
                       response={response.text}
                       index={idx}
                       sessionId={sessionId}
+                      isHighlighted={activeSequentialKey === `past-${response.id}`}
                     />
                   ))}
                 </div>
@@ -2839,6 +3168,7 @@ const MidTurnUserResponseBubble: React.FC<{
           )}
         </>
       )}
+      <audio ref={sequenceAudioRef} className="hidden" />
     </div>
   )
 }

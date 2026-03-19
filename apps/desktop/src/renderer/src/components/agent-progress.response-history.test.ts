@@ -12,6 +12,7 @@ function createHookRuntime() {
   const states: any[] = []
   const refs: Array<{ current: any }> = []
   const effects: EffectRecord[] = []
+  const audioRefs: any[] = []
   let stateIndex = 0
   let refIndex = 0
   let effectIndex = 0
@@ -42,9 +43,31 @@ function createHookRuntime() {
     if (typeof ref === "function") ref(value)
     else if (ref && typeof ref === "object") ref.current = value
   }
-  const createRefValue = (type: any) => type === "audio"
-    ? { addEventListener: vi.fn(), removeEventListener: vi.fn(), pause: vi.fn(), currentTime: 0, src: "" }
-    : { scrollTop: 0, scrollHeight: 100, clientHeight: 100 }
+  const createRefValue = (type: any) => {
+    if (type === "audio") {
+      const listeners = new Map<string, Set<(...args: any[]) => void>>()
+      const audioRef = {
+        addEventListener: vi.fn((event: string, handler: (...args: any[]) => void) => {
+          const set = listeners.get(event) ?? new Set<(...args: any[]) => void>()
+          set.add(handler)
+          listeners.set(event, set)
+        }),
+        removeEventListener: vi.fn((event: string, handler: (...args: any[]) => void) => {
+          listeners.get(event)?.delete(handler)
+        }),
+        dispatchEvent(event: string) {
+          listeners.get(event)?.forEach((handler) => handler())
+        },
+        pause: vi.fn(),
+        currentTime: 0,
+        src: "",
+      }
+      audioRefs.push(audioRef)
+      return audioRef
+    }
+
+    return { scrollTop: 0, scrollHeight: 100, clientHeight: 100, scrollIntoView: vi.fn() }
+  }
   const invoke = (type: any, props: any) => {
     if (type === Fragment) return props?.children ?? null
     if (typeof type === "function") return type(props ?? {})
@@ -88,6 +111,7 @@ function createHookRuntime() {
         record.hasRun = true
       }
     },
+    audioRefs,
     reactMock,
     jsxRuntimeMock: { __esModule: true, Fragment, jsx: invoke, jsxs: invoke, jsxDEV: invoke },
   }
@@ -151,7 +175,10 @@ function findElementByTitle(tree: any, title: string) {
   return match
 }
 
-async function loadAgentProgress(runtime: ReturnType<typeof createHookRuntime>) {
+async function loadAgentProgress(
+  runtime: ReturnType<typeof createHookRuntime>,
+  options?: { ttsEnabled?: boolean },
+) {
   vi.resetModules()
   const captured = { tileFollowUpInputProps: null as any }
 
@@ -159,12 +186,33 @@ async function loadAgentProgress(runtime: ReturnType<typeof createHookRuntime>) 
     configurable: true,
     value: { getItem: vi.fn(() => null), setItem: vi.fn(), removeItem: vi.fn(), clear: vi.fn() },
   })
+  Object.defineProperty(globalThis, "requestAnimationFrame", {
+    configurable: true,
+    value: (callback: FrameRequestCallback) => {
+      callback(0)
+      return 0
+    },
+  })
+  Object.defineProperty(globalThis, "cancelAnimationFrame", {
+    configurable: true,
+    value: vi.fn(),
+  })
 
   const Null = () => null
   const icon = (name: string) => (props: any) => ({ type: name, props })
   const tipcMock = { tipcClient: new Proxy({ generateSpeech: vi.fn(), setPanelFocusable: vi.fn() }, { get: (target, key) => (target as any)[key] ?? vi.fn() }) }
-  const queriesMock = { useConfigQuery: () => ({ data: { ttsEnabled: false, ttsAutoPlay: false, dualModelEnabled: false } }) }
+  const queriesMock = { useConfigQuery: () => ({ data: { ttsEnabled: options?.ttsEnabled ?? false, ttsAutoPlay: false, dualModelEnabled: false } }) }
   const themeContextMock = { useTheme: () => ({ isDark: false }) }
+  const ttsManagerMock = {
+    ttsManager: {
+      stopAll: vi.fn(),
+      registerAudio: () => () => {},
+      registerStopCallback: () => () => {},
+      playExclusive: vi.fn(async (audio: any) => {
+        audio.dispatchEvent?.("play")
+      }),
+    },
+  }
   const storesMock = {
     useAgentStore: (selector: any) => selector({ setFocusedSessionId: vi.fn(), setSessionSnoozed: vi.fn() }),
     useMessageQueue: () => [],
@@ -205,6 +253,8 @@ async function loadAgentProgress(runtime: ReturnType<typeof createHookRuntime>) 
     Brain: icon("Brain"),
     Volume2: icon("Volume2"),
     Wrench: icon("Wrench"),
+    Play: icon("Play"),
+    Pause: icon("Pause"),
   }))
   vi.doMock("@renderer/lib/utils", () => ({ cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ") }))
   vi.doMock("@renderer/components/markdown-renderer", () => ({ MarkdownRenderer: ({ content }: any) => ({ type: "MarkdownRenderer", props: { content, children: content } }) }))
@@ -244,12 +294,12 @@ async function loadAgentProgress(runtime: ReturnType<typeof createHookRuntime>) 
   vi.doMock("./acp-session-badge", () => ({ ACPSessionBadge: Null }))
   vi.doMock("./agent-summary-view", () => ({ AgentSummaryView: Null }))
   vi.doMock("@renderer/lib/tts-tracking", () => ({ hasTTSPlayed: () => false, markTTSPlayed: vi.fn(), removeTTSKey: vi.fn() }))
-  vi.doMock("@renderer/lib/tts-manager", () => ({ ttsManager: { stopAll: vi.fn(), registerAudio: () => () => {}, registerStopCallback: () => () => {}, playExclusive: vi.fn() } }))
+  vi.doMock("@renderer/lib/tts-manager", () => ttsManagerMock)
   vi.doMock("@dotagents/shared/message-display-utils", () => ({ sanitizeMessageContentForSpeech: (text: string) => text }))
   vi.doMock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
   const mod = await import("./agent-progress")
-  return { AgentProgress: mod.AgentProgress, captured }
+  return { AgentProgress: mod.AgentProgress, captured, tipcMock, ttsManagerMock, audioRefs: runtime.audioRefs }
 }
 
 afterEach(() => {
@@ -533,5 +583,40 @@ describe("agent progress response history", () => {
     })
 
     expect(onExpand).toHaveBeenCalledTimes(2)
+  })
+
+  it("plays response history newest-to-oldest from the header playback control", async () => {
+    const runtime = createHookRuntime()
+    const { AgentProgress, tipcMock, audioRefs } = await loadAgentProgress(runtime, { ttsEnabled: true })
+    ;(tipcMock.tipcClient.generateSpeech as any)
+      .mockResolvedValueOnce({ audio: new Uint8Array([1, 2, 3]), mimeType: "audio/wav" })
+      .mockResolvedValueOnce({ audio: new Uint8Array([4, 5, 6]), mimeType: "audio/wav" })
+
+    const progress = {
+      sessionId: "session-8",
+      conversationId: "conversation-8",
+      currentIteration: 1,
+      maxIterations: 1,
+      steps: [],
+      isComplete: false,
+      finalContent: "",
+      conversationHistory: [],
+      userResponse: "Newest answer",
+      userResponseHistory: ["Oldest draft", "Middle draft"],
+    }
+
+    let tree = runtime.render(AgentProgress, { progress })
+    runtime.commitEffects()
+
+    const playButton = findElementByTitle(tree, "Play newest to oldest")
+    await playButton.props.onClick({ stopPropagation: vi.fn() })
+
+    expect(tipcMock.tipcClient.generateSpeech).toHaveBeenNthCalledWith(1, { text: "Newest answer" })
+
+    tree = runtime.render(AgentProgress, { progress })
+    expect(findElementByTitle(tree, "Stop playback")).toBeTruthy()
+
+    audioRefs[0].dispatchEvent("ended")
+    expect(tipcMock.tipcClient.generateSpeech).toHaveBeenNthCalledWith(2, { text: "Middle draft" })
   })
 })
