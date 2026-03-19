@@ -184,4 +184,44 @@ describe('useSpeechRecognizer', () => {
     vi.advanceTimersByTime(1);
     expect(onVoiceFinalized).toHaveBeenCalledWith({ text: 'hello world', mode: 'handsfree', source: 'web' });
   });
+
+  it('restarts hands-free recognition after recognizer end so follow-up speech extends the pending transcript', async () => {
+    vi.useFakeTimers();
+    (globalThis as any).window = { SpeechRecognition: FakeSpeechRecognition };
+    const runtime = createHookRuntime();
+    const { useSpeechRecognizer } = await loadUseSpeechRecognizer(runtime);
+    const onVoiceFinalized = vi.fn();
+    const recognizer = runtime.render(useSpeechRecognizer, {
+      handsFree: true,
+      handsFreeDebounceMs: 10_000,
+      willCancel: false,
+      onVoiceFinalized,
+    });
+    runtime.commitEffects();
+
+    await recognizer.startRecording();
+    const speechRecognition = FakeSpeechRecognition.instances[0];
+
+    speechRecognition.onresult?.({
+      resultIndex: 0,
+      results: [{ 0: { transcript: 'hello world' }, isFinal: true }],
+    });
+
+    vi.advanceTimersByTime(1_500);
+    speechRecognition.onend?.();
+
+    expect(speechRecognition.startCalls).toBe(2);
+    expect(onVoiceFinalized).not.toHaveBeenCalled();
+
+    speechRecognition.onresult?.({
+      resultIndex: 0,
+      results: [{ 0: { transcript: 'again' }, isFinal: true }],
+    });
+
+    vi.advanceTimersByTime(9_999);
+    expect(onVoiceFinalized).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1);
+    expect(onVoiceFinalized).toHaveBeenCalledWith({ text: 'hello world again', mode: 'handsfree', source: 'web' });
+  });
 });

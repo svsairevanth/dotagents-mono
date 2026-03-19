@@ -222,6 +222,42 @@ export function useSpeechRecognizer(options: UseSpeechRecognizerOptions) {
     return true;
   }, [clearHandsFreeDebounce, finalizePendingHandsFree, handsFreeDebounceMs]);
 
+  const restartWebHandsFreeRecognition = useCallback(() => {
+    if (Platform.OS !== 'web' || !webRecognitionRef.current) {
+      return false;
+    }
+
+    try {
+      webRecognitionRef.current.start();
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const restartNativeHandsFreeRecognition = useCallback(async () => {
+    if (Platform.OS === 'web') {
+      return false;
+    }
+
+    try {
+      const SR: any = await import('expo-speech-recognition');
+      if (!SR?.ExpoSpeechRecognitionModule?.start) {
+        return false;
+      }
+
+      SR.ExpoSpeechRecognitionModule.start({
+        lang: 'en-US',
+        interimResults: true,
+        continuous: true,
+        volumeChangeEventOptions: { enabled: true, intervalMillis: 250 },
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
   const ensureWebRecognizer = useCallback(() => {
     if (Platform.OS !== 'web') return false;
     const SRClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -292,6 +328,9 @@ export function useSpeechRecognizer(options: UseSpeechRecognizerOptions) {
             if (!handsFreeDebounceRef.current) {
               scheduleHandsFreeFinalization('web', finalText);
             }
+            if (!restartWebHandsFreeRecognition()) {
+              setListeningValue(false);
+            }
             return;
           }
 
@@ -350,6 +389,7 @@ export function useSpeechRecognizer(options: UseSpeechRecognizerOptions) {
     handsFree,
     log,
     onRecognizerError,
+    restartWebHandsFreeRecognition,
     scheduleHandsFreeFinalization,
     setListeningValue,
     setLiveTranscriptValue,
@@ -440,6 +480,9 @@ export function useSpeechRecognizer(options: UseSpeechRecognizerOptions) {
                   nativeFinalRef.current = '';
                   if (!handsFreeDebounceRef.current) {
                     scheduleHandsFreeFinalization('native', finalText);
+                  }
+                  if (!await restartNativeHandsFreeRecognition()) {
+                    setListeningValue(false);
                   }
                   return;
                 }
@@ -566,6 +609,7 @@ export function useSpeechRecognizer(options: UseSpeechRecognizerOptions) {
     log,
     onPermissionDenied,
     onRecognizerError,
+    restartNativeHandsFreeRecognition,
     scheduleHandsFreeFinalization,
     setListeningValue,
     setLiveTranscriptValue,
