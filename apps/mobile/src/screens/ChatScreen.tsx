@@ -372,6 +372,12 @@ const stripRawToolTextFromContent = (content: string): string => {
 };
 
 const getVisibleMessageContent = (message: ChatMessage): string => {
+  // Tool role messages are raw tool results — always hide their content
+  // (they should have been merged into the preceding assistant message)
+  if (message.role === 'tool') {
+    return '';
+  }
+
   if (message.role !== 'assistant') {
     return message.content || '';
   }
