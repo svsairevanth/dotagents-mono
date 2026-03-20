@@ -291,15 +291,14 @@ export const Component = () => {
           {/* Header with collapse toggle */}
           <header
             className={cn(
-              "flex shrink-0 items-center",
-              isCollapsed ? "justify-center" : "justify-between",
+              "flex shrink-0 items-center justify-end gap-1",
               // On macOS, add top padding to clear the traffic-light window controls
-              process.env.IS_MAC ? "pb-1 pt-9" : "pb-1 pt-2",
+              process.env.IS_MAC ? "pb-1 pt-10" : "pb-1 pt-2",
               isCollapsed ? "px-1" : "px-2",
             )}
           >
             {!isCollapsed && (
-              <div className="flex items-center gap-1">
+              <>
                 <button
                   type="button"
                   onClick={handleToggleGlobalTTS}
@@ -341,7 +340,7 @@ export const Component = () => {
                     <OctagonX className="h-3.5 w-3.5" />
                   )}
                 </button>
-              </div>
+              </>
             )}
 
             <button
