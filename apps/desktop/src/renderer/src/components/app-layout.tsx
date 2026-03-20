@@ -291,20 +291,21 @@ export const Component = () => {
           {/* Header with collapse toggle */}
           <header
             className={cn(
-              "flex shrink-0 items-center justify-end gap-1",
+              "flex shrink-0 items-center",
+              isCollapsed ? "justify-center" : "justify-between",
               // On macOS, add top padding to clear the traffic-light window controls
-              process.env.IS_MAC ? "pb-1 pt-10" : "pb-1 pt-2",
+              process.env.IS_MAC ? "pb-1 pt-7" : "pb-1 pt-2",
               isCollapsed ? "px-1" : "px-2",
             )}
           >
             {!isCollapsed && (
-              <>
+              <div className="flex items-center gap-1">
                 <button
                   type="button"
                   onClick={handleToggleGlobalTTS}
                   disabled={!configQuery.data || saveConfigMutation.isPending}
                   className={cn(
-                    "flex h-6 w-6 items-center justify-center text-muted-foreground hover:bg-accent/50 hover:text-foreground shrink-0 rounded-md transition-colors disabled:opacity-50",
+                    "text-muted-foreground hover:bg-accent/50 hover:text-foreground shrink-0 rounded p-1 transition-colors disabled:opacity-50",
                   )}
                   title={
                     isGlobalTTSEnabled
@@ -330,7 +331,7 @@ export const Component = () => {
                   type="button"
                   onClick={handleEmergencyStopAll}
                   disabled={isEmergencyStopping}
-                  className="flex h-6 w-6 items-center justify-center text-destructive hover:bg-destructive/10 shrink-0 rounded-md transition-colors disabled:opacity-50"
+                  className="text-destructive hover:bg-destructive/10 shrink-0 rounded p-1 transition-colors disabled:opacity-50"
                   title="Emergency stop all agent sessions"
                   aria-label="Emergency stop all agent sessions"
                 >
@@ -340,7 +341,7 @@ export const Component = () => {
                     <OctagonX className="h-3.5 w-3.5" />
                   )}
                 </button>
-              </>
+              </div>
             )}
 
             <button
