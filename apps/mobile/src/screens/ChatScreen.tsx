@@ -54,9 +54,11 @@ import {
   RESPOND_TO_USER_TOOL,
   isToolOnlyMessage,
   normalizeAgentConversationState,
+  groupToolActivity,
   type AgentConversationState,
   type AgentUserResponseEvent,
   type PredefinedPromptSummary,
+  type ToolActivityGroup,
 } from '@dotagents/shared';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useIsFocused } from '@react-navigation/native';
@@ -887,6 +889,8 @@ export default function ChatScreen({ route, navigation }: any) {
   // Track which individual tool calls are fully expanded to show all input/output details
   // Key format: "messageId-toolCallIndex" (messageId falls back to message array index if undefined)
   const [expandedToolCalls, setExpandedToolCalls] = useState<Record<string, boolean>>({});
+  // Track which tool-activity groups are expanded (keyed by "startIndex-endIndex")
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   // Track the last failed message for retry functionality
   const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(null);
 	  const [willCancel, setWillCancel] = useState(false);
@@ -1401,6 +1405,7 @@ export default function ChatScreen({ route, navigation }: any) {
       // "final response expanded" behavior per chat and prevent stale UI state from leaking.
       setExpandedMessages({});
       setExpandedToolCalls({});
+      setExpandedGroups({});
       // Clear respond_to_user history for the new session
 	      replaceResponseHistory([]);
       playedResponseEventIdsRef.current = new Set();
@@ -1588,6 +1593,15 @@ export default function ChatScreen({ route, navigation }: any) {
   const toggleToolCallExpansion = useCallback((messageId: string, toolCallIndex: number) => {
     const key = `${messageId}-${toolCallIndex}`;
     setExpandedToolCalls(prev => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+
+  // Compute tool-activity groups for consecutive connected tool-call messages
+  const toolActivityGroups = useMemo(() => groupToolActivity(messages), [messages]);
+
+  // Toggle expansion of a tool-activity group (keyed by "startIndex-endIndex")
+  const toggleGroupExpansion = useCallback((group: ToolActivityGroup) => {
+    const key = `${group.startIndex}-${group.endIndex}`;
+    setExpandedGroups(prev => ({ ...prev, [key]: !prev[key] }));
   }, []);
 
   // Auto-expand logic matching desktop behavior (#32, #33):
@@ -2917,6 +2931,52 @@ export default function ChatScreen({ route, navigation }: any) {
             </View>
           )}
           {messages.map((m, i) => {
+            // --- Tool-activity group handling ---
+            const group = toolActivityGroups.groupByIndex.get(i);
+            if (group) {
+              const groupKey = `${group.startIndex}-${group.endIndex}`;
+              const isGroupExpanded = expandedGroups[groupKey] ?? false;
+
+              // Non-first message in a collapsed group: skip rendering
+              if (i !== group.startIndex && !isGroupExpanded) {
+                return null;
+              }
+
+              // First message in a collapsed group: render the group header
+              if (i === group.startIndex && !isGroupExpanded) {
+                return (
+                  <Pressable
+                    key={`group-${groupKey}`}
+                    onPress={() => toggleGroupExpansion(group)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${group.count} tool activities, collapsed. Tap to expand.`}
+                    accessibilityState={{ expanded: false }}
+                    aria-expanded={false}
+                    style={({ pressed }) => [
+                      styles.toolActivityGroupCollapsed,
+                      pressed && styles.toolActivityGroupPressed,
+                    ]}
+                  >
+                    <Text style={styles.toolActivityGroupHeader}>
+                      ▶ {group.count} tool {group.count === 1 ? 'call' : 'calls'}
+                    </Text>
+                    {group.previewLines.map((line, lineIdx) => (
+                      <Text
+                        key={lineIdx}
+                        style={styles.toolActivityGroupPreviewLine}
+                        numberOfLines={1}
+                      >
+                        {line}
+                      </Text>
+                    ))}
+                  </Pressable>
+                );
+              }
+
+              // First message in an expanded group: render a collapse header before the message
+              // (non-first messages in expanded groups fall through to normal rendering below)
+            }
+
             const visibleMessageContent = getVisibleMessageContent(m);
             // Messages whose visible content comes from respond_to_user should
             // never be collapsed — they ARE the assistant's response to the user
@@ -2961,9 +3021,31 @@ export default function ChatScreen({ route, navigation }: any) {
               return null;
             }
 
+            // Determine if this message needs group expand/collapse chrome
+            const isFirstInExpandedGroup = group && i === group.startIndex && (expandedGroups[`${group.startIndex}-${group.endIndex}`] ?? false);
+            const isLastInExpandedGroup = group && i === group.endIndex && (expandedGroups[`${group.startIndex}-${group.endIndex}`] ?? false);
+
             return (
+              <View key={i}>
+                {/* Expanded group collapse header */}
+                {isFirstInExpandedGroup && (
+                  <Pressable
+                    onPress={() => toggleGroupExpansion(group!)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Collapse ${group!.count} tool activities`}
+                    accessibilityState={{ expanded: true }}
+                    aria-expanded={true}
+                    style={({ pressed }) => [
+                      styles.toolActivityGroupCollapsed,
+                      pressed && styles.toolActivityGroupPressed,
+                    ]}
+                  >
+                    <Text style={styles.toolActivityGroupHeader}>
+                      ▼ {group!.count} tool {group!.count === 1 ? 'call' : 'calls'}
+                    </Text>
+                  </Pressable>
+                )}
               <View
-                key={i}
                 style={[
                   styles.msg,
                   m.role === 'user' ? styles.user : styles.assistant,
@@ -3248,6 +3330,23 @@ export default function ChatScreen({ route, navigation }: any) {
                       </>
                     )}
                   </>
+                )}
+              </View>
+                {/* Expanded group collapse footer */}
+                {isLastInExpandedGroup && (
+                  <Pressable
+                    onPress={() => toggleGroupExpansion(group!)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Collapse ${group!.count} tool activities`}
+                    style={({ pressed }) => [
+                      styles.toolActivityGroupCollapsed,
+                      pressed && styles.toolActivityGroupPressed,
+                    ]}
+                  >
+                    <Text style={styles.toolActivityGroupHeader}>
+                      ▲ Collapse {group!.count} tool {group!.count === 1 ? 'call' : 'calls'}
+                    </Text>
+                  </Pressable>
                 )}
               </View>
             );
@@ -4259,6 +4358,31 @@ function createStyles(theme: Theme, screenHeight: number) {
     },
     toolCallCompactStatusError: {
       color: theme.colors.mutedForeground,
+    },
+    // Tool-activity group styles (collapsed-by-default grouping of consecutive tool calls)
+    toolActivityGroupCollapsed: {
+      paddingVertical: 4,
+      paddingHorizontal: spacing.xs,
+      borderRadius: radius.sm,
+      borderLeftWidth: 2,
+      borderLeftColor: hexToRgba(theme.colors.mutedForeground, 0.3),
+      marginBottom: 2,
+    },
+    toolActivityGroupPressed: {
+      opacity: 0.7,
+    },
+    toolActivityGroupHeader: {
+      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+      fontSize: 10,
+      fontWeight: '600',
+      color: theme.colors.mutedForeground,
+      marginBottom: 2,
+    },
+    toolActivityGroupPreviewLine: {
+      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+      fontSize: 10,
+      color: theme.colors.mutedForeground,
+      paddingLeft: 8,
     },
     toolParamsSection: {
       paddingHorizontal: spacing.xs,
