@@ -81,6 +81,7 @@ import {
 import { formatVoiceDebugEntry, useVoiceDebug } from '../lib/voice/voiceDebug';
 import { useSpeechRecognizer } from '../lib/voice/useSpeechRecognizer';
 import { useHandsFreeController } from '../lib/voice/useHandsFreeController';
+import { createDelegationProgressMessages } from '../lib/delegationProgress';
 
 interface PendingImageAttachment {
   id: string;
@@ -1676,6 +1677,7 @@ export default function ChatScreen({ route, navigation }: any) {
 
   const convertProgressToMessages = useCallback((update: AgentProgressUpdate): ChatMessage[] => {
     const messages: ChatMessage[] = [];
+    const delegationMessages = createDelegationProgressMessages(update.steps);
     console.log('[convertProgressToMessages] Processing update, steps:', update.steps?.length || 0, 'history:', update.conversationHistory?.length || 0, 'isComplete:', update.isComplete);
 
     if (update.steps && update.steps.length > 0) {
@@ -1758,7 +1760,11 @@ export default function ChatScreen({ route, navigation }: any) {
     }
 
     if (update.streamingContent?.text) {
-      if (messages.length > 0 && messages[messages.length - 1].role === 'assistant') {
+      if (
+        messages.length > 0
+        && messages[messages.length - 1].role === 'assistant'
+        && messages[messages.length - 1].variant !== 'delegation'
+      ) {
         messages[messages.length - 1].content = update.streamingContent.text;
       } else {
         messages.push({
@@ -1768,7 +1774,11 @@ export default function ChatScreen({ route, navigation }: any) {
       }
     }
 
-    return applyUserResponseToMessages(messages, update.userResponse || update.spokenContent);
+    const messagesWithUserResponse = applyUserResponseToMessages(
+      messages,
+      update.userResponse || update.spokenContent,
+    );
+    return [...messagesWithUserResponse, ...delegationMessages];
   }, []);
 
   // Get the current conversation ID for queue operations
@@ -3688,6 +3698,25 @@ export default function ChatScreen({ route, navigation }: any) {
                     <Text style={styles.handsFreeControlButtonText}>Sleep</Text>
                   </TouchableOpacity>
                 )}
+                <TouchableOpacity
+                  style={styles.handsFreeControlButton}
+                  onPress={() => {
+                    if (handsFreeController.state.phase === 'paused') {
+                      handsFreeController.resumeByUser();
+                      setDebugInfo('Handsfree resumed.');
+                      return;
+                    }
+                    handsFreeController.pauseByUser();
+                    Speech.stop();
+                    void stopRecognitionOnly();
+                    setDebugInfo('Handsfree paused.');
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.handsFreeControlButtonText}>
+                    {handsFreeController.state.phase === 'paused' ? 'Resume' : 'Pause'}
+                  </Text>
+                </TouchableOpacity>
               </View>
             </>
           )}
