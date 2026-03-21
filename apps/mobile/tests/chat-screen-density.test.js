@@ -67,6 +67,17 @@ test('bases assistant collapse decisions on visible content instead of raw tool 
   assert.match(screenSource, /const shouldShowCollapsedTextPreview =\s+visibleMessageContent\.length > 0 &&\s+!isExpanded &&\s+shouldCollapse;/);
 });
 
+test('derives tool execution card status from displayed non-meta tool entries', () => {
+  assert.match(screenSource, /const displayToolEntries = toolCalls\.reduce\(/);
+  assert.match(screenSource, /const allSuccess =\s+hasToolResults && displayToolEntries\.every\(entry => entry\.result\?\.success === true\);/);
+  assert.match(screenSource, /const hasErrors = displayToolEntries\.some\(entry => entry\.result\?\.success === false\);/);
+  assert.match(screenSource, /const isPending =\s+displayToolEntries\.some\(entry => !entry\.result && entry\.origIdx >= toolResultCount\);/);
+  assert.match(screenSource, /\{displayToolEntries\.map\(\(\{ toolCall, origIdx, result: tcResult \}, tcIdx\) => \{/);
+  assert.match(screenSource, /\{displayToolEntries\.map\(\(\{ toolCall, origIdx, result \}, idx\) => \{/);
+  assert.doesNotMatch(screenSource, /const allSuccess = hasToolResults && m\.toolResults!\.every\(r => r\.success\);/);
+  assert.doesNotMatch(screenSource, /const hasErrors = hasToolResults && m\.toolResults!\.some\(r => !r\.success\);/);
+});
+
 test('keeps the TTS control inline with assistant message text instead of on a detached row', () => {
   assert.match(screenSource, /assistantMessageRow:\s*\{[\s\S]*?flexDirection:\s*'row',[\s\S]*?alignItems:\s*'flex-start'/);
   assert.match(screenSource, /<View style=\{m\.role === 'assistant' \? styles\.assistantMessageRow : undefined\}>[\s\S]*?speakMessage\(i, visibleMessageContent\)/);

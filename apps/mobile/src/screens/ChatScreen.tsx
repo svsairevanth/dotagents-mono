@@ -3007,17 +3007,38 @@ export default function ChatScreen({ route, navigation }: any) {
               config.ttsEnabled !== false &&
               (shouldShowExpandedContent || shouldShowCollapsedTextPreview);
 
+            const toolCalls = m.toolCalls ?? [];
+            const toolResults = m.toolResults ?? [];
             // Filter out meta-tools from display (respond_to_user, mark_work_complete)
             // since their content is already shown as visible message text
-            const displayToolCalls = (m.toolCalls ?? []).filter(tc => !HIDDEN_META_TOOLS.has(tc.name));
-            const displayToolCallCount = displayToolCalls.length;
-            const toolCallCount = m.toolCalls?.length ?? 0;
-            const toolResultCount = m.toolResults?.length ?? 0;
-            const hasToolResults = toolResultCount > 0;
-            const allSuccess = hasToolResults && m.toolResults!.every(r => r.success);
-            const hasErrors = hasToolResults && m.toolResults!.some(r => !r.success);
-            // isPending is true when there are more tool calls than results (including partial completion)
-            const isPending = toolCallCount > 0 && toolCallCount > toolResultCount;
+            const displayToolEntries = toolCalls.reduce(
+              (entries, toolCall, origIdx) => {
+                if (HIDDEN_META_TOOLS.has(toolCall.name)) {
+                  return entries;
+                }
+
+                entries.push({
+                  toolCall,
+                  origIdx,
+                  result: toolResults[origIdx],
+                });
+                return entries;
+              },
+              [] as Array<{
+                toolCall: NonNullable<ChatMessage['toolCalls']>[number];
+                origIdx: number;
+                result: NonNullable<ChatMessage['toolResults']>[number] | undefined;
+              }>
+            );
+            const displayToolCallCount = displayToolEntries.length;
+            const toolResultCount = toolResults.length;
+            const hasToolResults = displayToolEntries.some(entry => !!entry.result);
+            const allSuccess =
+              hasToolResults && displayToolEntries.every(entry => entry.result?.success === true);
+            const hasErrors = displayToolEntries.some(entry => entry.result?.success === false);
+            // isPending is true when any displayed tool call has not received its result yet.
+            const isPending =
+              displayToolEntries.some(entry => !entry.result && entry.origIdx >= toolResultCount);
 
             // Skip empty messages: no visible content AND no tool calls to display
             // Also skip messages that only have toolResults but no toolCalls (raw result blobs)
@@ -3164,13 +3185,11 @@ export default function ChatScreen({ route, navigation }: any) {
                               pressed && styles.toolCallCompactPressed,
                             ]}
                           >
-                            {displayToolCalls.map((tc, tcIdx) => {
-                              const origIdx = (m.toolCalls ?? []).indexOf(tc);
-                              const tcResult = m.toolResults?.[origIdx];
-                              const tcPending = !tcResult && origIdx >= (m.toolResults?.length ?? 0);
+                            {displayToolEntries.map(({ toolCall, origIdx, result: tcResult }, tcIdx) => {
+                              const tcPending = !tcResult && origIdx >= toolResultCount;
                               const tcSuccess = tcResult?.success === true;
                               const tcError = tcResult?.success === false;
-                              const argPreview = formatArgumentsPreview(tc.arguments);
+                              const argPreview = formatArgumentsPreview(toolCall.arguments);
                               return (
                                 <View key={tcIdx} style={styles.toolCallCompactLine}>
                                   <Text style={[
@@ -3190,7 +3209,7 @@ export default function ChatScreen({ route, navigation }: any) {
                                     ]}
                                     numberOfLines={1}
                                   >
-                                    {tc.name}{argPreview ? ` · ${argPreview}` : ''}
+                                    {toolCall.name}{argPreview ? ` · ${argPreview}` : ''}
                                   </Text>
                                 </View>
                               );
@@ -3226,14 +3245,12 @@ export default function ChatScreen({ route, navigation }: any) {
                             allSuccess && styles.toolExecutionSuccess,
                             hasErrors && styles.toolExecutionError,
                           ]}>
-                            {displayToolCalls.map((toolCall, idx) => {
-                              const origIdx = (m.toolCalls ?? []).indexOf(toolCall);
-                              const result = m.toolResults?.[origIdx];
-                              const isResultPending = !result && origIdx >= (m.toolResults?.length ?? 0);
+                            {displayToolEntries.map(({ toolCall, origIdx, result }, idx) => {
+                              const isResultPending = !result && origIdx >= toolResultCount;
                               // Use message id or fallback to array index to ensure stable, unique keys
                               // that won't collide when m.id is undefined (which is common)
                               const stableMessageKey = m.id ?? String(i);
-                              const toolCallKey = `${stableMessageKey}-${idx}`;
+                              const toolCallKey = `${stableMessageKey}-${origIdx}`;
                               const isToolCallFullyExpanded = expandedToolCalls[toolCallKey] ?? false;
                               return (
                                 <View key={idx} style={styles.toolCallSection}>
