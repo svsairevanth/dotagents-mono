@@ -190,6 +190,19 @@ export function resolveHandsFreeUtterance({
   }
 
   if (state.phase === 'processing' || state.phase === 'speaking') {
+    const sleepMatch = matchSleepPhrase(normalizedTranscript, sleepPhrase);
+    if (sleepMatch.matched) {
+      return {
+        nextState: {
+          ...transitionToSleeping(state),
+          lastTranscript: sleepMatch.normalizedTranscript,
+        },
+        action: { type: 'none' },
+        matchedWake: false,
+        matchedSleep: true,
+      };
+    }
+
     const wakeMatch = matchWakePhrase(normalizedTranscript, wakePhrase);
     if (wakeMatch.matched && wakeMatch.remainder) {
       return {
@@ -202,6 +215,16 @@ export function resolveHandsFreeUtterance({
         matchedSleep: false,
       };
     }
+
+    return {
+      nextState: {
+        ...state,
+        lastTranscript: normalizedTranscript,
+      },
+      action: { type: 'send', text: normalizedTranscript },
+      matchedWake: false,
+      matchedSleep: false,
+    };
   }
 
   return {
