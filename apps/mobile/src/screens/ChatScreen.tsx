@@ -1774,10 +1774,11 @@ export default function ChatScreen({ route, navigation }: any) {
       }
     }
 
-    return applyUserResponseToMessages(
-      [...messages, ...delegationMessages],
+    const messagesWithUserResponse = applyUserResponseToMessages(
+      messages,
       update.userResponse || update.spokenContent,
     );
+    return [...messagesWithUserResponse, ...delegationMessages];
   }, []);
 
   // Get the current conversation ID for queue operations

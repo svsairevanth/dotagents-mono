@@ -204,13 +204,25 @@ export function resolveHandsFreeUtterance({
     }
 
     const wakeMatch = matchWakePhrase(normalizedTranscript, wakePhrase);
-    if (wakeMatch.matched && wakeMatch.remainder) {
+    if (wakeMatch.matched) {
+      if (wakeMatch.remainder) {
+        return {
+          nextState: {
+            ...state,
+            lastTranscript: wakeMatch.remainder,
+          },
+          action: { type: 'send', text: wakeMatch.remainder },
+          matchedWake: true,
+          matchedSleep: false,
+        };
+      }
+
       return {
         nextState: {
           ...state,
-          lastTranscript: wakeMatch.remainder,
+          lastTranscript: wakeMatch.normalizedTranscript,
         },
-        action: { type: 'send', text: wakeMatch.remainder },
+        action: { type: 'none' },
         matchedWake: true,
         matchedSleep: false,
       };

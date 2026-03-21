@@ -186,6 +186,20 @@ describe('resolveHandsFreeUtterance', () => {
     expect(result.matchedSleep).toBe(true);
   });
 
+  it('does not send a bare wake phrase while already processing', () => {
+    const result = resolveHandsFreeUtterance({
+      state: { ...createInitialHandsFreeState(), phase: 'processing', awakeSince: 100, resumePhase: 'listening' },
+      transcript: 'hey dot agents',
+      wakePhrase: 'hey dot agents',
+      sleepPhrase: 'go to sleep',
+      now: 270,
+    });
+
+    expect(result.action).toEqual({ type: 'none' });
+    expect(result.nextState.phase).toBe('processing');
+    expect(result.matchedWake).toBe(true);
+  });
+
   it('resets controller state when hands-free is disabled after waking up', async () => {
     const runtime = createHookRuntime();
     const { useHandsFreeController: useHook } = await loadUseHandsFreeController(runtime);
