@@ -510,6 +510,107 @@ describe("agent progress response history", () => {
     expect(countTextOccurrences(text, "Final answer")).toBe(1)
   })
 
+  it("shows completion-tool responses as plain text without respond_to_user or mark_work_complete rows", async () => {
+    const runtime = createHookRuntime()
+    const { AgentProgress } = await loadAgentProgress(runtime)
+    const progress = {
+      sessionId: "session-control-tools-hidden",
+      conversationId: "conversation-control-tools-hidden",
+      currentIteration: 1,
+      maxIterations: 2,
+      steps: [],
+      isComplete: false,
+      finalContent: "",
+      responseEvents: [
+        {
+          id: "resp-control",
+          sessionId: "session-control-tools-hidden",
+          ordinal: 1,
+          text: "Need your approval",
+          timestamp: 100,
+        },
+      ],
+      conversationHistory: [
+        {
+          role: "assistant",
+          content: "",
+          timestamp: 90,
+          toolCalls: [
+            { name: "respond_to_user", arguments: { message: "Need your approval" } },
+            { name: "mark_work_complete", arguments: {} },
+          ],
+        },
+        {
+          role: "tool",
+          content: "",
+          timestamp: 95,
+          toolResults: [
+            { success: true, content: "ok" },
+            { success: true, content: "ok" },
+          ],
+        },
+      ],
+    }
+
+    const tree = runtime.render(AgentProgress, { progress })
+    const text = getTextContent(tree)
+
+    expect(text).toContain("Need your approval")
+    expect(text).not.toContain("respond_to_user")
+    expect(text).not.toContain("mark_work_complete")
+  })
+
+  it("keeps reloaded completed sessions from showing completion-tool rows or duplicate final output", async () => {
+    const runtime = createHookRuntime()
+    const { AgentProgress } = await loadAgentProgress(runtime)
+    const progress = {
+      sessionId: "session-reloaded-complete",
+      conversationId: "conversation-reloaded-complete",
+      currentIteration: 1,
+      maxIterations: 1,
+      steps: [],
+      isComplete: true,
+      finalContent: "",
+      responseEvents: [
+        {
+          id: "resp-reloaded-complete",
+          sessionId: "session-reloaded-complete",
+          ordinal: 1,
+          text: "Final answer",
+          timestamp: 100,
+        },
+      ],
+      conversationHistory: [
+        {
+          role: "assistant",
+          content: "",
+          timestamp: 90,
+          toolCalls: [
+            { name: "respond_to_user", arguments: { message: "Final answer" } },
+            { name: "mark_work_complete", arguments: {} },
+          ],
+        },
+        {
+          role: "tool",
+          content: "",
+          timestamp: 95,
+          toolResults: [
+            { success: true, content: "ok" },
+            { success: true, content: "ok" },
+          ],
+        },
+        { role: "assistant", content: "Final answer", timestamp: 110 },
+      ],
+    }
+
+    const tree = runtime.render(AgentProgress, { progress })
+    const text = getTextContent(tree)
+
+    expect(countTextOccurrences(text, "Final answer")).toBe(1)
+    expect(text).not.toContain("respond_to_user")
+    expect(text).not.toContain("mark_work_complete")
+  })
+
   it("smartly auto-speaks response-linked assistant messages and keeps replay available before completion", async () => {
     const runtime = createHookRuntime()
     const { AgentProgress, tipcMock } = await loadAgentProgress(runtime, { ttsEnabled: true, ttsAutoPlay: true })

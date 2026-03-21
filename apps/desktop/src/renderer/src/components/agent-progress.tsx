@@ -131,6 +131,10 @@ type DisplayItem =
 
 const MID_TURN_RESPONSE_ITEM_ID = "mid-turn-response"
 
+function isCompletionControlTool(toolName: string): boolean {
+  return toolName === RESPOND_TO_USER_TOOL || toolName === MARK_WORK_COMPLETE_TOOL
+}
+
 function extractRespondToUserResponsesFromMessages(
   messages: Array<{
     role: "user" | "assistant" | "tool"
@@ -3930,30 +3934,35 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
         const execTimestamp = next?.timestamp ?? message.timestamp
         const toolExecId = generateToolExecutionId(message.toolCalls, execTimestamp)
         const toolCallNames = message.toolCalls.map((call) => call.name)
-        const matchingStep = toolCallSteps.find(
-          (step) => step.title?.includes(toolCallNames[0]) || toolCallNames.some((name) => step.title?.includes(name)),
-        )
-        const hasCompletionTool = message.toolCalls.some(
-          (call) => call.name === RESPOND_TO_USER_TOOL || call.name === MARK_WORK_COMPLETE_TOOL,
-        )
+        const visibleToolCalls = message.toolCalls
+          .map((call, index) => ({ call, result: results[index] }))
+          .filter(({ call }) => !isCompletionControlTool(call.name))
+        const visibleToolNames = visibleToolCalls.map(({ call }) => call.name)
+        const hasCompletionTool = visibleToolCalls.length !== message.toolCalls.length
         const suppressThought = hasCompletionTool && !!effectiveUserResponse
 
-        items.push({
-          kind: "assistant_with_tools",
-          id: `assistant-tools-${assistantIndex}-${toolExecId}`,
-          data: {
-            thought: suppressThought ? "" : (message.content || ""),
-            timestamp: message.timestamp,
-            isComplete: message.isComplete,
-            calls: message.toolCalls,
-            results,
-            executionStats: matchingStep?.executionStats ? {
-              durationMs: matchingStep.executionStats.durationMs,
-              totalTokens: matchingStep.executionStats.totalTokens,
-              model: matchingStep.subagentId,
-            } : undefined,
-          },
-        })
+        if (visibleToolCalls.length > 0) {
+          const matchingStep = toolCallSteps.find(
+            (step) => step.title?.includes(visibleToolNames[0]) || visibleToolNames.some((name) => step.title?.includes(name)),
+          )
+
+          items.push({
+            kind: "assistant_with_tools",
+            id: `assistant-tools-${assistantIndex}-${toolExecId}`,
+            data: {
+              thought: suppressThought ? "" : (message.content || ""),
+              timestamp: message.timestamp,
+              isComplete: message.isComplete,
+              calls: visibleToolCalls.map(({ call }) => call),
+              results: visibleToolCalls.map(({ result }) => result).filter((result): result is NonNullable<typeof result> => Boolean(result)),
+              executionStats: matchingStep?.executionStats ? {
+                durationMs: matchingStep.executionStats.durationMs,
+                totalTokens: matchingStep.executionStats.totalTokens,
+                model: matchingStep.subagentId,
+              } : undefined,
+            },
+          })
+        }
 
         if (next && next.role === "tool" && next.toolResults) {
           i++
@@ -4066,9 +4075,13 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
     const sortedItems = [...timestampedItems, ...currentStateItems]
 
     // --- Group consecutive tool-activity DisplayItems ---
-    // A DisplayItem is "tool activity" if it is assistant_with_tools or tool_execution.
-    const isToolActivityItem = (item: DisplayItem): boolean =>
-      item.kind === "assistant_with_tools" || item.kind === "tool_execution"
+    // assistant_with_tools items that contain respond_to_user must stay visible
+    // because they represent user-facing output, not background tool churn.
+    const isToolActivityItem = (item: DisplayItem): boolean => {
+      if (item.kind === "tool_execution") return true
+      if (item.kind !== "assistant_with_tools") return false
+      return !item.data.calls.some((call) => isCompletionControlTool(call.name))
+    }
 
     const grouped: DisplayItem[] = []
     let runStart: number | null = null
