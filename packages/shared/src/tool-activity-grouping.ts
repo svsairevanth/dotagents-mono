@@ -11,7 +11,9 @@
  * - User messages are NEVER grouped.
  * - User-visible final assistant responses (including respond_to_user output)
  *   are NEVER grouped — they stay rendered normally.
- * - The collapsed preview shows the last 3 single-line entries from the group.
+ * - Only the trailing tool-activity group (while waiting for a follow-up
+ *   response) gets collapsed preview lines. Historical groups collapse to a
+ *   count-only header.
  */
 
 import { RESPOND_TO_USER_TOOL, isToolOnlyMessage, getToolCallsSummary } from './chat-utils'
@@ -39,7 +41,8 @@ export interface ToolActivityGroup {
   /**
    * Collapsed preview lines — at most {@link TOOL_GROUP_PREVIEW_COUNT} entries,
    * taken from the *end* of the group (most recent activity).
-   * Each entry is a short single-line summary (e.g. "🔧 read_file, view").
+   * Present only for the trailing tool-activity group while a follow-up
+   * response has not been received yet.
    */
   previewLines: string[]
 }
@@ -156,11 +159,17 @@ export function groupToolActivity(messages: GroupableMessage[]): GroupedMessages
       runStart = null
       return
     }
-    // Build preview from the last N messages in the run.
-    const previewStartIdx = Math.max(runStart, runEnd - TOOL_GROUP_PREVIEW_COUNT + 1)
     const previewLines: string[] = []
-    for (let i = previewStartIdx; i <= runEnd; i++) {
-      previewLines.push(getToolActivitySummaryLine(messages[i]))
+    const shouldPreviewTrailingRun = runEnd === messages.length - 1
+
+    // Only preview the latest tool run while we're still waiting for whatever
+    // comes after it. Once a later response is present, historical groups stay
+    // collapsed but do not show tool-call preview lines.
+    if (shouldPreviewTrailingRun) {
+      const previewStartIdx = Math.max(runStart, runEnd - TOOL_GROUP_PREVIEW_COUNT + 1)
+      for (let i = previewStartIdx; i <= runEnd; i++) {
+        previewLines.push(getToolActivitySummaryLine(messages[i]))
+      }
     }
     const group: ToolActivityGroup = {
       startIndex: runStart,

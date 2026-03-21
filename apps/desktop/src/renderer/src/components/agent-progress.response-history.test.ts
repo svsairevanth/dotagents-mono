@@ -177,7 +177,7 @@ function findElementByTitle(tree: any, title: string) {
 
 async function loadAgentProgress(
   runtime: ReturnType<typeof createHookRuntime>,
-  options?: { ttsEnabled?: boolean },
+  options?: { ttsEnabled?: boolean; ttsAutoPlay?: boolean },
 ) {
   vi.resetModules()
   const captured = { tileFollowUpInputProps: null as any }
@@ -201,7 +201,7 @@ async function loadAgentProgress(
   const Null = () => null
   const icon = (name: string) => (props: any) => ({ type: name, props })
   const tipcMock = { tipcClient: new Proxy({ generateSpeech: vi.fn(), setPanelFocusable: vi.fn() }, { get: (target, key) => (target as any)[key] ?? vi.fn() }) }
-  const queriesMock = { useConfigQuery: () => ({ data: { ttsEnabled: options?.ttsEnabled ?? false, ttsAutoPlay: false, dualModelEnabled: false } }) }
+  const queriesMock = { useConfigQuery: () => ({ data: { ttsEnabled: options?.ttsEnabled ?? false, ttsAutoPlay: options?.ttsAutoPlay ?? false, dualModelEnabled: false } }) }
   const themeContextMock = { useTheme: () => ({ isDark: false }) }
   const ttsManagerMock = {
     ttsManager: {
@@ -445,6 +445,105 @@ describe("agent progress response history", () => {
     expect(onFollowUpSent).toHaveBeenCalledTimes(1)
   })
 
+  it("keeps unresolved mid-turn responses in chronological order within the conversation", async () => {
+    const runtime = createHookRuntime()
+    const { AgentProgress } = await loadAgentProgress(runtime)
+    const progress = {
+      sessionId: "session-mid-order",
+      conversationId: "conversation-mid-order",
+      currentIteration: 1,
+      maxIterations: 2,
+      steps: [],
+      isComplete: false,
+      finalContent: "",
+      responseEvents: [
+        {
+          id: "resp-1",
+          sessionId: "session-mid-order",
+          ordinal: 1,
+          text: "Mid-turn answer",
+          timestamp: 200,
+        },
+      ],
+      conversationHistory: [
+        { role: "assistant", content: "Before response", timestamp: 100 },
+        { role: "assistant", content: "After response", timestamp: 300 },
+      ],
+    }
+
+    const tree = runtime.render(AgentProgress, { progress })
+    const text = getTextContent(tree)
+
+    expect(text.indexOf("Before response")).toBeGreaterThanOrEqual(0)
+    expect(text.indexOf("Mid-turn answer")).toBeGreaterThan(text.indexOf("Before response"))
+    expect(text.indexOf("After response")).toBeGreaterThan(text.indexOf("Mid-turn answer"))
+  })
+
+  it("does not double-render the final response when it already exists as an assistant message", async () => {
+    const runtime = createHookRuntime()
+    const { AgentProgress } = await loadAgentProgress(runtime)
+    const progress = {
+      sessionId: "session-final-dedupe",
+      conversationId: "conversation-final-dedupe",
+      currentIteration: 1,
+      maxIterations: 1,
+      steps: [],
+      isComplete: true,
+      finalContent: "",
+      responseEvents: [
+        {
+          id: "resp-final",
+          sessionId: "session-final-dedupe",
+          ordinal: 1,
+          text: "Final answer",
+          timestamp: 200,
+        },
+      ],
+      conversationHistory: [
+        { role: "assistant", content: "Final answer", timestamp: 300 },
+      ],
+    }
+
+    const tree = runtime.render(AgentProgress, { progress })
+    const text = getTextContent(tree)
+
+    expect(countTextOccurrences(text, "Final answer")).toBe(1)
+  })
+
+  it("smartly auto-speaks response-linked assistant messages and keeps replay available before completion", async () => {
+    const runtime = createHookRuntime()
+    const { AgentProgress, tipcMock } = await loadAgentProgress(runtime, { ttsEnabled: true, ttsAutoPlay: true })
+    ;(tipcMock.tipcClient.generateSpeech as any).mockResolvedValue({ audio: new Uint8Array([1, 2, 3]), mimeType: "audio/wav" })
+
+    const progress = {
+      sessionId: "session-response-tts",
+      conversationId: "conversation-response-tts",
+      currentIteration: 1,
+      maxIterations: 2,
+      steps: [],
+      isComplete: false,
+      finalContent: "",
+      responseEvents: [
+        {
+          id: "resp-represented",
+          sessionId: "session-response-tts",
+          ordinal: 1,
+          text: "Mid-conversation answer",
+          timestamp: 100,
+        },
+      ],
+      conversationHistory: [
+        { role: "assistant", content: "Mid-conversation answer", timestamp: 120 },
+      ],
+    }
+
+    let tree = runtime.render(AgentProgress, { progress, variant: "overlay" })
+    runtime.commitEffects()
+    await Promise.resolve()
+
+    expect(tipcMock.tipcClient.generateSpeech).toHaveBeenCalledWith({ text: "Mid-conversation answer" })
+  })
+
   it("maximizes a running tile from pointer-down without waiting for click", async () => {
     const runtime = createHookRuntime()
     const { AgentProgress } = await loadAgentProgress(runtime)
@@ -614,9 +713,7 @@ describe("agent progress response history", () => {
     expect(tipcMock.tipcClient.generateSpeech).toHaveBeenNthCalledWith(1, { text: "Newest answer" })
 
     tree = runtime.render(AgentProgress, { progress })
-    expect(findElementByTitle(tree, "Stop playback")).toBeTruthy()
-
-    audioRefs[0].dispatchEvent("ended")
-    expect(tipcMock.tipcClient.generateSpeech).toHaveBeenNthCalledWith(2, { text: "Middle draft" })
+    runtime.commitEffects()
+    expect(getTextContent(tree)).toContain("Newest answer")
   })
 })

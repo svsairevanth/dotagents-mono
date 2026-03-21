@@ -152,7 +152,7 @@ describe('groupToolActivity', () => {
     expect(groups[1].startIndex).toBe(3)
   })
 
-  it('preview shows last N entries when group is larger than TOOL_GROUP_PREVIEW_COUNT', () => {
+  it('preview shows last N entries for the trailing tool group only', () => {
     const msgs: GroupableMessage[] = [
       toolOnlyAssistant(['step1']),
       toolResultMsg(),
@@ -166,6 +166,38 @@ describe('groupToolActivity', () => {
     // Should be the LAST 3 entries
     expect(groups[0].previewLines[0]).toContain('step2')
     expect(groups[0].previewLines[2]).toContain('step3')
+  })
+
+  it('does not show preview lines once a later assistant response exists', () => {
+    const msgs: GroupableMessage[] = [
+      toolOnlyAssistant(['read_file']),
+      toolResultMsg(),
+      assistantMsg('Done!'),
+    ]
+
+    const { groups } = groupToolActivity(msgs)
+
+    expect(groups).toHaveLength(1)
+    expect(groups[0].previewLines).toEqual([])
+  })
+
+  it('only previews the most recent pending tool run when multiple groups exist', () => {
+    const msgs: GroupableMessage[] = [
+      toolOnlyAssistant(['first']),
+      toolResultMsg(),
+      assistantMsg('First done'),
+      toolOnlyAssistant(['second-1']),
+      toolResultMsg(),
+      toolOnlyAssistant(['second-2']),
+    ]
+
+    const { groups } = groupToolActivity(msgs)
+
+    expect(groups).toHaveLength(2)
+    expect(groups[0].previewLines).toEqual([])
+    expect(groups[1].previewLines).toHaveLength(TOOL_GROUP_PREVIEW_COUNT)
+    expect(groups[1].previewLines[0]).toContain('second-1')
+    expect(groups[1].previewLines[2]).toContain('second-2')
   })
 
   it('does not group assistant messages with real content', () => {

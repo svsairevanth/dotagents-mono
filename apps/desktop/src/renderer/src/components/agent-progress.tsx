@@ -81,6 +81,7 @@ type DisplayItem =
       isThinking: boolean
       toolCalls?: Array<{ name: string; arguments: any }>
       toolResults?: Array<{ success: boolean; content: string; error?: string }>
+      responseEvent?: AgentUserResponseEvent
     } }
   | { kind: "tool_execution"; id: string; data: {
       timestamp: number
@@ -124,7 +125,7 @@ type DisplayItem =
   | { kind: "tool_activity_group"; id: string; data: {
       /** The original DisplayItems that were collapsed into this group. */
       items: DisplayItem[]
-      /** Short single-line preview strings (last 3 from the group). */
+      /** Short single-line preview strings for the trailing pending tool group only. */
       previewLines: string[]
     } }
 
@@ -187,6 +188,7 @@ type CompactMessageProps = {
     toolCalls?: Array<{ name: string; arguments: any }>
     toolResults?: Array<{ success: boolean; content: string; error?: string }>
     timestamp: number
+    responseEvent?: AgentUserResponseEvent
   }
   ttsText?: string
   isLast: boolean
@@ -212,8 +214,8 @@ const CompactMessageBase: React.FC<CompactMessageProps> = ({ message, ttsText, i
   const [isCopied, setIsCopied] = useState(false)
   const [isTTSPlaying, setIsTTSPlaying] = useState(false)
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // Track the ttsKey that's currently being generated, so we can clean it up on unmount
-  const inFlightTtsKeyRef = useRef<string | null>(null)
+  // Track the TTS keys currently being generated, so we can clean them up on unmount.
+  const inFlightTtsKeysRef = useRef<string[]>([])
   // Track the last ttsSource that was successfully auto-played to prevent replay on follow-up messages
   const lastAutoPlayedSourceRef = useRef<string | null>(null)
   const configQuery = useConfigQuery()
@@ -224,18 +226,21 @@ const CompactMessageBase: React.FC<CompactMessageProps> = ({ message, ttsText, i
       if (copyTimeoutRef.current) {
         clearTimeout(copyTimeoutRef.current)
       }
-      // If we're unmounting while TTS generation is in-flight, remove the key
-      // from the tracking set so future mounts can retry generation
-      const inFlightKeyAtUnmount = inFlightTtsKeyRef.current
-      if (inFlightKeyAtUnmount) {
+      // If we're unmounting while TTS generation is in-flight, remove the key(s)
+      // from the tracking set so future mounts can retry generation.
+      const inFlightKeysAtUnmount = [...inFlightTtsKeysRef.current]
+      if (inFlightKeysAtUnmount.length > 0) {
         // IMPORTANT: defer cleanup to a microtask.
         // If generation has already completed, its `.then()` handler will run
-        // before this microtask and clear `inFlightTtsKeyRef`, preventing us
+        // before this microtask and clear `inFlightTtsKeysRef`, preventing us
         // from accidentally deleting a "success" key during a view switch.
         queueMicrotask(() => {
-          if (inFlightTtsKeyRef.current === inFlightKeyAtUnmount) {
-            removeTTSKey(inFlightKeyAtUnmount)
-            inFlightTtsKeyRef.current = null
+          if (
+            inFlightTtsKeysRef.current.length === inFlightKeysAtUnmount.length &&
+            inFlightTtsKeysRef.current.every((key) => inFlightKeysAtUnmount.includes(key))
+          ) {
+            inFlightKeysAtUnmount.forEach((key) => removeTTSKey(key))
+            inFlightTtsKeysRef.current = []
           }
         })
       }
@@ -270,7 +275,7 @@ const CompactMessageBase: React.FC<CompactMessageProps> = ({ message, ttsText, i
 
   // Track the computed ttsSource (ttsText || message.content) since that's what determines the
   // ttsKey and should also gate async state updates.
-  const ttsSource = sanitizeMessageContentForSpeech(ttsText || message.content)
+  const ttsSource = sanitizeMessageContentForSpeech(ttsText || message.responseEvent?.text || message.content)
   const latestTtsSourceRef = useRef(ttsSource)
   latestTtsSourceRef.current = ttsSource
   const ttsGenerationIdRef = useRef(0)
@@ -352,9 +357,14 @@ const CompactMessageBase: React.FC<CompactMessageProps> = ({ message, ttsText, i
   }, [ttsSource])
 
   // Check if TTS button should be shown for this message (any completed assistant message with content)
-  const shouldShowTTSButton = message.role === "assistant" && isComplete && configQuery.data?.ttsEnabled && !!(message.content?.trim())
-  // Auto-play TTS only on the last message
-  const shouldAutoPlayTTS = shouldShowTTSButton && isLast
+  const shouldShowTTSButton =
+    message.role === "assistant" &&
+    configQuery.data?.ttsEnabled &&
+    !!ttsSource &&
+    (isComplete || !!message.responseEvent)
+  // Auto-play the final assistant message and any assistant message representing
+  // a respond_to_user response event.
+  const shouldAutoPlayTTS = shouldShowTTSButton && (isLast || !!message.responseEvent)
 
   // Auto-play TTS when assistant message completes (but NOT if agent was stopped by kill switch)
   //
@@ -383,20 +393,20 @@ const CompactMessageBase: React.FC<CompactMessageProps> = ({ message, ttsText, i
       return
     }
 
-    // Create a key to track TTS playback for this specific session + content combination
-    // Use ttsSource (computed above) to ensure consistency with audioData invalidation
-    const ttsKey = buildContentTTSKey(sessionId, ttsSource, "final")
+    const ttsKeys = [
+      message.responseEvent ? buildResponseEventTTSKey(sessionId, message.responseEvent.id, "final") : null,
+      buildContentTTSKey(sessionId, ttsSource, "final"),
+    ].filter((key, index, arr): key is string => Boolean(key) && arr.indexOf(key) === index)
 
-    // If we have a session key and TTS has already played for this content, skip
-    if (ttsKey && hasTTSPlayed(ttsKey)) {
+    // If this response was already spoken from a mid-turn card or an earlier render, skip.
+    if (ttsKeys.some((key) => hasTTSPlayed(key))) {
       return
     }
 
     // Mark as playing before starting generation to prevent race conditions
-    if (ttsKey) {
-      markTTSPlayed(ttsKey)
-      // Track in-flight key so we can clean up on unmount
-      inFlightTtsKeyRef.current = ttsKey
+    if (ttsKeys.length > 0) {
+      ttsKeys.forEach((key) => markTTSPlayed(key))
+      inFlightTtsKeysRef.current = ttsKeys
     }
 
     // Track the source we're auto-playing to prevent replay on follow-up
@@ -404,16 +414,20 @@ const CompactMessageBase: React.FC<CompactMessageProps> = ({ message, ttsText, i
 
     generateAudio()
       .then(() => {
-        // Generation succeeded, clear the in-flight ref (key stays in set permanently)
-        inFlightTtsKeyRef.current = null
+        // Generation succeeded, clear the in-flight ref (keys stay in the set permanently)
+        inFlightTtsKeysRef.current = []
       })
       .catch((error) => {
         // If generation fails, remove from the set so user can retry
-        // Only remove if this is still the in-flight key (prevents race condition where
-        // a new mount re-added the key and this old catch handler would delete it)
-        if (ttsKey && inFlightTtsKeyRef.current === ttsKey) {
-          removeTTSKey(ttsKey)
-          inFlightTtsKeyRef.current = null
+        // Only remove if these are still the in-flight keys (prevents race conditions
+        // where a newer render re-added the keys and this old catch handler would delete them).
+        if (
+          ttsKeys.length > 0 &&
+          inFlightTtsKeysRef.current.length === ttsKeys.length &&
+          inFlightTtsKeysRef.current.every((key) => ttsKeys.includes(key))
+        ) {
+          ttsKeys.forEach((key) => removeTTSKey(key))
+          inFlightTtsKeysRef.current = []
         }
         // Clear the auto-played source so the user can retry
         if (lastAutoPlayedSourceRef.current === ttsSource) {
@@ -421,7 +435,7 @@ const CompactMessageBase: React.FC<CompactMessageProps> = ({ message, ttsText, i
         }
         // Error is already handled in generateAudio function
       })
-  }, [shouldAutoPlayTTS, configQuery.data?.ttsAutoPlay, audioData, isGeneratingAudio, isSnoozed, ttsError, wasStopped, variant, sessionId, ttsSource])
+  }, [shouldAutoPlayTTS, configQuery.data?.ttsAutoPlay, audioData, isGeneratingAudio, isSnoozed, ttsError, wasStopped, variant, sessionId, ttsSource, message.responseEvent])
 
   const getRoleStyle = () => {
     switch (message.role) {
@@ -561,7 +575,7 @@ const CompactMessageBase: React.FC<CompactMessageProps> = ({ message, ttsText, i
             </div>
           )}
 
-          {/* TTS Audio Player - show for all completed assistant messages with content */}
+          {/* TTS Audio Player - show for completed assistant messages and response-linked assistant messages */}
           {shouldShowTTSButton && (
             <div className="mt-2 min-w-0 space-y-1">
               <AudioPlayer
@@ -572,7 +586,7 @@ const CompactMessageBase: React.FC<CompactMessageProps> = ({ message, ttsText, i
                 isGenerating={isGeneratingAudio}
                 error={ttsError}
                 compact={true}
-                autoPlay={isLast ? ((configQuery.data?.ttsAutoPlay ?? true) && !isSnoozed) : false}
+                autoPlay={(isLast || !!message.responseEvent) ? ((configQuery.data?.ttsAutoPlay ?? true) && !isSnoozed) : false}
                 onPlayStateChange={setIsTTSPlaying}
                 audioOutputDeviceId={configQuery.data?.audioOutputDeviceId}
               />
@@ -669,7 +683,8 @@ const CompactMessage = React.memo(CompactMessageBase, (prev, next) => (
   prev.isExpanded === next.isExpanded &&
   prev.variant === next.variant &&
   prev.sessionId === next.sessionId &&
-  prev.isSnoozed === next.isSnoozed
+  prev.isSnoozed === next.isSnoozed &&
+  prev.message.responseEvent?.id === next.message.responseEvent?.id
 ))
 
 // Helper to extract execute_command display info
@@ -1082,8 +1097,8 @@ const formatArgumentsPreview = (args: any): string => {
 }
 
 // Collapsed group of consecutive tool-call activity.
-// Shows a compact header with the last 3 single-line summaries; expands to
-// reveal all contained items when clicked.
+// Only the trailing in-flight group shows tool preview lines; historical
+// groups collapse to a count-only header.
 const ToolActivityGroupBubble: React.FC<{
   group: {
     items: DisplayItem[]
@@ -3758,7 +3773,7 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
   const legacyResponseEvents = useMemo<AgentUserResponseEvent[]>(() => {
     if (!progress.userResponse) return []
     const orderedTexts = [...(progress.userResponseHistory || []), progress.userResponse]
-    const fallbackTimestamp = messages[messages.length - 1]?.timestamp ?? Date.now()
+    const fallbackTimestamp = messages[messages.length - 1]?.timestamp ?? steps[steps.length - 1]?.timestamp ?? 0
 
     return orderedTexts.map((text, index) => ({
       id: `legacy-${progress.sessionId}-${progress.runId ?? "run"}-${index + 1}`,
@@ -3768,7 +3783,7 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
       text,
       timestamp: fallbackTimestamp + index,
     }))
-  }, [messages, progress.runId, progress.sessionId, progress.userResponse, progress.userResponseHistory])
+  }, [messages, progress.runId, progress.sessionId, progress.userResponse, progress.userResponseHistory, steps])
   const fallbackRespondToUserEvents = useMemo(
     () => (progress.userResponse || (progress.responseEvents?.length ?? 0) > 0
       ? []
@@ -3780,20 +3795,64 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
     if (legacyResponseEvents.length > 0) return legacyResponseEvents
     return fallbackRespondToUserEvents
   }, [fallbackRespondToUserEvents, legacyResponseEvents, progress.responseEvents])
-  const currentResponseEvent = useMemo(
+  const latestResponseEvent = useMemo(
     () => effectiveResponseEvents[effectiveResponseEvents.length - 1],
     [effectiveResponseEvents],
   )
-  const pastResponseEvents = useMemo(
+  const priorResponseEvents = useMemo(
     () => effectiveResponseEvents.length > 1 ? effectiveResponseEvents.slice(0, -1) : undefined,
     [effectiveResponseEvents],
   )
-  const effectiveUserResponse = currentResponseEvent?.text
+  const effectiveUserResponse = latestResponseEvent?.text
   const effectiveUserResponseHistory = useMemo(
-    () => pastResponseEvents?.map((event) => event.text),
-    [pastResponseEvents],
+    () => priorResponseEvents?.map((event) => event.text),
+    [priorResponseEvents],
   )
-  const hasResponseHistoryEntries = !!(effectiveUserResponse || effectiveUserResponseHistory?.length)
+  const { displayResponseEvents, responseEventByMessageIndex } = useMemo(() => {
+    const representedEvents = new Map<number, AgentUserResponseEvent>()
+    if (effectiveResponseEvents.length === 0) {
+      return { displayResponseEvents: [] as AgentUserResponseEvent[], responseEventByMessageIndex: representedEvents }
+    }
+
+    const assistantMessages = messages
+      .map((message, index) => ({ message, index }))
+      .filter(({ message }) =>
+        message.role === "assistant" &&
+        !message.toolCalls?.length &&
+        !message.toolResults?.length &&
+        message.content.trim().length > 0,
+      )
+
+    const matchedAssistantMessageIndexes = new Set<number>()
+    const displayEvents: AgentUserResponseEvent[] = []
+
+    for (const event of effectiveResponseEvents) {
+      const trimmedEventText = event.text.trim()
+      const assistantMatch = assistantMessages.find(({ message, index }) =>
+        !matchedAssistantMessageIndexes.has(index) &&
+        message.content.trim() === trimmedEventText &&
+        message.timestamp >= event.timestamp,
+      )
+
+      if (!assistantMatch) {
+        displayEvents.push(event)
+        continue
+      }
+
+      matchedAssistantMessageIndexes.add(assistantMatch.index)
+      representedEvents.set(assistantMatch.index, event)
+    }
+
+    return { displayResponseEvents: displayEvents, responseEventByMessageIndex: representedEvents }
+  }, [effectiveResponseEvents, messages])
+  const currentResponseEvent = useMemo(
+    () => displayResponseEvents[displayResponseEvents.length - 1],
+    [displayResponseEvents],
+  )
+  const pastResponseEvents = useMemo(
+    () => displayResponseEvents.length > 1 ? displayResponseEvents.slice(0, -1) : undefined,
+    [displayResponseEvents],
+  )
   const primaryAgentLabel = useMemo(
     () => acpSessionInfo?.agentTitle ?? acpSessionInfo?.agentName ?? profileName ?? "Agent",
     [acpSessionInfo?.agentName, acpSessionInfo?.agentTitle, profileName],
@@ -3842,20 +3901,21 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
           return item.data.startTime
         case "retry_status":
           return item.data.startedAt
+        case "mid_turn_response":
+          return item.data.currentResponse.timestamp
         case "tool_approval":
         case "streaming":
-        case "mid_turn_response":
         case "tool_activity_group":
           return null
       }
     }
 
-    // Build a set of all respond_to_user content strings so we can suppress
-    // duplicate plain assistant messages the backend appends to conversationHistory.
+    // Build a set of respond_to_user content strings that are not already
+    // represented by later plain assistant messages in the timeline.
     const respondToUserContents = new Set<string>()
-    if (effectiveUserResponse) respondToUserContents.add(effectiveUserResponse.trim())
-    if (effectiveUserResponseHistory) {
-      for (const r of effectiveUserResponseHistory) respondToUserContents.add(r.trim())
+    if (currentResponseEvent) respondToUserContents.add(currentResponseEvent.text.trim())
+    if (pastResponseEvents) {
+      for (const event of pastResponseEvents) respondToUserContents.add(event.text.trim())
     }
 
     const items: DisplayItem[] = []
@@ -3922,7 +3982,14 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
           continue
         }
         const roleIndex = ++roleCounters[message.role]
-        items.push({ kind: "message", id: `msg-${message.role}-${roleIndex}`, data: message })
+        items.push({
+          kind: "message",
+          id: `msg-${message.role}-${roleIndex}`,
+          data: {
+            ...message,
+            responseEvent: message.role === "assistant" ? responseEventByMessageIndex.get(i) : undefined,
+          },
+        })
       }
     }
 
@@ -4016,21 +4083,24 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
         return
       }
       const runItems = sortedItems.slice(runStart, runEnd + 1)
-      // Build preview lines from the last N items using the shared helper
-      const previewStart = Math.max(0, runItems.length - TOOL_GROUP_PREVIEW_COUNT)
       const previewLines: string[] = []
-      for (let j = previewStart; j < runItems.length; j++) {
-        const it = runItems[j]
-        if (it.kind === "assistant_with_tools") {
-          previewLines.push(getToolActivitySummaryLine({
-            role: "assistant",
-            toolCalls: it.data.calls,
-          }))
-        } else if (it.kind === "tool_execution") {
-          previewLines.push(getToolActivitySummaryLine({
-            role: "tool",
-            toolResults: it.data.results,
-          }))
+      const shouldShowPreviewLines = runEnd === sortedItems.length - 1
+
+      if (shouldShowPreviewLines) {
+        const previewStart = Math.max(0, runItems.length - TOOL_GROUP_PREVIEW_COUNT)
+        for (let j = previewStart; j < runItems.length; j++) {
+          const it = runItems[j]
+          if (it.kind === "assistant_with_tools") {
+            previewLines.push(getToolActivitySummaryLine({
+              role: "assistant",
+              toolCalls: it.data.calls,
+            }))
+          } else if (it.kind === "tool_execution") {
+            previewLines.push(getToolActivitySummaryLine({
+              role: "tool",
+              toolResults: it.data.results,
+            }))
+          }
         }
       }
       grouped.push({
@@ -4052,7 +4122,7 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
     if (runStart !== null) flushToolRun(sortedItems.length - 1)
 
     return grouped
-  }, [currentResponseEvent, effectiveUserResponse, effectiveUserResponseHistory, messages, pastResponseEvents, progress.retryInfo, progress.steps, progress.streamingContent, toolCallSteps])
+  }, [currentResponseEvent, messages, pastResponseEvents, progress.retryInfo, progress.steps, progress.streamingContent, toolCallSteps])
 
   const visibleDisplayItems = useMemo(
     () => variant === "tile" && !isFocused && !isExpanded
@@ -4448,7 +4518,7 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
                           <CompactMessage
                             key={itemKey}
                             message={item.data}
-                            ttsText={isLastAssistant ? effectiveUserResponse : undefined}
+                            ttsText={item.data.responseEvent?.text ?? (isLastAssistant ? effectiveUserResponse : undefined)}
                             isLast={isLastAssistant}
                             isComplete={isComplete}
                             hasErrors={hasErrors}
@@ -4876,7 +4946,7 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
                     <CompactMessage
                       key={itemKey}
                       message={item.data}
-                      ttsText={isLastAssistant ? effectiveUserResponse : undefined}
+                      ttsText={item.data.responseEvent?.text ?? (isLastAssistant ? effectiveUserResponse : undefined)}
                       isLast={isLastAssistant}
                       isComplete={isComplete}
                       hasErrors={hasErrors}

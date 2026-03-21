@@ -80,6 +80,11 @@ describe("agent progress tile layout", () => {
     expect(agentProgressSource).toContain('className="shrink-0 whitespace-nowrap opacity-50 text-[10px]"')
   })
 
+  it("only shows collapsed tool previews for the latest pending tool run", () => {
+    expect(agentProgressSource).toContain('const shouldShowPreviewLines = runEnd === sortedItems.length - 1')
+    expect(agentProgressSource).toContain('!isExpanded && group.previewLines.length > 0')
+  })
+
   it("wraps expanded tool detail chrome and caps tool output blocks inside narrow tiles", () => {
     expect(agentProgressSource).toContain(
       'className="mb-1 ml-3 mt-0.5 space-y-1 border-l border-border/50 pl-2 text-[10px]"'
