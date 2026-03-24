@@ -12,7 +12,11 @@ import {
 import { Button } from "@renderer/components/ui/button"
 import {
   useConfigQuery,
+  useDisconnectOpenAIOAuthMutation,
+  useOpenAIOAuthStatusQuery,
+  useRefreshOpenAIOAuthUsageMutation,
   useSaveConfigMutation,
+  useStartOpenAIOAuthMutation,
 } from "@renderer/lib/query-client"
 import { Config } from "@shared/types"
 
@@ -634,7 +638,10 @@ function SupertonicProviderSection({
 
 export function Component() {
   const configQuery = useConfigQuery()
-
+  const openAiOauthStatusQuery = useOpenAIOAuthStatusQuery()
+  const startOpenAiOauthMutation = useStartOpenAIOAuthMutation()
+  const disconnectOpenAiOauthMutation = useDisconnectOpenAIOAuthMutation()
+  const refreshOpenAiOauthUsageMutation = useRefreshOpenAIOAuthUsageMutation()
   const saveConfigMutation = useSaveConfigMutation()
   const cfgRef = useRef(configQuery.data)
   const providerSaveTimeoutsRef = useRef<Partial<Record<ProviderDraftKey, ReturnType<typeof setTimeout>>>>({})
@@ -708,7 +715,7 @@ export function Component() {
 
   // Compute which providers are actively being used for each function
   const activeProviders = useMemo(() => {
-    if (!configQuery.data) return { openai: [], groq: [], gemini: [], parakeet: [], kitten: [], supertonic: [] }
+    if (!configQuery.data) return { openai: [], "openai-oauth": [], groq: [], gemini: [], parakeet: [], kitten: [], supertonic: [] }
 
     const isMainAgentAcpMode = configQuery.data.mainAgentMode === "acp"
     const stt = configQuery.data.sttProviderId || "openai"
@@ -722,6 +729,10 @@ export function Component() {
         ...(transcript === "openai" ? [{ label: "Cleanup", icon: FileText }] : []),
         ...(mcp === "openai" && !isMainAgentAcpMode ? [{ label: "Agent", icon: Bot }] : []),
         ...(tts === "openai" ? [{ label: "TTS", icon: Volume2 }] : []),
+      ],
+      "openai-oauth": [
+        ...(transcript === "openai-oauth" ? [{ label: "Cleanup", icon: FileText }] : []),
+        ...(mcp === "openai-oauth" && !isMainAgentAcpMode ? [{ label: "Agent", icon: Bot }] : []),
       ],
       groq: [
         ...(stt === "groq" ? [{ label: "STT", icon: Mic }] : []),
@@ -760,6 +771,7 @@ export function Component() {
   const isMainAgentAcpMode = configQuery.data?.mainAgentMode === "acp"
 
   // Determine which providers are active (selected for at least one feature)
+  const isOpenAiOauthActive = activeProviders["openai-oauth"].length > 0
   const isGroqActive = activeProviders.groq.length > 0
   const isGeminiActive = activeProviders.gemini.length > 0
   const isParakeetActive = activeProviders.parakeet.length > 0
@@ -794,6 +806,9 @@ export function Component() {
       />
     </Control>
   )
+
+  const openAiOauthStatus = openAiOauthStatusQuery.data
+  const openAiOauthConnected = openAiOauthStatus?.connected ?? false
 
   return (
     <div className="modern-panel h-full overflow-y-auto overflow-x-hidden px-4 py-4 sm:px-6">
@@ -860,6 +875,132 @@ export function Component() {
                 <p className="text-sm text-muted-foreground">
                   OpenAI-compatible presets, agent models, and transcript cleanup models are now managed on the Models page.
                 </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className={`rounded-lg border ${isOpenAiOauthActive ? 'border-primary/30 bg-primary/5' : ''}`}>
+          <button
+            type="button"
+            className="px-3 py-2 flex items-center justify-between w-full hover:bg-muted/30 transition-colors cursor-pointer"
+            onClick={() => saveConfig({ providerSectionCollapsedOpenaiOauth: !configQuery.data.providerSectionCollapsedOpenaiOauth })}
+            aria-expanded={!configQuery.data.providerSectionCollapsedOpenaiOauth}
+            aria-controls="openai-oauth-provider-content"
+          >
+            <span className="flex items-center gap-2 text-sm font-semibold">
+              {configQuery.data.providerSectionCollapsedOpenaiOauth ? (
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              )}
+              OpenAI OAuth
+              {(isOpenAiOauthActive || openAiOauthConnected) && (
+                <CheckCircle2 className="h-4 w-4 text-primary" />
+              )}
+            </span>
+            {activeProviders["openai-oauth"].length > 0 && (
+              <div className="flex gap-1.5 flex-wrap justify-end">
+                {activeProviders["openai-oauth"].map((badge) => (
+                  <ActiveProviderBadge key={badge.label} label={badge.label} icon={badge.icon} />
+                ))}
+              </div>
+            )}
+          </button>
+          {!configQuery.data.providerSectionCollapsedOpenaiOauth && (
+            <div id="openai-oauth-provider-content" className="divide-y border-t">
+              {!isOpenAiOauthActive && (
+                <p className="px-3 py-1.5 text-[11px] text-muted-foreground">
+                  Not selected above. You can still connect it here.
+                </p>
+              )}
+
+              <div className="px-3 py-3 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium">ChatGPT account connection</p>
+                    <p className="text-xs text-muted-foreground">
+                      Uses OpenAI OAuth for ChatGPT-backed agent and transcript processing requests.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {openAiOauthConnected ? (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => refreshOpenAiOauthUsageMutation.mutate()}
+                          disabled={refreshOpenAiOauthUsageMutation.isPending}
+                        >
+                          {refreshOpenAiOauthUsageMutation.isPending ? "Refreshing..." : "Refresh Usage"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => disconnectOpenAiOauthMutation.mutate()}
+                          disabled={disconnectOpenAiOauthMutation.isPending}
+                        >
+                          {disconnectOpenAiOauthMutation.isPending ? "Disconnecting..." : "Disconnect"}
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        size="sm"
+                        onClick={() => startOpenAiOauthMutation.mutate()}
+                        disabled={startOpenAiOauthMutation.isPending}
+                      >
+                        {startOpenAiOauthMutation.isPending ? "Connecting..." : "Connect"}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
+                  <div className="rounded-md border bg-muted/20 px-3 py-2">
+                    <div className="font-medium text-foreground">Email</div>
+                    <div>{openAiOauthStatus?.email || "Not connected"}</div>
+                  </div>
+                  <div className="rounded-md border bg-muted/20 px-3 py-2">
+                    <div className="font-medium text-foreground">Plan</div>
+                    <div>{openAiOauthStatus?.planType || "Unknown"}</div>
+                  </div>
+                  <div className="rounded-md border bg-muted/20 px-3 py-2">
+                    <div className="font-medium text-foreground">Account ID</div>
+                    <div className="truncate">{openAiOauthStatus?.accountId || "Unavailable"}</div>
+                  </div>
+                </div>
+
+                {openAiOauthStatus?.usage?.buckets && openAiOauthStatus.usage.buckets.length > 0 ? (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-foreground">Usage</p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {openAiOauthStatus.usage.buckets.map((bucket) => (
+                        <div key={`${bucket.label}-${bucket.unit || "unit"}`} className="rounded-md border bg-muted/20 px-3 py-2 text-xs">
+                          <div className="font-medium text-foreground">{bucket.label}</div>
+                          <div className="text-muted-foreground">
+                            {bucket.used ?? "?"}
+                            {bucket.limit !== null && bucket.limit !== undefined ? ` / ${bucket.limit}` : ""}
+                            {bucket.unit ? ` ${bucket.unit}` : ""}
+                          </div>
+                          {bucket.resetsAt && (
+                            <div className="mt-1 text-[11px] text-muted-foreground">Resets: {bucket.resetsAt}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    {openAiOauthStatus.usage.fetchedAt && (
+                      <p className="text-[11px] text-muted-foreground">
+                        Last updated: {new Date(openAiOauthStatus.usage.fetchedAt).toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    {openAiOauthConnected
+                      ? "Usage is available after you refresh it."
+                      : "Connect your ChatGPT account to view usage."}
+                  </p>
+                )}
               </div>
             </div>
           )}

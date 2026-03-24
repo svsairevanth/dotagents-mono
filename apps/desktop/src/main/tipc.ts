@@ -2292,6 +2292,40 @@ export const router = {
     return configStore.get()
   }),
 
+  getOpenAIOAuthStatus: t.procedure.action(async () => {
+    const { getOpenAIOAuthConnectionState } = await import("./openai-oauth-provider")
+    const config = configStore.get()
+    const connection = await getOpenAIOAuthConnectionState()
+    return {
+      ...connection,
+      usage: config.openaiOauthUsage,
+      connectedAt: config.openaiOauthConnectedAt,
+    }
+  }),
+
+  startOpenAIOAuth: t.procedure.action(async () => {
+    const { startOpenAIOAuthFlow, refreshOpenAIOAuthUsage } = await import("./openai-oauth-provider")
+    const account = await startOpenAIOAuthFlow()
+    let usage: import("../shared/types").OpenAIOAuthUsageSnapshot | undefined
+    try {
+      usage = await refreshOpenAIOAuthUsage()
+    } catch {
+      // best-effort only
+    }
+    return { ...account, usage }
+  }),
+
+  disconnectOpenAIOAuth: t.procedure.action(async () => {
+    const { disconnectOpenAIOAuth } = await import("./openai-oauth-provider")
+    await disconnectOpenAIOAuth()
+    return { success: true }
+  }),
+
+  refreshOpenAIOAuthUsage: t.procedure.action(async () => {
+    const { refreshOpenAIOAuthUsage } = await import("./openai-oauth-provider")
+    return refreshOpenAIOAuthUsage()
+  }),
+
   // ============================================================================
   // .agents (modular config) helpers
   // ============================================================================
@@ -3527,6 +3561,9 @@ export const router = {
         ...(profile.modelConfig?.mcpToolsOpenaiModel && {
           mcpToolsOpenaiModel: profile.modelConfig.mcpToolsOpenaiModel,
         }),
+        ...(profile.modelConfig?.mcpToolsOpenaiOauthModel && {
+          mcpToolsOpenaiOauthModel: profile.modelConfig.mcpToolsOpenaiOauthModel,
+        }),
         ...(profile.modelConfig?.mcpToolsGroqModel && {
           mcpToolsGroqModel: profile.modelConfig.mcpToolsGroqModel,
         }),
@@ -3552,6 +3589,9 @@ export const router = {
         }),
         ...(profile.modelConfig?.transcriptPostProcessingOpenaiModel && {
           transcriptPostProcessingOpenaiModel: profile.modelConfig.transcriptPostProcessingOpenaiModel,
+        }),
+        ...(profile.modelConfig?.transcriptPostProcessingOpenaiOauthModel && {
+          transcriptPostProcessingOpenaiOauthModel: profile.modelConfig.transcriptPostProcessingOpenaiOauthModel,
         }),
         ...(profile.modelConfig?.transcriptPostProcessingGroqModel && {
           transcriptPostProcessingGroqModel: profile.modelConfig.transcriptPostProcessingGroqModel,
@@ -3637,6 +3677,7 @@ export const router = {
         // Agent/MCP Tools settings
         mcpToolsProviderId: config.mcpToolsProviderId,
         mcpToolsOpenaiModel: config.mcpToolsOpenaiModel,
+        mcpToolsOpenaiOauthModel: config.mcpToolsOpenaiOauthModel,
         mcpToolsGroqModel: config.mcpToolsGroqModel,
         mcpToolsGeminiModel: config.mcpToolsGeminiModel,
         currentModelPresetId: config.currentModelPresetId,
@@ -3647,6 +3688,7 @@ export const router = {
         // Transcript Post-Processing settings
         transcriptPostProcessingProviderId: config.transcriptPostProcessingProviderId,
         transcriptPostProcessingOpenaiModel: config.transcriptPostProcessingOpenaiModel,
+        transcriptPostProcessingOpenaiOauthModel: config.transcriptPostProcessingOpenaiOauthModel,
         transcriptPostProcessingGroqModel: config.transcriptPostProcessingGroqModel,
         transcriptPostProcessingGeminiModel: config.transcriptPostProcessingGeminiModel,
         // TTS Provider settings
@@ -3659,8 +3701,9 @@ export const router = {
     .input<{
       profileId: string
       // Agent/MCP Tools settings
-      mcpToolsProviderId?: "openai" | "groq" | "gemini"
+      mcpToolsProviderId?: "openai" | "openai-oauth" | "groq" | "gemini"
       mcpToolsOpenaiModel?: string
+      mcpToolsOpenaiOauthModel?: string
       mcpToolsGroqModel?: string
       mcpToolsGeminiModel?: string
       currentModelPresetId?: string
@@ -3669,8 +3712,9 @@ export const router = {
       openaiSttModel?: string
       groqSttModel?: string
       // Transcript Post-Processing settings
-      transcriptPostProcessingProviderId?: "openai" | "groq" | "gemini"
+      transcriptPostProcessingProviderId?: "openai" | "openai-oauth" | "groq" | "gemini"
       transcriptPostProcessingOpenaiModel?: string
+      transcriptPostProcessingOpenaiOauthModel?: string
       transcriptPostProcessingGroqModel?: string
       transcriptPostProcessingGeminiModel?: string
       // TTS Provider settings
@@ -3681,6 +3725,7 @@ export const router = {
         // Agent/MCP Tools settings
         mcpToolsProviderId: input.mcpToolsProviderId,
         mcpToolsOpenaiModel: input.mcpToolsOpenaiModel,
+        mcpToolsOpenaiOauthModel: input.mcpToolsOpenaiOauthModel,
         mcpToolsGroqModel: input.mcpToolsGroqModel,
         mcpToolsGeminiModel: input.mcpToolsGeminiModel,
         currentModelPresetId: input.currentModelPresetId,
@@ -3691,6 +3736,7 @@ export const router = {
         // Transcript Post-Processing settings
         transcriptPostProcessingProviderId: input.transcriptPostProcessingProviderId,
         transcriptPostProcessingOpenaiModel: input.transcriptPostProcessingOpenaiModel,
+        transcriptPostProcessingOpenaiOauthModel: input.transcriptPostProcessingOpenaiOauthModel,
         transcriptPostProcessingGroqModel: input.transcriptPostProcessingGroqModel,
         transcriptPostProcessingGeminiModel: input.transcriptPostProcessingGeminiModel,
         // TTS Provider settings
